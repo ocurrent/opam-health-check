@@ -5,7 +5,8 @@ switch=4.06.1
 
 mkdir -p "$logdir/good"
 mkdir -p "$logdir/bad"
-chmod -R +w "$logdir"
+touch "$logdir/pkgs"
+chmod +w "$logdir/pkgs"
 
 cd $(mktemp -d)
 echo 'FROM ocaml/opam2:debian-9-ocaml-4.05.0' >> Dockerfile
