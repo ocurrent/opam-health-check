@@ -5,6 +5,7 @@ switch=4.06.1
 
 mkdir -p "$logdir/good"
 mkdir -p "$logdir/bad"
+chmod -R +w "$logdir"
 
 cd $(mktemp -d)
 echo 'FROM ocaml/opam2:debian-9-ocaml-4.05.0' >> Dockerfile
@@ -13,7 +14,7 @@ echo 'RUN git pull origin master && opam update' >> Dockerfile
 echo 'RUN opam admin cache' >> Dockerfile
 echo "RUN opam switch create -y $switch" >> Dockerfile
 echo 'RUN opam install -y opam-depext' >> Dockerfile
-echo 'CMD sudo chown opam:opam /logs && opam list --installable --available --short > /logs/pkgs' >> Dockerfile
+echo 'CMD opam list --installable --available --short > /logs/pkgs' >> Dockerfile
 docker build -t base-opam-check-all .
 echo "Getting packages list..."
 docker run -v "$logdir:/logs" base-opam-check-all
