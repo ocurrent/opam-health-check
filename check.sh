@@ -13,6 +13,7 @@ echo 'FROM ocaml/opam2:debian-9-ocaml-4.05.0' >> Dockerfile
 echo 'RUN sudo apt-get update' >> Dockerfile
 echo 'RUN git pull origin master && opam update' >> Dockerfile
 echo 'RUN opam admin cache' >> Dockerfile
+echo "RUN echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" >> Dockerfile
 echo "RUN opam switch create -y $switch" >> Dockerfile
 echo 'RUN opam install -y opam-depext' >> Dockerfile
 echo 'CMD opam list --installable --available --short > /logs/pkgs' >> Dockerfile
