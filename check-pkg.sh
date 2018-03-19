@@ -10,11 +10,14 @@ compilers="4.01.0 4.02.3 4.03.0 4.04.2 4.05.0 4.06.0"
 for version in ${compilers}; do
     mkdir -p "${logdir}/${version}"
     cd "${logdir}/${version}"
+
     echo "FROM ocaml/opam:${distro}_ocaml-${version}" >> Dockerfile
     echo 'WORKDIR /home/opam/opam-repository' >> Dockerfile
     echo 'RUN git pull origin master' >> Dockerfile
     echo "RUN git pull '${repo}' '${branch}'" >> Dockerfile
     echo 'RUN opam update' >> Dockerfile
     echo "RUN opam depext -ui ${pkgs}" >> Dockerfile
+
+    echo "Checking using OCaml ${version}..."
     docker build --rm --force-rm . > log
 done
