@@ -11,7 +11,7 @@ for version in ${compilers}; do
     mkdir -p "${logdir}/${version}"
     cd "${logdir}/${version}"
 
-    echo "FROM ocaml/opam:${distro}_ocaml-${version}" >> Dockerfile
+    echo "FROM ocaml/opam:${distro}_ocaml-${version}" > Dockerfile
     echo 'WORKDIR /home/opam/opam-repository' >> Dockerfile
     echo 'RUN git pull origin master' >> Dockerfile
     echo "RUN git pull '${repo}' '${branch}'" >> Dockerfile
