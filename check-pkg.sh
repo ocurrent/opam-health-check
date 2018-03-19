@@ -8,7 +8,7 @@ distro=debian-unstable
 compilers="4.01.0 4.02.3 4.03.0 4.04.2 4.05.0 4.06.0"
 
 for version in ${compilers}; do
-    mkdir "${logdir}/${version}"
+    mkdir -p "${logdir}/${version}"
     cd "${logdir}/${version}"
     echo "FROM ocaml/opam:${distro}_ocaml-${version}" >> Dockerfile
     echo 'WORKDIR /home/opam/opam-repository' >> Dockerfile
