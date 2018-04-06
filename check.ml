@@ -53,18 +53,26 @@ let rec get_jobs ~img_name ~logdir ~gooddir ~baddir jobs = function
       in
       let job =
         Lwt_pool.use pool begin fun () ->
-          Lwt_io.write_line Lwt_io.stdout ("Checking "^pkg^"...") >>= fun () ->
-          let logfile = Filename.concat logdir pkg in
-          Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stdout ->
-          let stdout = Lwt_unix.unix_file_descr stdout in
-          let stdout = `FD_move stdout in
-          docker_build ~stdout ["-t"; "base-opam-check-all"] dockerfile >>= begin function
-          | Ok () -> Lwt_unix.rename logfile (Filename.concat logdir (Filename.concat "good" pkg))
-          | Error () -> Lwt_unix.rename logfile (Filename.concat logdir (Filename.concat "bad" pkg))
-          end >>= fun () ->
-          Lwt_process.exec ("", [|"docker"; "image"; "prune"; "-f"|]) >>= fun _ ->
-          Lwt_process.exec ("", [|"docker"; "image"; "container"; "-f"|]) >>= fun _ ->
-          Lwt.return_unit
+          let goodlog = Filename.concat gooddir pkg in
+          let badlog = Filename.concat baddir pkg in
+          Lwt_unix.file_exists goodlog >>= fun goodlog_exists ->
+          Lwt_unix.file_exists badlog >>= fun badlog_exists ->
+          if goodlog_exists || badlog_exists then begin
+            Lwt_io.write_line Lwt_io.stdout (pkg^" has already been checked. Skipping...")
+          end else begin
+            Lwt_io.write_line Lwt_io.stdout ("Checking "^pkg^"...") >>= fun () ->
+            let logfile = Filename.concat logdir pkg in
+            Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stdout ->
+            let stdout = Lwt_unix.unix_file_descr stdout in
+            let stdout = `FD_move stdout in
+            docker_build ~stdout ["-t"; "base-opam-check-all"] dockerfile >>= begin function
+            | Ok () -> Lwt_unix.rename logfile goodlog
+            | Error () -> Lwt_unix.rename logfile badlog
+            end >>= fun () ->
+            Lwt_process.exec ("", [|"docker"; "image"; "prune"; "-f"|]) >>= fun _ ->
+            Lwt_process.exec ("", [|"docker"; "image"; "container"; "-f"|]) >>= fun _ ->
+            Lwt.return_unit
+          end
         end
       in
       get_jobs ~img_name ~logdir ~gooddir ~baddir (job :: jobs) pkgs
