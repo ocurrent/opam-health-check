@@ -38,7 +38,7 @@ let get_pkgs ~base_img ~img_name ~logdir ~switch =
   in
   docker_build ~stdout:`Keep ["-t"; img_name] dockerfile >>= fun _ ->
   Lwt_io.write_line Lwt_io.stdout "Getting packages list..." >>= fun () ->
-  Lwt_process.pread ("", [|"docker"; "run"; "-v"; img_name|]) >|=
+  Lwt_process.pread ("", [|"docker"; "run"; img_name|]) >|=
   String.split_on_char '\n'
 
 let rec get_jobs ~img_name ~logdir ~gooddir ~baddir jobs = function
