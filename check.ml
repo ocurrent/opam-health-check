@@ -70,7 +70,7 @@ let rec get_jobs ~img_name ~logdir ~gooddir ~baddir jobs = function
             | Error () -> Lwt_unix.rename logfile badlog
             end >>= fun () ->
             Lwt_process.exec ("", [|"docker"; "image"; "prune"; "-f"|]) >>= fun _ ->
-            Lwt_process.exec ("", [|"docker"; "image"; "container"; "-f"|]) >>= fun _ ->
+            Lwt_process.exec ("", [|"docker"; "container"; "prune"; "-f"|]) >>= fun _ ->
             Lwt.return_unit
           end
         end
