@@ -48,7 +48,7 @@ let rec get_jobs ~img_name ~logdir ~gooddir ~baddir jobs = function
       let dockerfile =
         let open Dockerfile in
         from img_name @@
-        run "opam pin add -yn --dev ocamlfind 1.7.3-1" @@
+        run "opam pin add -yn --dev ocamlfind.1.7.3-1" @@
         run "opam depext -ivy %s" pkg
       in
       let job =
