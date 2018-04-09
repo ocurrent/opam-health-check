@@ -16,11 +16,14 @@ let exec_in ~stdout str cmd =
       Lwt_io.write_line Lwt_io.stderr ("Command '"^cmd^"' failed.") >>= fun () ->
       Lwt.return (Error ())
 
-let docker_build ~stdout args dockerfile =
+let docker_build args dockerfile =
   exec_in
-    ~stdout
+    ~stdout:`Keep
     (Dockerfile.string_of_t dockerfile)
     ("docker"::"build"::args@["-"])
+
+let docker_run ~stdout img cmd =
+  exec_in ~stdout "" ("docker"::"run"::"--rm"::"-it"::img::cmd)
 
 let get_pkgs ~base_img ~img_name ~logdir ~switch =
   let dockerfile =
@@ -34,9 +37,10 @@ let get_pkgs ~base_img ~img_name ~logdir ~switch =
     run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
     run "opam switch create -y %s" switch @@
     run "opam install -y opam-depext" @@
+    run "opam pin add -yn --dev ocamlfind.1.7.3-1" @@
     cmd "opam list --installable --available --short --all-versions"
   in
-  docker_build ~stdout:`Keep ["-t"; img_name] dockerfile >>= fun _ ->
+  docker_build ["-t"; img_name] dockerfile >>= fun _ ->
   Lwt_io.write_line Lwt_io.stdout "Getting packages list..." >>= fun () ->
   Lwt_process.pread ("", [|"docker"; "run"; img_name|]) >|=
   String.split_on_char '\n'
@@ -45,12 +49,6 @@ let rec get_jobs ~img_name ~logdir ~gooddir ~baddir jobs = function
   | [] ->
       Lwt.return jobs
   | pkg::pkgs ->
-      let dockerfile =
-        let open Dockerfile in
-        from img_name @@
-        run "opam pin add -yn --dev ocamlfind.1.7.3-1" @@
-        run "opam depext -ivy %s" pkg
-      in
       let job =
         Lwt_pool.use pool begin fun () ->
           let goodlog = Filename.concat gooddir pkg in
@@ -65,13 +63,10 @@ let rec get_jobs ~img_name ~logdir ~gooddir ~baddir jobs = function
             Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stdout ->
             let stdout = Lwt_unix.unix_file_descr stdout in
             let stdout = `FD_move stdout in
-            docker_build ~stdout ["-t"; "base-opam-check-all"] dockerfile >>= begin function
+            docker_run ~stdout img_name ["opam";"depext";"-ivy";pkg] >>= begin function
             | Ok () -> Lwt_unix.rename logfile goodlog
             | Error () -> Lwt_unix.rename logfile badlog
-            end >>= fun () ->
-            Lwt_process.exec ("", [|"docker"; "image"; "prune"; "-f"|]) >>= fun _ ->
-            Lwt_process.exec ("", [|"docker"; "container"; "prune"; "-f"|]) >>= fun _ ->
-            Lwt.return_unit
+            end
           end
         end
       in
