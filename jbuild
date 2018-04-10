@@ -2,4 +2,10 @@
 
 (executable
   ((name check)
+   (modules (check))
    (libraries (lwt.unix dockerfile))))
+
+(executable
+  ((name diff)
+   (modules (diff))
+   (libraries (tyxml unix containers))))
