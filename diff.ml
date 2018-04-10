@@ -2,7 +2,7 @@ open Containers
 
 module Pkgs = Map.Make (String)
 
-type state = Good | Bad | Nop
+type state = Good | Bad of string | Nop
 
 let get_files dirname =
   let dir = Unix.opendir dirname in
@@ -21,16 +21,18 @@ let get_dirs dir =
   let dirs = List.filter Sys.is_directory files in
   List.sort String.compare dirs
 
-let pkg_update ~len ~idx def = function
-  | None -> Some (List.init len (fun i -> if i = idx then def else Nop))
-  | Some l -> Some (List.set_at_idx idx def l)
+let pkg_update ~dir ~pkg ~len ~idx def = function
+  | None -> Some (List.init len (fun i -> if i = idx then def ~dir ~pkg else Nop))
+  | Some l -> Some (List.set_at_idx idx (def ~dir ~pkg) l)
 
 let get_pkgs_from_dir ~len pkgs idx dir =
   let good_files = get_files (Filename.concat dir "good") in
   let bad_files = get_files (Filename.concat dir "bad") in
-  let aux def pkgs pkg = Pkgs.update pkg (pkg_update ~len ~idx def) pkgs in
-  let pkgs = List.fold_left (aux Good) pkgs good_files in
-  List.fold_left (aux Bad) pkgs bad_files
+  let aux def pkgs pkg =
+    Pkgs.update pkg (pkg_update ~dir ~pkg ~len ~idx def) pkgs
+  in
+  let pkgs = List.fold_left (aux (fun ~dir ~pkg -> Good)) pkgs good_files in
+  List.fold_left (aux (fun ~dir ~pkg -> Bad (Filename.concat (Filename.concat (Filename.basename dir) "bad") pkg))) pkgs bad_files
 
 let get_pkgs dirs =
   let len = List.length dirs in
@@ -43,7 +45,7 @@ let state_to_html =
   let td c = td ~a:[a_style ("border: 2px solid black; background-color: "^c^"; text-align: center;")] in
   function
   | Good -> td "green" [pcdata "☑"]
-  | Bad -> td "red" [pcdata "☒"]
+  | Bad path -> td "red" [a ~a:[a_href path] [pcdata "☒"]]
   | Nop -> td "grey" [pcdata "☐"]
 
 let pkg_to_html (pkg, instances) =
