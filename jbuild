@@ -9,3 +9,8 @@
   ((name diff)
    (modules (diff))
    (libraries (tyxml unix containers))))
+
+(executable
+  ((name server)
+   (modules (server))
+   (libraries (cohttp-lwt-unix containers))))
