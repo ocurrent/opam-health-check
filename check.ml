@@ -2,13 +2,8 @@ open Lwt.Infix
 
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 
-let exec_in ~stdout str cmd =
-  let stdin, fd = Lwt_unix.pipe_out () in
-  let stdin = `FD_move stdin in
-  let fd = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
-  Lwt_io.write_line fd str >>= fun () ->
-  Lwt_io.close fd >>= fun () ->
-  Lwt_process.exec ~stdin ~stdout ("", Array.of_list cmd) >>= function
+let exec_in ~stdin ~stdout ~stderr cmd =
+  Lwt_process.exec ~stdin ~stdout ~stderr ("", Array.of_list cmd) >>= function
   | Unix.WEXITED 0 ->
       Lwt.return (Ok ())
   | _ ->
@@ -17,13 +12,21 @@ let exec_in ~stdout str cmd =
       Lwt.return (Error ())
 
 let docker_build args dockerfile =
+  let stdin, fd = Lwt_unix.pipe_out () in
+  let stdin = `FD_move stdin in
+  let fd = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
+  Lwt_io.write_line fd (Dockerfile.string_of_t dockerfile) >>= fun () ->
+  Lwt_io.close fd >>= fun () ->
   exec_in
+    ~stdin
     ~stdout:`Keep
-    (Dockerfile.string_of_t dockerfile)
+    ~stderr:`Keep
     ("docker"::"build"::args@["-"])
 
 let docker_run ~stdout img cmd =
-  exec_in ~stdout "" ("docker"::"run"::"--rm"::"-it"::img::cmd)
+  let stderr = `FD_move stdout in
+  let stdout = `FD_copy stdout in
+  exec_in ~stdin:`Keep ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
 
 let get_pkgs ~base_img ~img_name ~logdir ~switch =
   let dockerfile =
@@ -37,7 +40,9 @@ let get_pkgs ~base_img ~img_name ~logdir ~switch =
     run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
     run "opam switch create -y %s" switch @@
     run "opam install -y opam-depext" @@
-    run "opam pin add -yn --dev ocamlfind.1.7.3-1" @@
+    run "git clone git://github.com/kit-ty-kate/lib-findlib.git" @@
+    run "git -C lib-findlib checkout test-407" @@
+    run "opam pin add -yn ocamlfind lib-findlib" @@
     cmd "opam list --installable --available --short --all-versions"
   in
   docker_build ["-t"; img_name] dockerfile >>= fun _ ->
@@ -62,7 +67,6 @@ let rec get_jobs ~img_name ~logdir ~gooddir ~baddir jobs = function
             let logfile = Filename.concat logdir pkg in
             Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stdout ->
             let stdout = Lwt_unix.unix_file_descr stdout in
-            let stdout = `FD_move stdout in
             docker_run ~stdout img_name ["opam";"depext";"-ivy";pkg] >>= begin function
             | Ok () -> Lwt_unix.rename logfile goodlog
             | Error () -> Lwt_unix.rename logfile badlog
