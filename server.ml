@@ -1,9 +1,12 @@
 open Containers
+open Lwt.Infix
 
 let serv_file ~logdir file =
-  match IO.File.read (Filename.concat logdir file) with
-  | Ok body -> Cohttp_lwt_unix.Server.respond_string ~status:`OK ~body ()
-  | Error err -> failwith err
+  let file = Filename.concat logdir file in
+  Lwt_io.with_file ~mode:Lwt_io.Input file begin fun file ->
+    Lwt_io.read file >>= fun body ->
+    Cohttp_lwt_unix.Server.respond_string ~status:`OK ~body ()
+  end
 
 let callback logdir _conn req _body =
   match Uri.path (Cohttp.Request.uri req) with
