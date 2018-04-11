@@ -20,6 +20,7 @@ let () =
       let callback = callback logdir in
       Lwt_main.run begin
         Cohttp_lwt_unix.Server.create
+          ~on_exn:(fun _ -> ())
           ~mode:(`TCP (`Port 8080))
           (Cohttp_lwt_unix.Server.make ~callback ())
       end
