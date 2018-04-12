@@ -15,7 +15,7 @@ let docker_build args dockerfile =
   let stdin, fd = Lwt_unix.pipe_out () in
   let stdin = `FD_move stdin in
   let fd = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
-  Lwt_io.write_line fd (Dockerfile.string_of_t dockerfile) >>= fun () ->
+  Lwt_io.write_line fd dockerfile >>= fun () ->
   Lwt_io.close fd >>= fun () ->
   exec_in
     ~stdin
@@ -28,27 +28,16 @@ let docker_run ~stdout img cmd =
   let stdout = `FD_copy stdout in
   exec_in ~stdin:`Keep ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
 
-let get_pkgs ~base_img ~img_name ~logdir ~switch =
-  let dockerfile =
-    let open Dockerfile in
-    from base_img @@
-    run "sudo apt-get update" @@
-    run "git checkout 632bc2eed" @@
-    run "git pull origin 2.0.0" @@
-    run "opam update" @@
-    run "opam admin cache" @@
-    run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
-    run "opam switch create -y %s" switch @@
-    run "opam install -y opam-depext" @@
-    run "git clone git://github.com/kit-ty-kate/lib-findlib.git" @@
-    run "git -C lib-findlib checkout test-407" @@
-    run "opam pin add -yn ocamlfind lib-findlib" @@
-    cmd "opam list --installable --available --short --all-versions"
-  in
-  docker_build ["-t"; img_name] dockerfile >>= fun _ ->
-  Lwt_io.write_line Lwt_io.stdout "Getting packages list..." >>= fun () ->
-  Lwt_process.pread ("", [|"docker"; "run"; img_name|]) >|=
-  String.split_on_char '\n'
+let get_pkgs ~logdir dockerfile =
+  Lwt_io.with_file ~mode:Lwt_io.Input dockerfile begin fun dockerfile ->
+    Lwt_io.read dockerfile >>= fun dockerfile ->
+    let md5 = Digest.string dockerfile in
+    let img_name = "opam-check-all-" ^ md5 in
+    docker_build ["-t"; img_name] dockerfile >>= fun _ ->
+    Lwt_io.write_line Lwt_io.stdout "Getting packages list..." >>= fun () ->
+    Lwt_process.pread ("", [|"docker"; "run"; img_name|]) >|= fun pkgs ->
+    (img_name, String.split_on_char '\n' pkgs)
+  end
 
 let rec get_jobs ~img_name ~logdir ~gooddir ~baddir jobs = function
   | [] ->
@@ -78,14 +67,14 @@ let rec get_jobs ~img_name ~logdir ~gooddir ~baddir jobs = function
 
 let () =
   match Sys.argv with
-  | [|_; base_img; img_name; logdir; switch|] ->
+  | [|_; logdir; dockerfile|] ->
       let gooddir = Filename.concat logdir "good" in
       let baddir = Filename.concat logdir "bad" in
       Lwt_main.run begin
         Lwt_process.exec ("", [|"mkdir"; "-p"; gooddir|]) >>= fun _ ->
         Lwt_process.exec ("", [|"mkdir"; "-p"; baddir|]) >>= fun _ ->
-        get_pkgs ~base_img ~img_name ~logdir ~switch >>=
-        get_jobs ~img_name ~logdir ~gooddir ~baddir [] >>=
+        get_pkgs ~logdir dockerfile >>= fun (img_name, pkgs) ->
+        get_jobs ~img_name ~logdir ~gooddir ~baddir [] pkgs >>=
         Lwt.join
       end
   | _ ->

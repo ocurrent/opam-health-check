@@ -3,7 +3,7 @@
 (executable
   ((name check)
    (modules (check))
-   (libraries (lwt.unix dockerfile))))
+   (libraries (lwt.unix))))
 
 (executable
   ((name diff)
