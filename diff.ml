@@ -42,7 +42,7 @@ let get_pkgs dirs =
 
 let state_to_html =
   let open Tyxml.Html in
-  let td c = td ~a:[a_style ("border: 2px solid black; background-color: "^c^"; text-align: center;")] in
+  let td c = td ~a:[a_class ["result-col"]; a_style ("background-color: "^c^";")] in
   function
   | Good -> td "green" [pcdata "☑"]
   | Bad path -> td "red" [a ~a:[a_href path] [pcdata "☒"]]
@@ -50,25 +50,34 @@ let state_to_html =
 
 let pkg_to_html (pkg, instances) =
   let open Tyxml.Html in
-  let td = td ~a:[a_style "border: 2px solid black;"] in
   td [pcdata pkg] :: List.map state_to_html instances
 
 let print_html dirs pkgs =
   let open Tyxml.Html in
-  let table = table ~a:[a_style "border-collapse: collapse;"] in
-  let th = th ~a:[a_style "border: 2px solid black; test-align: center; width: 20em;"] in
-  let dirs = th [] :: List.map (fun dir -> th [pcdata (Filename.basename dir)]) dirs in
+  let col_width = string_of_int (100 / List.length dirs) in
+  let dirs = th [] :: List.map (fun dir -> th ~a:[a_class ["result-col"]] [pcdata (Filename.basename dir)]) dirs in
   let pkgs = List.map (fun pkg -> tr (pkg_to_html pkg)) pkgs in
+  let title = title (pcdata "title") in
+  let charset = meta ~a:[a_charset "utf-8"] () in
+  let style_table = pcdata "table {border-collapse: collapse; min-width: 100%;}" in
+  let style_col = pcdata (".result-col {text-align: center; width: "^col_width^"%;}") in
+  let style_case = pcdata "td, th {border: 2px solid black;}" in
+  let head = head title [charset; style [style_table; style_col; style_case]] in
   let doc = table ~thead:(thead [tr dirs]) pkgs in
-  let doc = html (head (title (pcdata "title")) [meta ~a:[a_charset "utf-8"] ()]) (body [doc]) in
+  let doc = html head (body [doc]) in
   Format.printf "%a\n" (pp ()) doc
 
 let () =
   match Sys.argv with
   | [|_; logdir|] ->
-      let dirs = get_dirs logdir in
-      let pkgs = get_pkgs dirs in
-      print_html dirs pkgs
+      begin match get_dirs logdir with
+      | [] ->
+          prerr_endline "Empty logdir";
+          exit 1
+      | dirs ->
+          let pkgs = get_pkgs dirs in
+          print_html dirs pkgs
+      end
   | _ ->
       prerr_endline "Read the code and try again";
       exit 1
