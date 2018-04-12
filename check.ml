@@ -31,7 +31,7 @@ let docker_run ~stdout img cmd =
 let get_pkgs ~logdir dockerfile =
   Lwt_io.with_file ~mode:Lwt_io.Input dockerfile begin fun dockerfile ->
     Lwt_io.read dockerfile >>= fun dockerfile ->
-    let md5 = Digest.string dockerfile in
+    let md5 = Digest.to_hex (Digest.string dockerfile) in
     let img_name = "opam-check-all-" ^ md5 in
     docker_build ["-t"; img_name] dockerfile >>= fun _ ->
     Lwt_io.write_line Lwt_io.stdout "Getting packages list..." >>= fun () ->
