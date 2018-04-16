@@ -6,11 +6,6 @@
    (libraries (lwt.unix))))
 
 (executable
-  ((name diff)
-   (modules (diff))
-   (libraries (tyxml unix containers))))
-
-(executable
   ((name server)
-   (modules (server))
-   (libraries (cohttp-lwt-unix containers))))
+   (modules (server diff))
+   (libraries (tyxml cohttp-lwt-unix containers))))

@@ -25,26 +25,37 @@ end = struct
     String.concat Filename.dir_sep path
 end
 
+let serv_string ~content_type body =
+  let headers = Cohttp.Header.init_with "Content-Type" content_type in
+  Cohttp_lwt_unix.Server.respond_string ~headers ~status:`OK ~body ()
+
 let serv_file ~content_type ~logdir file =
   let headers = Cohttp.Header.init_with "Content-Type" content_type in
   let fname = Filename.concat logdir file in
   Cohttp_lwt_unix.Server.respond_file ~headers ~fname ()
 
-let callback logdir _conn req _body =
+let callback ~logdir ~dirs ~pkgs _conn req _body =
   match Path.of_uri (Cohttp.Request.uri req) with
-  | [] -> serv_file ~content_type:"text/html" ~logdir "index.html"
+  | [] -> serv_string ~content_type:"text/html" (Diff.get_html dirs pkgs)
   | path -> serv_file ~content_type:"text/plain" ~logdir (Path.to_string path)
 
 let () =
   match Sys.argv with
   | [|_; logdir; port|] ->
-      let callback = callback logdir in
-      let port = int_of_string port in
-      Lwt_main.run begin
-        Cohttp_lwt_unix.Server.create
-          ~on_exn:(fun _ -> ())
-          ~mode:(`TCP (`Port port))
-          (Cohttp_lwt_unix.Server.make ~callback ())
+      begin match Diff.get_dirs logdir with
+      | [] ->
+          prerr_endline "Empty logdir";
+          exit 1
+      | dirs ->
+          let pkgs = Diff.get_pkgs dirs in
+          let callback = callback ~logdir ~dirs ~pkgs in
+          let port = int_of_string port in
+          Lwt_main.run begin
+            Cohttp_lwt_unix.Server.create
+              ~on_exn:(fun _ -> ())
+              ~mode:(`TCP (`Port port))
+              (Cohttp_lwt_unix.Server.make ~callback ())
+          end
       end
   | _ ->
       prerr_endline "Read the code and try again";

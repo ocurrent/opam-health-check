@@ -4,6 +4,9 @@ module Pkgs = Map.Make (String)
 
 type state = Good | Bad of string | Nop
 
+type dir = string
+type pkgs = (string * state list) list
+
 let get_files dirname =
   let dir = Unix.opendir dirname in
   let rec aux files = match Unix.readdir dir with
@@ -52,7 +55,7 @@ let pkg_to_html (pkg, instances) =
   let open Tyxml.Html in
   td [pcdata pkg] :: List.map state_to_html instances
 
-let print_html dirs pkgs =
+let get_html dirs pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / List.length dirs) in
   let dirs = th [] :: List.map (fun dir -> th ~a:[a_class ["result-col"]] [pcdata (Filename.basename dir)]) dirs in
@@ -65,19 +68,4 @@ let print_html dirs pkgs =
   let head = head title [charset; style [style_table; style_col; style_case]] in
   let doc = table ~thead:(thead [tr dirs]) pkgs in
   let doc = html head (body [doc]) in
-  Format.printf "%a\n" (pp ()) doc
-
-let () =
-  match Sys.argv with
-  | [|_; logdir|] ->
-      begin match get_dirs logdir with
-      | [] ->
-          prerr_endline "Empty logdir";
-          exit 1
-      | dirs ->
-          let pkgs = get_pkgs dirs in
-          print_html dirs pkgs
-      end
-  | _ ->
-      prerr_endline "Read the code and try again";
-      exit 1
+  Format.sprintf "%a\n" (pp ()) doc
