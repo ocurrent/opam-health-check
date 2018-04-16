@@ -15,13 +15,14 @@ end = struct
     | [] -> []
     | ""::xs -> normalize_path xs
     | ".."::_ -> failwith "You bastard !"
+    | x::_ when String.mem ~sub:Filename.dir_sep x -> failwith "You bastard !!"
     | x::xs -> x :: normalize_path xs
 
   let of_uri path =
     normalize_path (String.split_on_char '/' (Uri.path path))
 
   let to_string path =
-    String.concat "/" path
+    String.concat Filename.dir_sep path
 end
 
 let serv_file ~content_type ~logdir file =
