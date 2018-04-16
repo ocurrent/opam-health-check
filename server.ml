@@ -17,12 +17,13 @@ let callback logdir _conn req _body =
 
 let () =
   match Sys.argv with
-  | [|_; logdir|] ->
+  | [|_; logdir; port|] ->
       let callback = callback logdir in
+      let port = int_of_string port in
       Lwt_main.run begin
         Cohttp_lwt_unix.Server.create
           ~on_exn:(fun _ -> ())
-          ~mode:(`TCP (`Port 8080))
+          ~mode:(`TCP (`Port port))
           (Cohttp_lwt_unix.Server.make ~callback ())
       end
   | _ ->
