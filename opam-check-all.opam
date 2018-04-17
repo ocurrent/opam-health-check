@@ -10,7 +10,5 @@ tags: ["opam" "check"]
 build: ["jbuilder" "build" "-p" name]
 depends: [
   "jbuilder" {build}
-  "tyxml"
-  "cohttp-lwt-unix"
-  "containers"
+  "lwt"
 ]
