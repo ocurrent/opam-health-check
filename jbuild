@@ -12,4 +12,4 @@
    (public_name opam-serve-all)
    (package opam-serve-all)
    (modules (server diff))
-   (libraries (tyxml cohttp-lwt-unix containers))))
+   (libraries (tyxml cohttp-lwt-unix containers opam-core))))

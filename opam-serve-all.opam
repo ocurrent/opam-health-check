@@ -13,4 +13,5 @@ depends: [
   "tyxml"
   "cohttp-lwt-unix"
   "containers"
+  "opam-core"
 ]

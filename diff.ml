@@ -27,7 +27,7 @@ let is_directory dir file =
 let get_dirs dir =
   let files = get_files dir in
   let dirs = List.filter (is_directory dir) files in
-  List.sort String.compare dirs
+  List.sort OpamVersionCompare.compare dirs
 
 let pkg_update ~comp ~file v = function
   | None -> Some [(comp, (file, v))]
@@ -48,7 +48,7 @@ let get_pkgs_from_dir ~logdir pkgs comp =
 let get_pkgs ~logdir compilers =
   let pkgs = List.fold_left (get_pkgs_from_dir ~logdir) Pkgs.empty compilers in
   let pkgs = Pkgs.bindings pkgs in
-  List.sort (fun (x, _) (y, _) -> String.compare x y) pkgs
+  List.sort (fun (x, _) (y, _) -> OpamVersionCompare.compare x y) pkgs
 
 let instance_to_html instances comp =
   let open Tyxml.Html in
