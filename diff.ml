@@ -39,6 +39,8 @@ let get_pkgs_from_dir ~logdir pkgs comp =
   let baddir = Filename.concat dir "bad" in
   let good_files = get_files gooddir in
   let bad_files = get_files baddir in
+  let gooddir = Filename.concat comp "good" in
+  let baddir = Filename.concat comp "bad" in
   let aux dir v pkgs pkg =
     Pkgs.update pkg (pkg_update ~comp ~file:(Filename.concat dir pkg) v) pkgs
   in
