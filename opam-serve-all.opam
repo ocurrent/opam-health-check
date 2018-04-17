@@ -1,0 +1,14 @@
+opam-version: "1.2"
+version: "0.1~"
+license: "MIT"
+maintainer: "Kate <jp.deplaix@gmail.com>"
+authors: "Kate <jp.deplaix@gmail.com>"
+homepage: "https://github.com/kit-ty-kate/opam-check-all"
+dev-repo: "git://github.com/kit-ty-kate/opam-check-all.git"
+bug-reports: "https://github.com/kit-ty-kate/opam-check-all/issues"
+tags: ["opam" "check"]
+build: ["jbuilder" "build" "-p" name]
+depends: [
+  "jbuilder" {build}
+  "lwt"
+]

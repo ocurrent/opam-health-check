@@ -2,10 +2,14 @@
 
 (executable
   ((name check)
+   (public_name opam-check-all)
+   (package opam-check-all)
    (modules (check))
    (libraries (lwt.unix))))
 
 (executable
   ((name server)
+   (public_name opam-serve-all)
+   (package opam-serve-all)
    (modules (server diff))
    (libraries (tyxml cohttp-lwt-unix containers))))
