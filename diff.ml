@@ -27,9 +27,12 @@ let get_dirs dir =
   let dirs = List.filter (is_directory dir) files in
   List.sort OpamVersionCompare.compare dirs
 
-let pkg_update ~comp v = function
-  | None -> Some [(comp, v)]
-  | Some l -> Some ((comp, v) :: l)
+let pkg_update ~comp v pkgs pkg =
+  let aux = function
+    | None -> Some [(comp, v)]
+    | Some l -> Some ((comp, v) :: l)
+  in
+  Pkgs.update pkg aux pkgs
 
 let get_pkgs_from_dir ~logdir pkgs comp =
   let dir = Filename.concat logdir comp in
@@ -37,11 +40,8 @@ let get_pkgs_from_dir ~logdir pkgs comp =
   let baddir = Filename.concat dir "bad" in
   let good_files = get_files gooddir in
   let bad_files = get_files baddir in
-  let aux v pkgs pkg =
-    Pkgs.update pkg (pkg_update ~comp v) pkgs
-  in
-  let pkgs = List.fold_left (aux Good) pkgs good_files in
-  List.fold_left (aux Bad) pkgs bad_files
+  let pkgs = List.fold_left (pkg_update ~comp Good) pkgs good_files in
+  List.fold_left (pkg_update ~comp Bad) pkgs bad_files
 
 let get_pkgs ~logdir compilers =
   let pkgs = List.fold_left (get_pkgs_from_dir ~logdir) Pkgs.empty compilers in
