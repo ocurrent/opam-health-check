@@ -2,8 +2,7 @@ open Containers
 open Lwt.Infix
 
 module Path : sig
-  type elt
-  type t = elt list
+  type t = string list
 
   val of_uri : Uri.t -> t
   val to_string : t -> string
@@ -34,10 +33,15 @@ let serv_file ~content_type ~logdir file =
   let fname = Filename.concat logdir file in
   Cohttp_lwt_unix.Server.respond_file ~headers ~fname ()
 
-let callback ~logdir ~dirs ~pkgs _conn req _body =
+let callback ~logdir ~compilers ~pkgs _conn req _body =
   match Path.of_uri (Cohttp.Request.uri req) with
-  | [] -> serv_string ~content_type:"text/html" (Diff.get_html dirs pkgs)
-  | path -> serv_file ~content_type:"text/plain" ~logdir (Path.to_string path)
+  | [] ->
+      serv_string ~content_type:"text/html" (Diff.get_html compilers pkgs)
+  | "diff"::compilers ->
+      let compilers = List.map Diff.comp_from_string compilers in
+      serv_string ~content_type:"text/html" (Diff.get_html compilers pkgs)
+  | path ->
+      serv_file ~content_type:"text/plain" ~logdir (Path.to_string path)
 
 let () =
   match Sys.argv with
@@ -46,9 +50,9 @@ let () =
       | [] ->
           prerr_endline "Empty logdir";
           exit 1
-      | dirs ->
-          let pkgs = Diff.get_pkgs dirs in
-          let callback = callback ~logdir ~dirs ~pkgs in
+      | compilers ->
+          let pkgs = Diff.get_pkgs ~logdir compilers in
+          let callback = callback ~logdir ~compilers ~pkgs in
           let port = int_of_string port in
           Lwt_main.run begin
             Cohttp_lwt_unix.Server.create

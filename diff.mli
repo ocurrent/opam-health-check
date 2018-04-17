@@ -1,6 +1,8 @@
-type dir
+type comp
 type pkgs
 
-val get_dirs : string -> dir list
-val get_pkgs : dir list -> pkgs
-val get_html : dir list -> pkgs -> string
+val get_dirs : string -> comp list
+val get_pkgs : logdir:string -> comp list -> pkgs
+val get_html : comp list -> pkgs -> string
+
+val comp_from_string : string -> comp
