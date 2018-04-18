@@ -11,7 +11,4 @@ RUN git pull git://github.com/kit-ty-kate/opam-repository.git tmp-drup-check
 RUN opam init -yac 4.08.0+trunk .
 RUN echo 'archive-mirrors: ["file:///home/opam/opam-repository/cache"]' >> /home/opam/.opam/config
 RUN opam install -y opam-depext
-RUN git clone git://github.com/kit-ty-kate/lib-findlib.git
-RUN git -C lib-findlib checkout test-407
-RUN opam pin add -yn ocamlfind lib-findlib
 CMD opam list --installable --available --short --all-versions
