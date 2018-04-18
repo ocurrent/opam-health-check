@@ -2,7 +2,6 @@
 
 ```
 $ opam pin add opam-check-all .
-$ opam pin add opam-serve-all .
 ```
 
 ### How to use opam-check-all:
