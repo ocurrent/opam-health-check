@@ -36,10 +36,12 @@ let serv_file ~content_type ~logdir file =
 let callback ~logdir _conn req _body =
   match Path.of_uri (Cohttp.Request.uri req) with
   | [] ->
-      serv_string ~content_type:"text/html" (Cache.get_html ~logdir [])
+      Cache.get_html ~logdir [] >>= fun html ->
+      serv_string ~content_type:"text/html" html
   | "diff"::compilers ->
       let compilers = List.map Diff.comp_from_string compilers in
-      serv_string ~content_type:"text/html" (Cache.get_html ~logdir compilers)
+      Cache.get_html ~logdir compilers >>= fun html ->
+      serv_string ~content_type:"text/html" html
   | path ->
       serv_file ~content_type:"text/plain" ~logdir (Path.to_string path)
 

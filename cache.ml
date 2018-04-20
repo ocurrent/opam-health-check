@@ -1,4 +1,5 @@
 open Containers
+open Lwt.Infix
 
 module Hashtbl = Hashtbl.Make (struct
     type t = Diff.comp list
@@ -14,14 +15,14 @@ let clear () =
 
 let get_html ~logdir compilers =
   let is_default = List.is_empty compilers in
-  let compilers = if is_default then Diff.get_dirs logdir else compilers in
-  let pkgs = Diff.get_pkgs ~logdir compilers in
+  begin if is_default then Diff.get_dirs logdir else Lwt.return compilers end >>= fun compilers ->
+  Diff.get_pkgs ~logdir compilers >>= fun pkgs ->
   let html = Diff.get_html compilers pkgs in
   Hashtbl.add hashtbl compilers html;
   if is_default then Hashtbl.add hashtbl [] html;
-  html
+  Lwt.return html
 
 let get_html ~logdir compilers =
   match Hashtbl.find_opt hashtbl compilers with
-  | Some html -> html
+  | Some html -> Lwt.return html
   | None -> get_html ~logdir compilers

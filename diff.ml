@@ -1,4 +1,5 @@
 open Containers
+open Lwt.Infix
 
 module Pkgs = Map.Make (String)
 
@@ -9,21 +10,26 @@ type pkg = string
 type pkgs = (pkg * (comp * state) list) list
 
 let get_files dirname =
-  let dir = Unix.opendir dirname in
-  let rec aux files = match Unix.readdir dir with
-    | "." | ".." -> aux files
-    | file -> aux (file :: files)
-    | exception End_of_file -> files
+  Lwt_unix.opendir dirname >>= fun dir ->
+  let rec aux files =
+    Lwt.catch begin fun () ->
+      Lwt_unix.readdir dir >>= function
+      | "." | ".." -> aux files
+      | file -> aux (file :: files)
+    end begin function
+    | End_of_file -> Lwt.return files
+    | exn -> Lwt.fail exn
+    end
   in
-  let files = aux [] in
-  Unix.closedir dir;
+  aux [] >>= fun files ->
+  Lwt_unix.closedir dir >|= fun () ->
   files
 
 let is_directory dir file =
   Sys.is_directory (Filename.concat dir file)
 
 let get_dirs dir =
-  let files = get_files dir in
+  get_files dir >|= fun files ->
   let dirs = List.filter (is_directory dir) files in
   List.sort OpamVersionCompare.compare dirs
 
@@ -38,13 +44,13 @@ let get_pkgs_from_dir ~logdir pkgs comp =
   let dir = Filename.concat logdir comp in
   let gooddir = Filename.concat dir "good" in
   let baddir = Filename.concat dir "bad" in
-  let good_files = get_files gooddir in
-  let bad_files = get_files baddir in
+  get_files gooddir >>= fun good_files ->
+  get_files baddir >|= fun bad_files ->
   let pkgs = List.fold_left (pkg_update ~comp Good) pkgs good_files in
   List.fold_left (pkg_update ~comp Bad) pkgs bad_files
 
 let get_pkgs ~logdir compilers =
-  let pkgs = List.fold_left (get_pkgs_from_dir ~logdir) Pkgs.empty compilers in
+  Lwt_list.fold_left_s (get_pkgs_from_dir ~logdir) Pkgs.empty compilers >|= fun pkgs ->
   let pkgs = Pkgs.bindings pkgs in
   List.sort (fun (x, _) (y, _) -> OpamVersionCompare.compare x y) pkgs
 
