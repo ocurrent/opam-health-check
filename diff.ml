@@ -82,3 +82,4 @@ let get_html compilers pkgs =
   Format.sprintf "%a\n" (pp ()) doc
 
 let comp_from_string x = x
+let comp_equal = String.equal

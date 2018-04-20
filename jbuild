@@ -9,5 +9,5 @@
 (executable
   ((name server)
    (public_name opam-serve-all)
-   (modules (server diff admin check))
+   (modules (server diff admin check cache))
    (libraries (tyxml cohttp-lwt-unix containers opam-core x509))))

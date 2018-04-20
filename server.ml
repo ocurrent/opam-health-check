@@ -33,14 +33,13 @@ let serv_file ~content_type ~logdir file =
   let fname = Filename.concat logdir file in
   Cohttp_lwt_unix.Server.respond_file ~headers ~fname ()
 
-let callback ~logdir ~compilers ~pkgs _conn req _body =
+let callback ~logdir _conn req _body =
   match Path.of_uri (Cohttp.Request.uri req) with
   | [] ->
-      (* TODO: Add cache for html content *)
-      serv_string ~content_type:"text/html" (Diff.get_html compilers pkgs)
+      serv_string ~content_type:"text/html" (Cache.get_html ~logdir [])
   | "diff"::compilers ->
       let compilers = List.map Diff.comp_from_string compilers in
-      serv_string ~content_type:"text/html" (Diff.get_html compilers pkgs)
+      serv_string ~content_type:"text/html" (Cache.get_html ~logdir compilers)
   | path ->
       serv_file ~content_type:"text/plain" ~logdir (Path.to_string path)
 
@@ -53,21 +52,14 @@ let tcp_server port callback =
 let () =
   match Sys.argv with
   | [|_; logdir; port; keysdir|] ->
-      begin match Diff.get_dirs logdir with
-      | [] ->
-          prerr_endline "Empty logdir";
-          exit 1
-      | compilers ->
-          let pkgs = Diff.get_pkgs ~logdir compilers in
-          let callback = callback ~logdir ~compilers ~pkgs in
-          let admin_callback = Admin.callback ~logdir ~keysdir in
-          let port = int_of_string port in
-          Lwt_main.run begin
-            Lwt.join [
-              tcp_server port callback;
-              tcp_server 9999 admin_callback;
-            ]
-          end
+      let callback = callback ~logdir in
+      let admin_callback = Admin.callback ~logdir ~keysdir in
+      let port = int_of_string port in
+      Lwt_main.run begin
+        Lwt.join [
+          tcp_server port callback;
+          tcp_server 9999 admin_callback;
+        ]
       end
   | _ ->
       prerr_endline "Read the code and try again";

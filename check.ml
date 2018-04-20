@@ -43,7 +43,10 @@ let get_pkgs ~dockerfile =
 (* TODO: Redirect everything to a per user & jobs log *)
 let rec get_jobs ~img_name ~logdir ~gooddir ~baddir = function
   | [] ->
-      Lwt.return_unit
+      Lwt_pool.use pool begin fun () ->
+        Cache.clear ();
+        Lwt.return_unit
+      end
   | pkg::pkgs ->
       Lwt_pool.use pool begin fun () ->
         let goodlog = Filename.concat gooddir pkg in
