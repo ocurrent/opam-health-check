@@ -34,13 +34,16 @@ let get_user_key ~keysdir user =
   else
     Lwt.fail_with "Invalid username"
 
+let partial_decrypt key msg =
+  Cstruct.to_string (Nocrypto.Rsa.decrypt ~key (Cstruct.of_string msg))
+
 let rec decrypt key msg =
   let key_size = Nocrypto.Rsa.priv_bits key / 8 in
   if String.length msg <= key_size then
-    ltrim (Cstruct.to_string (Nocrypto.Rsa.decrypt ~key (Cstruct.of_string msg)))
+    ltrim (partial_decrypt key msg)
   else
     let msg, next = String.take_drop key_size msg in
-    decrypt key msg ^ decrypt key next
+    partial_decrypt key msg ^ decrypt key next
 
 let callback ~logdir ~keysdir conn req body =
   Cohttp_lwt.Body.to_string body >>= fun body ->

@@ -5,13 +5,16 @@ let parse_key key =
   let `RSA key = X509.Encoding.Pem.Private_key.of_pem_cstruct1 (Cstruct.of_string key) in
   Nocrypto.Rsa.pub_of_priv key
 
+let partial_encrypt key msg =
+  Cstruct.to_string (Nocrypto.Rsa.encrypt ~key (Cstruct.of_string msg))
+
 let rec encrypt_msg ~key msg =
   let max_size = Nocrypto.Rsa.pub_bits key / 8 in
   if String.length msg <= max_size then
-    Cstruct.to_string (Nocrypto.Rsa.encrypt ~key (Cstruct.of_string msg))
+    partial_encrypt key msg
   else
     let msg, next = String.take_drop max_size msg in
-    encrypt_msg ~key msg ^ encrypt_msg ~key next
+    partial_encrypt key msg ^ encrypt_msg ~key next
 
 let send_msg ~key ~username ~hostname msg =
   let key = parse_key key in
