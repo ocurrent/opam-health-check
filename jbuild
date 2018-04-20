@@ -1,13 +1,13 @@
 (jbuild_version 1)
 
 (executable
-  ((name check)
+  ((name client)
    (public_name opam-check-all)
-   (modules (check))
-   (libraries (lwt.unix))))
+   (modules (client))
+   (libraries (x509 cohttp-lwt-unix containers))))
 
 (executable
   ((name server)
    (public_name opam-serve-all)
-   (modules (server diff))
-   (libraries (tyxml cohttp-lwt-unix containers opam-core))))
+   (modules (server diff admin check))
+   (libraries (tyxml cohttp-lwt-unix containers opam-core x509))))

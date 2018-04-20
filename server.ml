@@ -36,6 +36,7 @@ let serv_file ~content_type ~logdir file =
 let callback ~logdir ~compilers ~pkgs _conn req _body =
   match Path.of_uri (Cohttp.Request.uri req) with
   | [] ->
+      (* TODO: Add cache for html content *)
       serv_string ~content_type:"text/html" (Diff.get_html compilers pkgs)
   | "diff"::compilers ->
       let compilers = List.map Diff.comp_from_string compilers in
@@ -43,9 +44,15 @@ let callback ~logdir ~compilers ~pkgs _conn req _body =
   | path ->
       serv_file ~content_type:"text/plain" ~logdir (Path.to_string path)
 
+let tcp_server port callback =
+  Cohttp_lwt_unix.Server.create
+    ~on_exn:(fun _ -> ())
+    ~mode:(`TCP (`Port port))
+    (Cohttp_lwt_unix.Server.make ~callback ())
+
 let () =
   match Sys.argv with
-  | [|_; logdir; port|] ->
+  | [|_; logdir; port; keysdir|] ->
       begin match Diff.get_dirs logdir with
       | [] ->
           prerr_endline "Empty logdir";
@@ -53,12 +60,13 @@ let () =
       | compilers ->
           let pkgs = Diff.get_pkgs ~logdir compilers in
           let callback = callback ~logdir ~compilers ~pkgs in
+          let admin_callback = Admin.callback ~logdir ~keysdir in
           let port = int_of_string port in
           Lwt_main.run begin
-            Cohttp_lwt_unix.Server.create
-              ~on_exn:(fun _ -> ())
-              ~mode:(`TCP (`Port port))
-              (Cohttp_lwt_unix.Server.make ~callback ())
+            Lwt.join [
+              tcp_server port callback;
+              tcp_server 9999 admin_callback;
+            ]
           end
       end
   | _ ->
