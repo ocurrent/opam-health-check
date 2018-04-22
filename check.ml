@@ -7,6 +7,19 @@ type pkgs = string list
 let write_line_unix fd s =
   Lwt_io.write_line (Lwt_io.of_fd ~mode:Lwt_io.Output fd) s
 
+let mkdir_p dir =
+  let rec aux base = function
+    | [] ->
+        Lwt.return_unit
+    | x::xs ->
+        let dir = Filename.concat base x in
+        Lwt_unix.mkdir dir 0o750 >>= fun () ->
+        aux dir xs
+  in
+  match String.Split.list_cpy ~by:Filename.dir_sep dir with
+  | ""::dirs -> aux Filename.dir_sep dirs
+  | dirs -> aux "" dirs
+
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 
 let exec_in ~stdin ~stdout ~stderr cmd =
@@ -76,7 +89,6 @@ let check ~logdir ~dockerfile name =
   get_pkgs ~stdout ~dockerfile >>= fun (img_name, pkgs) ->
   let gooddir = Filename.concat logdir "good" in
   let baddir = Filename.concat logdir "bad" in
-  (* TODO: Check result *)
-  Lwt_process.exec ("", [|"mkdir"; "-p"; gooddir|]) >>= fun _ ->
-  Lwt_process.exec ("", [|"mkdir"; "-p"; baddir|]) >>= fun _ ->
+  mkdir_p gooddir >>= fun () ->
+  mkdir_p baddir >>= fun () ->
   get_jobs ~stdout ~img_name ~logdir ~gooddir ~baddir pkgs
