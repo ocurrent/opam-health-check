@@ -5,10 +5,7 @@ let admin_action ~logdir user body =
   match String.split_on_char '\n' body with
   | "check"::dir::dockerfile ->
       let dockerfile = String.concat "\n" dockerfile in
-      Lwt.ignore_result begin
-        Check.get_pkgs ~dockerfile >>= fun (img_name, pkgs) ->
-        Check.get_jobs ~img_name ~logdir pkgs
-      end
+      Lwt.ignore_result (Check.check ~logdir ~dockerfile dir)
   | _ ->
       assert false (* TODO *)
 

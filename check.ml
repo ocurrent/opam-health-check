@@ -4,6 +4,9 @@ open Lwt.Infix
 type img = string
 type pkgs = string list
 
+let write_line_unix fd s =
+  Lwt_io.write_line (Lwt_io.of_fd ~mode:Lwt_io.Output fd) s
+
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 
 let exec_in ~stdin ~stdout ~stderr cmd =
@@ -15,37 +18,37 @@ let exec_in ~stdin ~stdout ~stderr cmd =
       Lwt_io.write_line Lwt_io.stderr ("Command '"^cmd^"' failed.") >>= fun () ->
       Lwt.return (Error ())
 
-let docker_build args dockerfile =
+let docker_build ~stdout args dockerfile =
+  let stdout = Lwt_unix.unix_file_descr stdout in
   let stdin, fd = Lwt_unix.pipe_out () in
   let stdin = `FD_move stdin in
+  let stderr = `FD_copy stdout in
+  let stdout = `FD_copy stdout in
   let fd = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
   Lwt_io.write_line fd dockerfile >>= fun () ->
   Lwt_io.close fd >>= fun () ->
-  exec_in
-    ~stdin
-    ~stdout:`Keep
-    ~stderr:`Keep
-    ("docker"::"build"::args@["-"])
+  exec_in ~stdin ~stdout ~stderr ("docker"::"build"::args@["-"])
 
 let docker_run ~stdout img cmd =
+  let stdout = Lwt_unix.unix_file_descr stdout in
   let stderr = `FD_move stdout in
   let stdout = `FD_copy stdout in
-  exec_in ~stdin:`Keep ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
+  exec_in ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
 
-let get_pkgs ~dockerfile =
+let get_pkgs ~stdout ~dockerfile =
   let md5 = Digest.to_hex (Digest.string dockerfile) in
   let img_name = "opam-check-all-" ^ md5 in
-  docker_build ["-t"; img_name] dockerfile >>= fun _ ->
-  Lwt_io.write_line Lwt_io.stdout "Getting packages list..." >>= fun () ->
+  docker_build ~stdout ["-t"; img_name] dockerfile >>= fun _ ->
+  write_line_unix stdout "Getting packages list..." >>= fun () ->
   Lwt_process.pread ("", [|"docker"; "run"; img_name|]) >|= fun pkgs ->
   (img_name, String.split_on_char '\n' pkgs)
 
 (* TODO: Redirect everything to a per user & jobs log *)
-let rec get_jobs ~img_name ~logdir ~gooddir ~baddir = function
+let rec get_jobs ~stdout ~img_name ~logdir ~gooddir ~baddir = function
   | [] ->
       Lwt_pool.use pool begin fun () ->
         Cache.clear ();
-        Lwt.return_unit
+        Lwt_unix.close stdout
       end
   | pkg::pkgs ->
       Lwt_pool.use pool begin fun () ->
@@ -54,23 +57,26 @@ let rec get_jobs ~img_name ~logdir ~gooddir ~baddir = function
         Lwt_unix.file_exists goodlog >>= fun goodlog_exists ->
         Lwt_unix.file_exists badlog >>= fun badlog_exists ->
         if goodlog_exists || badlog_exists then begin
-          Lwt_io.write_line Lwt_io.stdout (pkg^" has already been checked. Skipping...")
+          write_line_unix stdout (pkg^" has already been checked. Skipping...")
         end else begin
-          Lwt_io.write_line Lwt_io.stdout ("Checking "^pkg^"...") >>= fun () ->
+          write_line_unix stdout ("Checking "^pkg^"...") >>= fun () ->
           let logfile = Filename.concat logdir pkg in
           Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stdout ->
-          let stdout = Lwt_unix.unix_file_descr stdout in
           docker_run ~stdout img_name ["opam";"depext";"-ivy";pkg] >>= begin function
           | Ok () -> Lwt_unix.rename logfile goodlog
           | Error () -> Lwt_unix.rename logfile badlog
           end
         end
       end |> Lwt.ignore_result;
-      get_jobs ~img_name ~logdir ~gooddir ~baddir pkgs
+      get_jobs ~stdout ~img_name ~logdir ~gooddir ~baddir pkgs
 
-let get_jobs ~img_name ~logdir pkgs =
+let check ~logdir ~dockerfile name =
+  let logfile = Filename.concat logdir (name^".log") in
+  Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stdout ->
+  get_pkgs ~stdout ~dockerfile >>= fun (img_name, pkgs) ->
   let gooddir = Filename.concat logdir "good" in
   let baddir = Filename.concat logdir "bad" in
+  (* TODO: Check result *)
   Lwt_process.exec ("", [|"mkdir"; "-p"; gooddir|]) >>= fun _ ->
   Lwt_process.exec ("", [|"mkdir"; "-p"; baddir|]) >>= fun _ ->
-  get_jobs ~img_name ~logdir ~gooddir ~baddir pkgs
+  get_jobs ~stdout ~img_name ~logdir ~gooddir ~baddir pkgs

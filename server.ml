@@ -13,7 +13,7 @@ end = struct
   let rec normalize_path = function
     | [] -> []
     | ""::xs -> normalize_path xs
-    | ".."::_ -> failwith "You bastard !"
+    | ".."::_ -> failwith "You bastard !" (* TODO: Use Filename.parent_dir *)
     | x::_ when String.mem ~sub:Filename.dir_sep x -> failwith "You bastard !!"
     | x::xs -> x :: normalize_path xs
 
