@@ -5,7 +5,7 @@ let admin_action ~logdir user body =
   match String.split_on_char '\n' body with
   | "check"::dir::dockerfile ->
       let dockerfile = String.concat "\n" dockerfile in
-      Lwt.ignore_result (Check.check ~logdir ~dockerfile dir)
+      Check.check ~logdir ~dockerfile dir
   | _ ->
       assert false (* TODO *)
 
@@ -52,7 +52,7 @@ let callback ~logdir ~keysdir conn req body =
       let body = decrypt key body in
       begin match String.Split.left ~by:"\n" body with
       | Some (user', body) when String.equal user user' ->
-          admin_action ~logdir user body;
+          admin_action ~logdir user body >>= fun () ->
           Cohttp_lwt_unix.Server.respond ~status:`OK ~body:`Empty ()
       | Some (user', _) ->
           Lwt.fail_with "Identity couldn't be ensured"

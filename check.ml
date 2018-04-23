@@ -67,12 +67,10 @@ let get_pkgs ~stderr ~dockerfile =
 
 let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir jobs = function
   | [] ->
-      Lwt.ignore_result begin
-        Lwt_pool.use pool begin fun () ->
-          Lwt.join jobs >>= fun () ->
-          Cache.clear ();
-          Lwt_unix.close stderr
-        end
+      Lwt_pool.use pool begin fun () ->
+        Lwt.join jobs >|= fun () ->
+        Cache.clear ();
+        Lwt_unix.close stderr
       end
   | pkg::pkgs ->
       let job =
@@ -103,17 +101,33 @@ let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir jobs = function
       in
       get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir (job :: jobs) pkgs
 
+let async_proc ~stderr f =
+  let old = !Lwt.async_exception_hook in
+  let stderr = Lwt_unix.unix_file_descr stderr in
+  Lwt.async_exception_hook := begin fun e ->
+    let msg = Printexc.to_string e in
+    let chan = Unix.out_channel_of_descr stderr in
+    output_string chan (msg^"\n");
+    flush chan;
+    Unix.close stderr
+  end;
+  Lwt.async f;
+  Lwt.async_exception_hook := old
+
 let check ~logdir ~dockerfile name =
   let logfile = Filename.concat logdir (name^".log") in
   Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stderr ->
   Lwt.catch begin fun () ->
-    get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
     let gooddir = Filename.concat logdir "good" in
     let baddir = Filename.concat logdir "bad" in
     mkdir_p gooddir >>= fun () ->
     mkdir_p baddir >|= fun () ->
-    get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir [] pkgs
+    async_proc ~stderr begin fun () ->
+      get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
+      get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir [] pkgs
+    end
   end begin fun e ->
+    write_line_unix stderr (Printexc.to_string e) >>= fun () ->
     Lwt_unix.close stderr >>= fun () ->
     Lwt.fail e
   end
