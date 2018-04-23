@@ -121,6 +121,7 @@ let async_proc ~stderr f =
 
 let check ~logdir ~dockerfile name =
   let logfile = Filename.concat logdir (name^".log") in
+  let logdir = Filename.concat logdir name in
   Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stderr ->
   Lwt.catch begin fun () ->
     let gooddir = Filename.concat logdir "good" in
