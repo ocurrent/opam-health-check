@@ -23,7 +23,7 @@ let proc_fd_of_unix = function
   | `Close -> `Close
   | `Dev_null -> `Dev_null
   | `FD_move fd -> `FD_move (Lwt_unix.unix_file_descr fd)
-  | `FD_copy fd -> `FD_move (Lwt_unix.unix_file_descr fd)
+  | `FD_copy fd -> `FD_copy (Lwt_unix.unix_file_descr fd)
   | `Keep -> `Keep
 
 exception Process_failure
