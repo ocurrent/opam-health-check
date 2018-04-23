@@ -65,10 +65,12 @@ let get_pkgs ~stderr ~dockerfile =
 
 let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir jobs = function
   | [] ->
-      Lwt_pool.use pool begin fun () ->
-        Lwt.join jobs >>= fun () ->
-        Cache.clear ();
-        Lwt_unix.close stderr
+      Lwt.ignore_result begin
+        Lwt_pool.use pool begin fun () ->
+          Lwt.join jobs >>= fun () ->
+          Cache.clear ();
+          Lwt_unix.close stderr
+        end
       end
   | pkg::pkgs ->
       let job =
@@ -107,7 +109,7 @@ let check ~logdir ~dockerfile name =
     let gooddir = Filename.concat logdir "good" in
     let baddir = Filename.concat logdir "bad" in
     mkdir_p gooddir >>= fun () ->
-    mkdir_p baddir >>= fun () ->
+    mkdir_p baddir >|= fun () ->
     get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir [] pkgs
   end begin fun e ->
     Lwt_unix.close stderr >>= fun () ->
