@@ -2,7 +2,9 @@ open Containers
 open Lwt.Infix
 
 let write_line_unix fd s =
-  Lwt_io.write_line (Lwt_io.of_fd ~mode:Lwt_io.Output fd) s
+  let fd = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
+  Lwt_io.write_line fd s >>= fun () ->
+  Lwt_io.flush fd
 
 let mkdir_p dir =
   let rec aux base = function
