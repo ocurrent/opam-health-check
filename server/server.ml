@@ -55,11 +55,11 @@ let () =
   match Sys.argv with
   | [|_; workdir|] ->
       let conf = Filename.concat workdir "config.yaml" in
-      let conf = Server_config.from_file conf in
+      let conf = Config.from_file conf in
       let logdir = Filename.concat workdir "logs" in
       let keysdir = Filename.concat workdir "keys" in
-      let port = Server_config.port conf in
-      let admin_port = Server_config.admin_port conf in
+      let port = Config.port conf in
+      let admin_port = Config.admin_port conf in
       let callback = callback ~logdir in
       let admin_callback = Admin.callback ~logdir ~keysdir in
       Lwt_main.run begin
