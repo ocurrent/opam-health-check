@@ -51,24 +51,35 @@ let tcp_server port callback =
     ~mode:(`TCP (`Port port))
     (Cohttp_lwt_unix.Server.make ~callback ())
 
-let () =
-  match Sys.argv with
-  | [|_; workdir|] ->
-      Lwt_main.run begin
-        Oca_lib.mkdir_p workdir >>= fun () ->
-        let conf = Filename.concat workdir "config.yaml" in
-        let conf = Config.from_file conf in
-        let logdir = Filename.concat workdir "logs" in
-        let keysdir = Filename.concat workdir "keys" in
-        let port = Config.port conf in
-        let admin_port = Config.admin_port conf in
-        let callback = callback ~logdir in
-        let admin_callback = Admin.callback ~logdir ~keysdir in
-        Lwt.join [
-          tcp_server port callback;
-          tcp_server admin_port admin_callback;
-        ]
-      end
-  | _ ->
-      prerr_endline "Read the code and try again";
-      exit 1
+let main workdir =
+  Lwt_main.run begin
+    Oca_lib.mkdir_p workdir >>= fun () ->
+    let conf = Filename.concat workdir "config.yaml" in
+    let conf = Configfile.from_file conf in
+    let logdir = Filename.concat workdir "logs" in
+    let keysdir = Filename.concat workdir "keys" in
+    let port = Configfile.port conf in
+    let admin_port = Configfile.admin_port conf in
+    let callback = callback ~logdir in
+    let admin_callback = Admin.callback ~logdir ~keysdir in
+    Lwt.join [
+      tcp_server port callback;
+      tcp_server admin_port admin_callback;
+    ]
+  end
+
+let term =
+  let ($) = Cmdliner.Term.($) in
+  Cmdliner.Term.pure main $
+  Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"WORKDIR" [])
+
+let info =
+  Cmdliner.Term.info
+    ~doc:"A server to check for broken opam packages."
+    ~man:[`P "This program takes a work directory where every files created \
+              are stored. This includes logs, config file and user private \
+              keys."]
+    ~version:Config.version
+    Config.name
+
+let () = Cmdliner.Term.exit (Cmdliner.Term.eval (term, info))

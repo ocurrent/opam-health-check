@@ -15,4 +15,5 @@ depends: [
   "containers"
   "opam-core"
   "x509"
+  "cmdliner"
 ]

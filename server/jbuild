@@ -1,6 +1,19 @@
 (jbuild_version 1)
 
 (executable
-  ((name server)
-   (public_name opam-serve-all)
-   (libraries (tyxml cohttp-lwt-unix containers opam-core x509 yaml))))
+ ((name server)
+  (public_name opam-serve-all)
+  (libraries
+   (tyxml
+    cohttp-lwt-unix
+    containers
+    opam-core
+    x509
+    yaml
+    cmdliner))))
+
+(rule
+  (with-stdout-to config.ml
+    (progn
+      (echo "let name = {|opam-serve-all|}\n")
+      (echo "let version = {|${version:opam-check-all}|}\n"))))
