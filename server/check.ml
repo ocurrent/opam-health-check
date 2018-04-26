@@ -6,24 +6,6 @@ let write_line_unix fd s =
   Lwt_io.write_line fd s >>= fun () ->
   Lwt_io.flush fd
 
-let mkdir_p dir =
-  let rec aux base = function
-    | [] ->
-        Lwt.return_unit
-    | x::xs ->
-        let dir = Filename.concat base x in
-        Lwt.catch begin fun () ->
-          Lwt_unix.mkdir dir 0o750
-        end begin function
-        | Unix.Unix_error (Unix.EEXIST, _, _) -> Lwt.return_unit
-        | e -> Lwt.fail e
-        end >>= fun () ->
-        aux dir xs
-  in
-  match String.Split.list_cpy ~by:Filename.dir_sep dir with
-  | ""::dirs -> aux Filename.dir_sep dirs
-  | dirs -> aux "" dirs
-
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 
 let proc_fd_of_unix = function
@@ -126,8 +108,8 @@ let check ~logdir ~dockerfile name =
   Lwt.catch begin fun () ->
     let gooddir = Filename.concat logdir "good" in
     let baddir = Filename.concat logdir "bad" in
-    mkdir_p gooddir >>= fun () ->
-    mkdir_p baddir >|= fun () ->
+    Oca_lib.mkdir_p gooddir >>= fun () ->
+    Oca_lib.mkdir_p baddir >|= fun () ->
     async_proc ~stderr begin fun () ->
       get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
       get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir [] pkgs
