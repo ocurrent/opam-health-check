@@ -42,7 +42,7 @@ let ltrim s =
 let get_user_key ~keysdir user =
   check_username user >>= fun () ->
   Lwt_io.with_file ~mode:Lwt_io.Input (Filename.concat keysdir user) Lwt_io.read >|= fun key ->
-  X509.Encoding.Pem.Private_key.of_pem_cstruct1 (Cstruct.of_string key)
+  Nocrypto.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key)
 
 let partial_decrypt key msg =
   Cstruct.to_string (Nocrypto.Rsa.decrypt ~key (Cstruct.of_string msg))
@@ -61,7 +61,7 @@ let callback ~logdir ~keysdir conn req body =
   | Some (user, "") ->
       Lwt.fail_with "Empty message"
   | Some (user, body) ->
-      get_user_key ~keysdir user >>= fun (`RSA key) ->
+      get_user_key ~keysdir user >>= fun key ->
       let body = decrypt key body in
       begin match String.Split.left ~by:"\n" body with
       | Some (user', body) when String.equal user user' ->

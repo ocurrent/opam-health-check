@@ -3,4 +3,4 @@
 (executable
   ((name client)
    (public_name opam-check-all)
-   (libraries (x509 cohttp-lwt-unix containers))))
+   (libraries (nocrypto cohttp-lwt-unix containers))))

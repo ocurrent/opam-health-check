@@ -14,6 +14,6 @@ depends: [
   "cohttp-lwt-unix"
   "containers"
   "opam-core"
-  "x509"
+  "nocrypto"
   "cmdliner"
 ]

@@ -2,7 +2,7 @@ open Containers
 
 let parse_key key =
   let key = IO.with_in key IO.read_all in
-  let `RSA key = X509.Encoding.Pem.Private_key.of_pem_cstruct1 (Cstruct.of_string key) in
+  let key = Nocrypto.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key) in
   Nocrypto.Rsa.pub_of_priv key
 
 let partial_encrypt key msg =
