@@ -1,0 +1,6 @@
+(jbuild_version 1)
+
+(executable
+  ((name server)
+   (public_name opam-serve-all)
+   (libraries (tyxml cohttp-lwt-unix containers opam-core x509 yaml))))
