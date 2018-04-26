@@ -53,6 +53,7 @@ let tcp_server port callback =
 
 let main workdir =
   Lwt_main.run begin
+    Nocrypto_entropy_lwt.initialize () >>= fun () ->
     Oca_lib.mkdir_p workdir >>= fun () ->
     let conf = Filename.concat workdir "config.yaml" in
     let conf = Configfile.from_file conf in
