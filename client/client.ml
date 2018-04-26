@@ -26,7 +26,10 @@ let send_msg ~key ~username ~hostname msg =
 (* TODO: Have a config file to store repetitive informations *)
 let () =
   match Sys.argv with
-  | [|_; key; username; hostname; comp; dockerfile|] ->
+  | [|_; username; hostname; comp; dockerfile|] ->
+      let confdir = XDGBaseDir.(default.config_home) in
+      let confdir = Filename.concat confdir "opam-check-all" in
+      let key = Filename.concat confdir username in
       print_endline "Sending command...";
       let dockerfile = IO.with_in dockerfile IO.read_all in
       let msg = "check\n"^comp^"\n"^dockerfile in

@@ -1,6 +1,10 @@
 (jbuild_version 1)
 
 (executable
-  ((name client)
-   (public_name opam-check-all)
-   (libraries (nocrypto cohttp-lwt-unix containers))))
+ ((name client)
+  (public_name opam-check-all)
+  (libraries
+   (nocrypto
+    cohttp-lwt-unix
+    containers
+    xdg-basedir))))
