@@ -1,3 +1,5 @@
+val create_admin_key : keysdir:string -> unit Lwt.t
+
 val callback :
   logdir:string ->
   keysdir:string ->

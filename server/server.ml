@@ -63,6 +63,7 @@ let main workdir =
     let admin_port = Configfile.admin_port conf in
     let callback = callback ~logdir in
     let admin_callback = Admin.callback ~logdir ~keysdir in
+    Admin.create_admin_key ~keysdir >>= fun () ->
     Lwt.join [
       tcp_server port callback;
       tcp_server admin_port admin_callback;

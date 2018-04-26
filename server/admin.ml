@@ -12,20 +12,30 @@ let check_username user =
   else
     Lwt.fail_with "Invalid username"
 
+let create_userkey ~keysdir username =
+  check_username username >>= fun () ->
+  let key = Nocrypto.Rsa.generate 2048 in
+  let key = Nocrypto.Rsa.sexp_of_priv key in
+  let key = Sexplib.Sexp.to_string key in
+  let keyfile = Filename.concat keysdir username in
+  Lwt_io.with_file ~flags:[Unix.O_CREAT; Unix.O_EXCL] ~mode:Lwt_io.Output keyfile begin fun chan ->
+    Lwt_io.write_line chan key
+  end
+
+let create_admin_key ~keysdir =
+  let username = "admin" in
+  let keyfile = Filename.concat keysdir username in
+  Lwt_unix.file_exists keyfile >>= function
+  | true -> Lwt.return_unit
+  | false -> create_userkey ~keysdir username
+
 let admin_action ~logdir ~keysdir user body =
   match String.split_on_char '\n' body with
   | "check"::dir::dockerfile ->
       let dockerfile = String.concat "\n" dockerfile in
       Check.check ~logdir ~dockerfile dir
   | ["create-user";username] ->
-      check_username username >>= fun () ->
-      let key = Nocrypto.Rsa.generate 2048 in
-      let key = Nocrypto.Rsa.sexp_of_priv key in
-      let key = Sexplib.Sexp.to_string key in
-      let keyfile = Filename.concat keysdir username in
-      Lwt_io.with_file ~flags:[Unix.O_CREAT; Unix.O_EXCL] ~mode:Lwt_io.Output keyfile begin fun chan ->
-        Lwt_io.write_line chan key
-      end
+      create_userkey ~keysdir username
   | _ ->
       Lwt.fail_with "Action unrecognized."
 
