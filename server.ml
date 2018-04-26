@@ -53,14 +53,19 @@ let tcp_server port callback =
 
 let () =
   match Sys.argv with
-  | [|_; logdir; port; keysdir|] ->
+  | [|_; workdir|] ->
+      let conf = Filename.concat workdir "config.yaml" in
+      let conf = Server_config.from_file conf in
+      let logdir = Filename.concat workdir "logs" in
+      let keysdir = Filename.concat workdir "keys" in
+      let port = Server_config.port conf in
+      let admin_port = Server_config.admin_port conf in
       let callback = callback ~logdir in
       let admin_callback = Admin.callback ~logdir ~keysdir in
-      let port = int_of_string port in
       Lwt_main.run begin
         Lwt.join [
           tcp_server port callback;
-          tcp_server 9999 admin_callback;
+          tcp_server admin_port admin_callback;
         ]
       end
   | _ ->
