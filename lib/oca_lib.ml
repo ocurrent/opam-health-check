@@ -18,3 +18,5 @@ let mkdir_p dir =
   match String.Split.list_cpy ~by:Filename.dir_sep dir with
   | ""::dirs -> aux Filename.dir_sep dirs
   | dirs -> aux "" dirs
+
+let protocol_version = "1"

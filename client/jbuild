@@ -7,4 +7,5 @@
    (nocrypto
     cohttp-lwt-unix
     containers
-    xdg-basedir))))
+    xdg-basedir
+    oca_lib))))

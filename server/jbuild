@@ -10,7 +10,8 @@
     opam-core
     nocrypto
     yaml
-    cmdliner))))
+    cmdliner
+    oca_lib))))
 
 (rule
   (with-stdout-to config.ml

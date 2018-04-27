@@ -68,19 +68,31 @@ let rec decrypt key msg =
 let callback ~logdir ~keysdir conn req body =
   Cohttp_lwt.Body.to_string body >>= fun body ->
   match String.Split.left ~by:"\n" body with
-  | Some (user, "") ->
-      Lwt.fail_with "Empty message"
-  | Some (user, body) ->
-      get_user_key ~keysdir user >>= fun key ->
-      let body = decrypt key body in
+  | Some (pversion, body) when String.equal Oca_lib.protocol_version pversion ->
       begin match String.Split.left ~by:"\n" body with
-      | Some (user', body) when String.equal user user' ->
-          admin_action ~logdir ~keysdir user body >>= fun () ->
-          Cohttp_lwt_unix.Server.respond ~status:`OK ~body:`Empty ()
-      | Some (user', _) ->
-          Lwt.fail_with "Identity couldn't be ensured"
+      | Some (user, "") ->
+          Lwt.fail_with "Empty message"
+      | Some (user, body) ->
+          get_user_key ~keysdir user >>= fun key ->
+          let body = decrypt key body in
+          begin match String.Split.left ~by:"\n" body with
+          | Some (user', body) when String.equal user user' ->
+              admin_action ~logdir ~keysdir user body >>= fun () ->
+              Cohttp_lwt_unix.Server.respond ~status:`OK ~body:`Empty ()
+          | Some (user', _) ->
+              Lwt.fail_with "Identity couldn't be ensured"
+          | None ->
+              Lwt.fail_with "Identity check required"
+          end
       | None ->
-          Lwt.fail_with "Identity check required"
+          Lwt.fail_with "Cannot find username"
       end
+  | Some (pversion, _) ->
+      Cohttp_lwt_unix.Server.respond_string
+        ~status:`Upgrade_required
+        ~body:("This server requires opam-check-all protocol version \
+                '"^Oca_lib.protocol_version^"' but got '"^pversion^"'. \
+                Please upgrade your client.")
+        ()
   | None ->
-      Lwt.fail_with "Cannot find username"
+      Lwt.fail_with "Cannot parse request"
