@@ -37,12 +37,13 @@ let init ~confdir yamlfile =
   let keyfile = get_input ~name:"User key" ~default:"" in
   if String.is_empty keyfile then
     failwith "No key given. Abort.";
+  Lwt_main.run (Oca_lib.mkdir_p confdir);
   copy_file ~src:keyfile ~dst:(Filename.concat confdir "default.key");
   IO.with_out ~flags:[Open_creat; Open_excl] yamlfile begin fun out ->
     IO.write_line out "default:";
-    IO.write_line out ("  - hostname: "^hostname);
-    IO.write_line out ("  - port: "^port);
-    IO.write_line out ("  - username: "^username);
+    IO.write_line out ("  hostname: "^hostname);
+    IO.write_line out ("  port: "^port);
+    IO.write_line out ("  username: "^username);
   end
 
 let set_field ~field set = function
