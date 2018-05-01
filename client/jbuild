@@ -8,4 +8,5 @@
     cohttp-lwt-unix
     containers
     xdg-basedir
-    oca_lib))))
+    oca_lib
+    yaml))))

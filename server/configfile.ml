@@ -25,12 +25,12 @@ let set_config conf = function
 let set_defaults yamlfile conf =
   let r = ref [] in
   if Option.is_none conf.port then begin
-    r := "port: 8080" :: !r;
-    conf.port <- Some "8080";
+    r := ("port: "^Oca_lib.default_html_port) :: !r;
+    conf.port <- Some Oca_lib.default_html_port;
   end;
   if Option.is_none conf.admin_port then begin
-    r := "admin-port: 9999" :: !r;
-    conf.admin_port <- Some "9999";
+    r := ("admin-port: "^Oca_lib.default_admin_port) :: !r;
+    conf.admin_port <- Some Oca_lib.default_admin_port;
   end;
   if not (List.is_empty !r) then begin
     IO.with_out_a yamlfile begin fun out ->

@@ -23,7 +23,7 @@ let create_userkey ~keysdir username =
   end
 
 let create_admin_key ~keysdir =
-  let username = "admin" in
+  let username = Oca_lib.default_admin_name in
   let keyfile = Filename.concat keysdir username in
   Lwt_unix.file_exists keyfile >>= function
   | true -> Lwt.return_unit

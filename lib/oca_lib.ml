@@ -20,3 +20,6 @@ let mkdir_p dir =
   | dirs -> aux "" dirs
 
 let protocol_version = "1"
+let default_html_port = "8080"
+let default_admin_port = "9999"
+let default_admin_name = "admin"
