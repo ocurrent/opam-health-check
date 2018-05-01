@@ -1,7 +1,8 @@
 type t
 type profile
 
-val from_file : string -> t option
+val init : confdir:string -> string -> unit
+val from_file : string -> t
 
 val profile : profilename:string option -> t -> profile
 val hostname : profile -> string

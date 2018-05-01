@@ -24,36 +24,29 @@ let send_msg ~key ~username ~hostname ~port msg =
   let uri = Uri.make ~scheme:"http" ~host:hostname ~port () in
   Lwt_main.run (Cohttp_lwt_unix.Client.post ~body:(`String (prefix^msg)) uri)
 
-(* TODO: Have a config file to store repetitive informations *)
 let () =
+  let confdir = XDGBaseDir.(default.config_home) in
+  let confdir = Filename.concat confdir "opam-check-all" in
+  let conffile = Filename.concat confdir "config.yaml" in
   match Sys.argv with
-  | [|_; comp; dockerfile|] ->
-      let confdir = XDGBaseDir.(default.config_home) in
-      let confdir = Filename.concat confdir "opam-check-all" in
-      let conffile = Filename.concat confdir "config.yaml" in
-      begin match Configfile.from_file conffile with
-      | Some conf ->
-          let conf = Configfile.profile ~profilename:None conf in
-          let hostname = Configfile.hostname conf in
-          let port = Configfile.port conf in
-          let username = Configfile.username conf in
-          let keyfile = Configfile.keyfile conf in
-          let key = Filename.concat confdir keyfile in
-          print_endline "Sending command...";
-          let dockerfile = IO.with_in dockerfile IO.read_all in
-          let msg = "check\n"^comp^"\n"^dockerfile in
-          let res, body = send_msg ~key ~username ~hostname ~port msg in
-          begin match Cohttp.Response.status res with
-          | `OK -> print_endline "Command sent successfully"
-          | _ -> prerr_endline "A problem occured"; exit 1
-          end
-      | None ->
-          prerr_endline
-            (Printf.sprintf
-               "No or empty configuration file. An example config file was \
-                just created in '%s'. Modify it and relaunch the command line."
-               conffile)
+  | [|_; "check"; comp; dockerfile|] ->
+      let conf = Configfile.from_file conffile in
+      let conf = Configfile.profile ~profilename:None conf in
+      let hostname = Configfile.hostname conf in
+      let port = Configfile.port conf in
+      let username = Configfile.username conf in
+      let keyfile = Configfile.keyfile conf in
+      let key = Filename.concat confdir keyfile in
+      print_endline "Sending command...";
+      let dockerfile = IO.with_in dockerfile IO.read_all in
+      let msg = "check\n"^comp^"\n"^dockerfile in
+      let res, body = send_msg ~key ~username ~hostname ~port msg in
+      begin match Cohttp.Response.status res with
+      | `OK -> print_endline "Command sent successfully"
+      | _ -> prerr_endline "A problem occured"; exit 1
       end
+  | [|_; "init"|] ->
+      Configfile.init ~confdir conffile
   | _ ->
       prerr_endline "Read the code and try again";
       exit 1

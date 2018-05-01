@@ -18,14 +18,31 @@ let empty_profile profilename = {
   username = None;
 }
 
-let create_example yamlfile =
-  IO.with_out_a yamlfile begin fun out ->
-    (* NOTE: Always prepend a newline in case the file doesn't end with one *)
-    IO.write_line out "";
+let get_input ~name ~default =
+  Printf.printf "%s (default: %s): " name default;
+  match read_line () with
+  | "" -> default
+  | x -> x
+
+let copy_file ~src ~dst =
+  IO.with_out ~flags:[Open_creat; Open_excl] dst begin fun out ->
+    let content = IO.with_in src IO.read_all in
+    output_string out content;
+  end
+
+let init ~confdir yamlfile =
+  let hostname = get_input ~name:"Server hostname" ~default:"localhost" in
+  let port = get_input ~name:"Server port" ~default:Oca_lib.default_admin_port in
+  let username = get_input ~name:"Username" ~default:Oca_lib.default_admin_name in
+  let keyfile = get_input ~name:"User key" ~default:"" in
+  if String.is_empty keyfile then
+    failwith "No key given. Abort.";
+  copy_file ~src:keyfile ~dst:(Filename.concat confdir "default.key");
+  IO.with_out ~flags:[Open_creat; Open_excl] yamlfile begin fun out ->
     IO.write_line out "default:";
-    IO.write_line out ("  - hostname: localhost");
-    IO.write_line out ("  - port: "^Oca_lib.default_admin_port);
-    IO.write_line out ("  - username: "^Oca_lib.default_admin_name);
+    IO.write_line out ("  - hostname: "^hostname);
+    IO.write_line out ("  - port: "^port);
+    IO.write_line out ("  - username: "^username);
   end
 
 let set_field ~field set = function
@@ -67,8 +84,7 @@ let parse_profile profiles = function
 let from_file yamlfile =
   let yaml = IO.with_in ~flags:[Open_creat] yamlfile IO.read_all in
   match Yaml.of_string_exn yaml with
-  | `String "" | `Null -> create_example yamlfile; None
-  | `O profiles -> Some (List.fold_left parse_profile Map.empty profiles)
+  | `O profiles -> List.fold_left parse_profile Map.empty profiles
   | _ -> failwith "Cannot parse the config file"
 
 let profile ~profilename conf =
