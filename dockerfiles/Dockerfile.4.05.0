@@ -7,7 +7,7 @@ RUN opam admin cache
 RUN echo 'wrap-build-commands: []' >> ~/.opamrc
 RUN echo 'wrap-install-commands: []' >> ~/.opamrc
 RUN echo 'wrap-remove-commands: []' >> ~/.opamrc
-RUN opam init -yac 4.06.1 .
+RUN opam init -yac 4.05.0 .
 RUN echo 'archive-mirrors: ["file:///home/opam/opam-repository/cache"]' >> /home/opam/.opam/config
 RUN opam install -y opam-depext
 CMD opam list --installable --available --short --all-versions
