@@ -30,6 +30,7 @@ let () =
   let conffile = Filename.concat confdir "config.yaml" in
   match Sys.argv with
   | [|_; "check"; comp; dockerfile|] ->
+      (* TODO: Catch the exception if the config file doesn't exist *)
       let conf = Configfile.from_file conffile in
       let conf = Configfile.profile ~profilename:None conf in
       let hostname = Configfile.hostname conf in

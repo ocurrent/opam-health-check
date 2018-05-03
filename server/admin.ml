@@ -6,25 +6,23 @@ let is_username_char = function
   | '-' | '_' -> true
   | _ -> false
 
-let check_username user =
-  if not (String.is_empty user) && String.for_all is_username_char user then
-    Lwt.return_unit
-  else
-    Lwt.fail_with "Invalid username"
+let get_keyfile ~keysdir user =
+  if String.is_empty user || not (String.for_all is_username_char user) then
+    failwith "Invalid username";
+  Filename.concat keysdir (user^".key")
 
 let create_userkey ~keysdir username =
-  check_username username >>= fun () ->
+  let keyfile = get_keyfile ~keysdir username in
   let key = Nocrypto.Rsa.generate 2048 in
   let key = Nocrypto.Rsa.sexp_of_priv key in
   let key = Sexplib.Sexp.to_string key in
-  let keyfile = Filename.concat keysdir username in
   Lwt_io.with_file ~flags:[Unix.O_CREAT; Unix.O_EXCL] ~mode:Lwt_io.Output keyfile begin fun chan ->
     Lwt_io.write_line chan key
   end
 
 let create_admin_key ~keysdir =
   let username = Oca_lib.default_admin_name in
-  let keyfile = Filename.concat keysdir username in
+  let keyfile = get_keyfile ~keysdir username in
   Lwt_unix.file_exists keyfile >>= function
   | true -> Lwt.return_unit
   | false -> create_userkey ~keysdir username
@@ -50,8 +48,8 @@ let ltrim s =
   if !i > 0 then String.sub s !i (String.length s - !i) else s
 
 let get_user_key ~keysdir user =
-  check_username user >>= fun () ->
-  Lwt_io.with_file ~mode:Lwt_io.Input (Filename.concat keysdir user) Lwt_io.read >|= fun key ->
+  let keyfile = get_keyfile ~keysdir user in
+  Lwt_io.with_file ~mode:Lwt_io.Input keyfile Lwt_io.read >|= fun key ->
   Nocrypto.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key)
 
 let partial_decrypt key msg =
