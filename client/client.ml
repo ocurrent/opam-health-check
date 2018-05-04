@@ -18,10 +18,10 @@ let rec encrypt_msg ~key msg =
 
 let send_msg ~key ~username ~hostname ~port msg =
   let key = parse_key key in
-  let prefix = Oca_lib.protocol_version^"\n" in
-  let prefix = prefix^username^"\n" in
+  let prefix = username^"\n" in
   let msg = encrypt_msg ~key (prefix^msg) in
   let uri = Uri.make ~scheme:"http" ~host:hostname ~port () in
+  let prefix = Oca_lib.protocol_version^"\n"^prefix in
   Lwt_main.run (Cohttp_lwt_unix.Client.post ~body:(`String (prefix^msg)) uri)
 
 let () =
