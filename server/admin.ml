@@ -1,6 +1,10 @@
 open Containers
 open Lwt.Infix
 
+let with_file_out ~flags file f =
+  let flags = Unix.O_WRONLY::Unix.O_CREAT::Unix.O_TRUNC::Unix.O_NONBLOCK::flags in
+  Lwt_io.with_file ~flags ~mode:Lwt_io.Output file f
+
 let is_username_char = function
   | 'a'..'z' -> true
   | '-' | '_' -> true
@@ -16,7 +20,7 @@ let create_userkey ~keysdir username =
   let key = Nocrypto.Rsa.generate 2048 in
   let key = Nocrypto.Rsa.sexp_of_priv key in
   let key = Sexplib.Sexp.to_string key in
-  Lwt_io.with_file ~flags:[Unix.O_CREAT; Unix.O_EXCL] ~mode:Lwt_io.Output keyfile begin fun chan ->
+  with_file_out ~flags:[Unix.O_EXCL] keyfile begin fun chan ->
     Lwt_io.write_line chan key
   end
 
