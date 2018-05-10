@@ -1,6 +1,15 @@
 type t
 type profile
 
+val init_with_values :
+  confdir:string ->
+  hostname:string ->
+  port:string ->
+  username:string ->
+  keyfile:string ->
+  string ->
+  unit
+
 val init : confdir:string -> string -> unit
 val from_file : string -> t
 

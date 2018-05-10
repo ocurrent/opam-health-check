@@ -30,13 +30,7 @@ let copy_file ~src ~dst =
     output_string out content;
   end
 
-let init ~confdir yamlfile =
-  let hostname = get_input ~name:"Server hostname" ~default:"localhost" in
-  let port = get_input ~name:"Server port" ~default:Oca_lib.default_admin_port in
-  let username = get_input ~name:"Username" ~default:Oca_lib.default_admin_name in
-  let keyfile = get_input ~name:"User key" ~default:"" in
-  if String.is_empty keyfile then
-    failwith "No key given. Abort.";
+let init_with_values ~confdir ~hostname ~port ~username ~keyfile yamlfile =
   Lwt_main.run (Oca_lib.mkdir_p confdir);
   copy_file ~src:keyfile ~dst:(Filename.concat confdir "default.key");
   IO.with_out ~flags:[Open_creat; Open_excl] yamlfile begin fun out ->
@@ -45,6 +39,15 @@ let init ~confdir yamlfile =
     IO.write_line out ("  port: "^port);
     IO.write_line out ("  username: "^username);
   end
+
+let init ~confdir yamlfile =
+  let hostname = get_input ~name:"Server hostname" ~default:Oca_lib.localhost in
+  let port = get_input ~name:"Server port" ~default:Oca_lib.default_admin_port in
+  let username = get_input ~name:"Username" ~default:Oca_lib.default_admin_name in
+  let keyfile = get_input ~name:"User key" ~default:"" in
+  if String.is_empty keyfile then
+    failwith "No key given. Abort.";
+  init_with_values ~confdir ~hostname ~port ~username ~keyfile yamlfile
 
 let set_field ~field set = function
   | Some _ -> failwith (Printf.sprintf "Config parser: '%s' is defined twice" field)
