@@ -9,4 +9,11 @@
     containers
     xdg-basedir
     oca_lib
+    cmdliner
     yaml))))
+
+(rule
+  (with-stdout-to config.ml
+    (progn
+      (echo "let name = {|opam-check-all|}\n")
+      (echo "let version = {|${version:opam-check-all}|}\n"))))
