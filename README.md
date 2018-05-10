@@ -4,23 +4,33 @@
 $ opam pin add opam-check-all .
 ```
 
-### How to use opam-check-all:
-```
-$ opam-check-all <your log directory>/<the name of the compiler> <a dockerfile>
-```
-For instance, to check all packages available on 4.06.1:
-```
-$ opam-check-all /tmp/logs/4.06.1 dockerfiles/Dockerfile.4.06.1
-```
-Examples of expected dockerfiles are in the ```dockerfiles``` directory.
+### How to use opam-check-all locally:
 
-### How to get the result from opam-check-all:
+For opam-check-all to work you need to start the server like so:
+```
+$ opam-serve-all <a new clean path or a path to an existing work directory>
+```
+For instance:
+```
+$ opam-serve-all /tmp/opam-check-all
+```
 
+Now simply use the `opam-check-all` command. First we need to initialize it like so:
 ```
-$ opam-serve-all <your log directory> 8080
+$ opam-check-all --from-local-workdir /tmp/opam-check-all
 ```
-For instance, to get the result from the check using 4.06.1 as done above:
+or used any custom path given to the server.
+
+Now you can send any command to the server using the `opam-check-all` command.
+
+For example to lauch a task:
 ```
-$ opam-serve-all /tmp/logs 8080
+$ opam-check-all check <name of the compiler> <a dockerfile>
 ```
-The result is now available on http://localhost:8080
+
+For an example of a compatible Dockerfile see the `dockerfiles` directory.
+All subcommands are listed with `opam-check-all --help`
+
+### How to use opam-check-all remotely:
+
+**TODO**
