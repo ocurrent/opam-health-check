@@ -4,7 +4,7 @@ type profile
 val init_with_values :
   confdir:string ->
   hostname:string ->
-  port:string ->
+  port:int ->
   username:string ->
   keyfile:string ->
   string ->

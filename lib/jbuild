@@ -2,6 +2,8 @@
 
 (library
  ((name oca_lib)
+  (wrapped false)
   (libraries
    (lwt.unix
+    yaml
     containers))))

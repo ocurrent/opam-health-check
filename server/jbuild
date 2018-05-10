@@ -9,7 +9,6 @@
     containers
     opam-core
     nocrypto
-    yaml
     cmdliner
     oca_lib))))
 

@@ -10,10 +10,10 @@ let is_username_char = function
   | '-' | '_' -> true
   | _ -> false
 
-let get_keyfile ~keysdir user =
-  if String.is_empty user || not (String.for_all is_username_char user) then
+let get_keyfile ~keysdir username =
+  if String.is_empty username || not (String.for_all is_username_char username) then
     failwith "Invalid username";
-  Filename.concat keysdir (user^".key")
+  Oca_lib.keyfile ~keysdir ~username
 
 let create_userkey ~keysdir username =
   let keyfile = get_keyfile ~keysdir username in

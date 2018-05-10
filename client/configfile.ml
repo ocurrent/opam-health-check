@@ -31,6 +31,7 @@ let copy_file ~src ~dst =
   end
 
 let init_with_values ~confdir ~hostname ~port ~username ~keyfile yamlfile =
+  let port = string_of_int port in
   Lwt_main.run (Oca_lib.mkdir_p confdir);
   copy_file ~src:keyfile ~dst:(Filename.concat confdir "default.key");
   IO.with_out ~flags:[Open_creat; Open_excl] yamlfile begin fun out ->
@@ -47,6 +48,7 @@ let init ~confdir yamlfile =
   let keyfile = get_input ~name:"User key" ~default:"" in
   if String.is_empty keyfile then
     failwith "No key given. Abort.";
+  let port = int_of_string port in
   init_with_values ~confdir ~hostname ~port ~username ~keyfile yamlfile
 
 let set_field ~field set = function

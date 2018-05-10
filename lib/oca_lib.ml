@@ -24,3 +24,6 @@ let default_html_port = "8080"
 let default_admin_port = "9999"
 let default_admin_name = "admin"
 let localhost = "localhost"
+
+let keysdir ~workdir = Filename.concat workdir "keys"
+let keyfile ~keysdir ~username = Filename.concat keysdir (username^".key")

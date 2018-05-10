@@ -53,11 +53,12 @@ let check_cmd ~confdir ~conffile =
 
 let init ~confdir ~conffile = function
   | Some local_workdir ->
+      let server_conf = Server_configfile.from_workdir local_workdir in
       let hostname = Oca_lib.localhost in
-      let port = Oca_lib.default_admin_port in (* TODO: parse the server config file *)
+      let port = Server_configfile.admin_port server_conf in
       let username = Oca_lib.default_admin_name in
-      let keyfile = Filename.concat local_workdir "keys" in
-      let keyfile = Filename.concat keyfile (Oca_lib.default_admin_name^".key") in
+      let keysdir = Oca_lib.keysdir ~workdir:local_workdir in
+      let keyfile = Oca_lib.keyfile ~keysdir ~username in
       Configfile.init_with_values ~confdir ~hostname ~port ~username ~keyfile conffile
   | None ->
       Configfile.init ~confdir conffile

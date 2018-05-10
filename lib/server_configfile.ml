@@ -46,7 +46,8 @@ let create yamlfile yaml =
   set_defaults yamlfile conf;
   conf
 
-let from_file yamlfile =
+let from_workdir workdir =
+  let yamlfile = Filename.concat workdir "config.yaml" in
   let yaml = IO.with_in ~flags:[Open_creat] yamlfile IO.read_all in
   match Yaml.of_string_exn yaml with
   | `O yaml -> create yamlfile yaml
