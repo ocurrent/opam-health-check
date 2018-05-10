@@ -23,12 +23,13 @@ or used any custom path given to the server.
 
 Now you can send any command to the server using the `opam-check-all` command.
 
-For example to lauch a task:
+For example to launch a task:
 ```
 $ opam-check-all check <name of the compiler> <a dockerfile>
 ```
 
 For an example of a compatible Dockerfile see the `dockerfiles` directory.
+
 All subcommands are listed with `opam-check-all --help`
 
 ### How to use opam-check-all remotely:
