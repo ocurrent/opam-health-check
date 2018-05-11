@@ -17,16 +17,17 @@ let rec encrypt_msg ~key msg =
     let msg, next = String.take_drop max_size msg in
     partial_encrypt key msg ^ encrypt_msg ~key next
 
+let print_body body =
+  let stream = Cohttp_lwt.Body.to_stream body in
+  Lwt_stream.iter print_string stream >|= fun () ->
+  print_newline ()
+
 let process_response (res, body) =
   match Cohttp.Response.status res with
   | `OK ->
-      let stream = Cohttp_lwt.Body.to_stream body in
-      Lwt_stream.iter print_string stream >|= fun () ->
-      print_newline ();
+      print_body body
   | `Upgrade_required ->
-      let stream = Cohttp_lwt.Body.to_stream body in
-      Lwt_stream.iter print_string stream >|= fun () ->
-      print_newline ();
+      print_body body >|= fun () ->
       raise Exit
   | _ ->
       print_endline "A problem occured";
