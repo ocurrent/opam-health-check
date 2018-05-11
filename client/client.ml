@@ -62,6 +62,19 @@ let check_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "check" in
   (term, info)
 
+let add_user ~confdir ~conffile username =
+  let msg = ["add-user";username] in
+  send_msg ~confdir ~conffile msg
+
+let add_user_cmd ~confdir ~conffile =
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (add_user ~confdir ~conffile) $
+    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"USERNAME" [])
+  in
+  let info = Cmdliner.Term.info "add-user" in
+  (term, info)
+
 let init ~confdir ~conffile = function
   | Some local_workdir ->
       let server_conf = Server_configfile.from_workdir local_workdir in
@@ -89,6 +102,7 @@ let cmds =
   let conffile = Filename.concat confdir "config.yaml" in
   [
     init_cmd ~confdir ~conffile;
+    add_user_cmd ~confdir ~conffile;
     check_cmd ~confdir ~conffile;
   ]
 

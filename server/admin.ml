@@ -36,7 +36,7 @@ let admin_action ~logdir ~keysdir user body =
   | "check"::dir::dockerfile ->
       let dockerfile = String.concat "\n" dockerfile in
       Check.check ~logdir ~dockerfile dir
-  | ["create-user";username] ->
+  | ["add-user";username] ->
       create_userkey ~keysdir username
   | _ ->
       Lwt.fail_with "Action unrecognized."
