@@ -21,7 +21,13 @@ let process_response (res, body) =
   match Cohttp.Response.status res with
   | `OK ->
       let stream = Cohttp_lwt.Body.to_stream body in
-      Lwt_stream.iter print_endline stream
+      Lwt_stream.iter print_string stream >|= fun () ->
+      print_newline ();
+  | `Upgrade_required ->
+      let stream = Cohttp_lwt.Body.to_stream body in
+      Lwt_stream.iter print_string stream >|= fun () ->
+      print_newline ();
+      raise Exit
   | _ ->
       print_endline "A problem occured";
       raise Exit
