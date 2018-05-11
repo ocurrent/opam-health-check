@@ -1,3 +1,4 @@
+open Lwt.Infix
 open Containers
 
 let parse_key key =
@@ -16,16 +17,16 @@ let rec encrypt_msg ~key msg =
     let msg, next = String.take_drop max_size msg in
     partial_encrypt key msg ^ encrypt_msg ~key next
 
-let send_msg ~key ~username ~hostname ~port msg =
-  let key = parse_key key in
-  let prefix = username^"\n" in
-  let msg = encrypt_msg ~key (prefix^msg) in
-  let uri = Uri.make ~scheme:"http" ~host:hostname ~port () in
-  let prefix = Oca_lib.protocol_version^"\n"^prefix in
-  Lwt_main.run (Cohttp_lwt_unix.Client.post ~body:(`String (prefix^msg)) uri)
+let process_response (res, body) =
+  match Cohttp.Response.status res with
+  | `OK ->
+      let stream = Cohttp_lwt.Body.to_stream body in
+      Lwt_stream.iter print_endline stream
+  | _ ->
+      print_endline "A problem occured";
+      raise Exit
 
-let check ~confdir ~conffile comp dockerfile =
-  (* TODO: Catch the exception if the config file doesn't exist *)
+let send_msg ~confdir ~conffile msg =
   let conf = Configfile.from_file conffile in
   let conf = Configfile.profile ~profilename:None conf in
   let hostname = Configfile.hostname conf in
@@ -33,13 +34,23 @@ let check ~confdir ~conffile comp dockerfile =
   let username = Configfile.username conf in
   let keyfile = Configfile.keyfile conf in
   let key = Filename.concat confdir keyfile in
+  let key = parse_key key in
+  let prefix = username^"\n" in
+  let msg = String.concat "\n" msg in
+  let msg = encrypt_msg ~key (prefix^msg) in
+  let uri = Uri.make ~scheme:"http" ~host:hostname ~port () in
+  let prefix = Oca_lib.protocol_version^"\n"^prefix in
   print_endline "Sending command...";
+  Lwt_main.run begin
+    Cohttp_lwt_unix.Client.post ~body:(`String (prefix^msg)) uri >>=
+    process_response
+  end
+
+let check ~confdir ~conffile comp dockerfile =
+  (* TODO: Catch the exception if the config file doesn't exist *)
   let dockerfile = IO.with_in dockerfile IO.read_all in
-  let msg = "check\n"^comp^"\n"^dockerfile in
-  let res, body = send_msg ~key ~username ~hostname ~port msg in
-  match Cohttp.Response.status res with
-  | `OK -> print_endline "Command sent successfully"
-  | _ -> prerr_endline "A problem occured"; raise Exit
+  let msg = ["check";comp;dockerfile] in
+  send_msg ~confdir ~conffile msg
 
 let check_cmd ~confdir ~conffile =
   let term =
