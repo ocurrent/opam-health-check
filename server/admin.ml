@@ -45,12 +45,6 @@ let is_bzero = function
   | '\000' -> true
   | _ -> false
 
-(* TODO: https://github.com/c-cube/ocaml-containers/pull/214 *)
-let ltrim s =
-  let i = ref 0 in
-  while !i < String.length s && is_bzero (String.unsafe_get s !i) do incr i done;
-  if !i > 0 then String.sub s !i (String.length s - !i) else s
-
 let get_user_key ~keysdir user =
   let keyfile = get_keyfile ~keysdir user in
   Lwt_io.with_file ~mode:Lwt_io.Input keyfile Lwt_io.read >|= fun key ->
@@ -62,7 +56,7 @@ let partial_decrypt key msg =
 let rec decrypt key msg =
   let key_size = Nocrypto.Rsa.priv_bits key / 8 in
   if String.length msg <= key_size then
-    ltrim (partial_decrypt key msg)
+    String.drop_while is_bzero (partial_decrypt key msg)
   else
     let msg, next = String.take_drop key_size msg in
     partial_decrypt key msg ^ decrypt key next

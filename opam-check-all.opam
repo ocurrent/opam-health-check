@@ -12,7 +12,7 @@ depends: [
   "jbuilder" {build}
   "tyxml"
   "cohttp-lwt-unix"
-  "containers"
+  "containers" {>= "2.2"}
   "opam-core"
   "nocrypto"
   "cmdliner"
