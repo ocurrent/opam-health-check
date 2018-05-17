@@ -52,11 +52,17 @@ let get_pkgs ~stderr ~dockerfile =
   Lwt_unix.close fd >|= fun () ->
   (img_name, String.split_on_char '\n' pkgs)
 
+let job_queue = Queue.create ()
+
 let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir jobs = function
   | [] ->
       Lwt_pool.use pool begin fun () ->
-        Lwt.join jobs >|= fun () ->
+        Lwt.join jobs >>= fun () ->
         Cache.clear ();
+        begin match Queue.pop job_queue with
+        | f -> f ()
+        | exception Queue.Empty -> ()
+        end;
         Lwt_unix.close stderr
       end
   | pkg::pkgs ->
@@ -86,20 +92,26 @@ let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir jobs = function
           end
         end
       in
+      (* TODO: Delete the directory first *)
       get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir (job :: jobs) pkgs
 
 let async_proc ~stderr f =
-  let old = !Lwt.async_exception_hook in
-  let stderr = Lwt_unix.unix_file_descr stderr in
-  Lwt.async_exception_hook := begin fun e ->
-    let msg = Printexc.to_string e in
-    let chan = Unix.out_channel_of_descr stderr in
-    output_string chan (msg^"\n");
-    flush chan;
-    Unix.close stderr
-  end;
-  Lwt.async f;
-  Lwt.async_exception_hook := old
+  let aux () =
+    let old = !Lwt.async_exception_hook in
+    let stderr = Lwt_unix.unix_file_descr stderr in
+    Lwt.async_exception_hook := begin fun e ->
+      let msg = Printexc.to_string e in
+      let chan = Unix.out_channel_of_descr stderr in
+      output_string chan (msg^"\n");
+      flush chan;
+      Unix.close stderr
+    end;
+    Lwt.async f;
+    Lwt.async_exception_hook := old
+  in
+  match Queue.is_empty job_queue with
+  | true -> aux ()
+  | false -> Queue.add aux job_queue
 
 let is_valid_name_char = function
   | '0'..'9'
