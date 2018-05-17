@@ -101,7 +101,22 @@ let async_proc ~stderr f =
   Lwt.async f;
   Lwt.async_exception_hook := old
 
+let is_valid_name_char = function
+  | '0'..'9'
+  | 'a'..'z'
+  | 'A'..'Z'
+  | '.' | '+' | '-' | '~' -> true
+  | _ -> false
+
+let is_valid_name name =
+  not (String.is_empty name) &&
+  String.for_all is_valid_name_char name &&
+  not (String.equal name Filename.parent_dir_name) &&
+  not (String.equal name Filename.current_dir_name)
+
 let check ~logdir ~dockerfile name =
+  if is_valid_name name then
+    failwith "Name is not valid";
   let logfile = Filename.concat logdir (name^".log") in
   let logdir = Filename.concat logdir name in
   Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stderr ->
