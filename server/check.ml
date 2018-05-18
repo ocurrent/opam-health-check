@@ -53,15 +53,16 @@ let get_pkgs ~stderr ~dockerfile =
   (img_name, String.split_on_char '\n' pkgs)
 
 let job_queue = Queue.create ()
+let current_job = ref None
 
-let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir jobs = function
+let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir ~jid jobs = function
   | [] ->
       Lwt_pool.use pool begin fun () ->
         Lwt.join jobs >>= fun () ->
         Cache.clear ();
         begin match Queue.pop job_queue with
-        | f -> f ()
-        | exception Queue.Empty -> ()
+        | f -> current_job := Some jid; f ()
+        | exception Queue.Empty -> current_job := None
         end;
         Lwt_unix.close stderr
       end
@@ -93,9 +94,9 @@ let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir jobs = function
         end
       in
       (* TODO: Delete the directory first *)
-      get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir (job :: jobs) pkgs
+      get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir ~jid (job :: jobs) pkgs
 
-let async_proc ~stderr f =
+let async_proc ~stderr ~jid f =
   let aux () =
     let old = !Lwt.async_exception_hook in
     let stderr = Lwt_unix.unix_file_descr stderr in
@@ -110,7 +111,7 @@ let async_proc ~stderr f =
     Lwt.async_exception_hook := old
   in
   match Queue.is_empty job_queue with
-  | true -> aux ()
+  | true -> current_job := Some jid; aux ()
   | false -> Queue.add aux job_queue
 
 let is_valid_name_char = function
@@ -140,9 +141,10 @@ let check ~logdir ~ilogdir ~dockerfile name =
     let baddir = Filename.concat logdir "bad" in
     Oca_lib.mkdir_p gooddir >>= fun () ->
     Oca_lib.mkdir_p baddir >|= fun () ->
-    async_proc ~stderr begin fun () ->
+    let jid = (name, current_time) in
+    async_proc ~jid ~stderr begin fun () ->
       get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
-      get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir [] pkgs
+      get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir ~jid [] pkgs
     end
   end begin fun e ->
     write_line_unix stderr (Printexc.to_string e) >>= fun () ->
