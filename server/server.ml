@@ -57,13 +57,15 @@ let main workdir =
     Oca_lib.mkdir_p workdir >>= fun () ->
     let conf = Server_configfile.from_workdir workdir in
     let logdir = Filename.concat workdir "logs" in
+    let ilogdir = Filename.concat workdir "ilogs" in
     let keysdir = Oca_lib.keysdir ~workdir in
     Oca_lib.mkdir_p logdir >>= fun () ->
+    Oca_lib.mkdir_p ilogdir >>= fun () ->
     Oca_lib.mkdir_p keysdir >>= fun () ->
     let port = Server_configfile.port conf in
     let admin_port = Server_configfile.admin_port conf in
     let callback = callback ~logdir in
-    let admin_callback = Admin.callback ~logdir ~keysdir in
+    let admin_callback = Admin.callback ~logdir ~ilogdir ~keysdir in
     Admin.create_admin_key ~keysdir >>= fun () ->
     Lwt.join [
       tcp_server port callback;

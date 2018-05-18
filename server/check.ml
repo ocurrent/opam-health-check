@@ -126,12 +126,15 @@ let is_valid_name name =
   not (String.equal name Filename.parent_dir_name) &&
   not (String.equal name Filename.current_dir_name)
 
-let check ~logdir ~dockerfile name =
+let check ~logdir ~ilogdir ~dockerfile name =
   if is_valid_name name then
     failwith "Name is not valid";
-  let logfile = Filename.concat logdir (name^".log") in
+  let ilogdir = Filename.concat ilogdir name in
+  Oca_lib.mkdir_p ilogdir >>= fun () ->
+  let current_time = Printf.sprintf "%.f" (Unix.time ()) in
+  let logfile = Filename.concat ilogdir current_time in
   let logdir = Filename.concat logdir name in
-  Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stderr ->
+  Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640 >>= fun stderr ->
   Lwt.catch begin fun () ->
     let gooddir = Filename.concat logdir "good" in
     let baddir = Filename.concat logdir "bad" in

@@ -1,1 +1,6 @@
-val check : logdir:string -> dockerfile:string -> string -> unit Lwt.t
+val check :
+  logdir:string ->
+  ilogdir:string ->
+  dockerfile:string ->
+  string ->
+  unit Lwt.t

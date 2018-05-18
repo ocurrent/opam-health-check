@@ -2,6 +2,7 @@ val create_admin_key : keysdir:string -> unit Lwt.t
 
 val callback :
   logdir:string ->
+  ilogdir:string ->
   keysdir:string ->
   Cohttp_lwt_unix.Server.conn ->
   Cohttp.Request.t ->
