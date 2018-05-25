@@ -62,22 +62,17 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
       get_jobs ~stderr ~img_name ~switch workdir (job :: jobs) pkgs
 
 let async_proc ~stderr ~switch f =
-  let aux () =
-    let old = !Lwt.async_exception_hook in
-    let stderr = Lwt_unix.unix_file_descr stderr in
-    Lwt.async_exception_hook := begin fun e ->
-      let msg = Printexc.to_string e in
-      let chan = Unix.out_channel_of_descr stderr in
-      output_string chan (msg^"\n");
-      flush chan;
-      Unix.close stderr
-    end;
-    Lwt.async f;
-    Lwt.async_exception_hook := old
-  in
-  if Hashtbl.mem job_tbl switch then
-    failwith "A job with the same name is already running";
-  aux ()
+  let old = !Lwt.async_exception_hook in
+  let stderr = Lwt_unix.unix_file_descr stderr in
+  Lwt.async_exception_hook := begin fun e ->
+    let msg = Printexc.to_string e in
+    let chan = Unix.out_channel_of_descr stderr in
+    output_string chan (msg^"\n");
+    flush chan;
+    Unix.close stderr
+  end;
+  Lwt.async f;
+  Lwt.async_exception_hook := old
 
 let is_valid_name_char = function
   | '0'..'9'
@@ -95,6 +90,8 @@ let is_valid_name name =
 let check workdir ~dockerfile name =
   if not (is_valid_name name) then
     failwith "Name is not valid";
+  if Hashtbl.mem job_tbl name then
+    failwith "A job with the same name is already running";
   Oca_lib.mkdir_p (Server_workdirs.switchilogdir ~switch:name workdir) >>= fun () ->
   let logfile = Server_workdirs.ilogfile ~switch:name workdir in
   Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640 >>= fun stderr ->
