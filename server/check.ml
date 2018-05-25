@@ -89,15 +89,9 @@ let check workdir ~dockerfile name =
   Oca_lib.mkdir_p (Server_workdirs.switchilogdir ~switch:name workdir) >>= fun () ->
   let logfile = Server_workdirs.ilogfile ~switch:name workdir in
   Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640 >>= fun stderr ->
-  Server_workdirs.init_base_job ~switch:name ~stderr workdir >>= fun () ->
-  try
-    Lwt.async begin fun () ->
-      Hashtbl.add job_tbl name ();
-      get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
-      get_jobs ~stderr ~img_name ~switch:name workdir [] pkgs
-    end;
-    Lwt.return_unit
-  with e ->
-    Oca_lib.write_line_unix stderr (Printexc.to_string e) >>= fun () ->
-    Lwt_unix.close stderr >>= fun () ->
-    Lwt.fail e
+  Server_workdirs.init_base_job ~switch:name ~stderr workdir >|= fun () ->
+  Lwt.async begin fun () ->
+    Hashtbl.add job_tbl name ();
+    get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
+    get_jobs ~stderr ~img_name ~switch:name workdir [] pkgs
+  end
