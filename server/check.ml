@@ -6,10 +6,10 @@ let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 let docker_build ~stderr ~img_name dockerfile =
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
-  let cmd = Oca_lib.exec ~stdin ~stdout:stderr ~stderr ["docker";"build";"-t";img_name;"-"] in
+  (* TODO: Is this correct with a pipe ? What about writing a huge string ? *)
   Oca_lib.write_line_unix fd dockerfile >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
-  cmd
+  Oca_lib.exec ~stdin ~stdout:stderr ~stderr ["docker";"build";"-t";img_name;"-"]
 
 let docker_run ~stdout ~stderr img cmd =
   Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
