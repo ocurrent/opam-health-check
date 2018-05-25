@@ -40,5 +40,5 @@ let init_base_job ~switch workdir =
   Oca_lib.mkdir_p (switchilogdir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (gooddir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (baddir ~switch workdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpbaddir ~switch workdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpgooddir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (tmpbaddir ~switch workdir)
