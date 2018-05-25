@@ -61,18 +61,12 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
       in
       get_jobs ~stderr ~img_name ~switch workdir (job :: jobs) pkgs
 
-let async_proc ~stderr ~switch f =
-  let old = !Lwt.async_exception_hook in
-  let stderr = Lwt_unix.unix_file_descr stderr in
+let () =
   Lwt.async_exception_hook := begin fun e ->
     let msg = Printexc.to_string e in
-    let chan = Unix.out_channel_of_descr stderr in
-    output_string chan (msg^"\n");
-    flush chan;
-    Unix.close stderr
-  end;
-  Lwt.async f;
-  Lwt.async_exception_hook := old
+    prerr_endline msg;
+    (* TODO: Close stderr *)
+  end
 
 let is_valid_name_char = function
   | '0'..'9'
@@ -97,7 +91,7 @@ let check workdir ~dockerfile name =
   Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640 >>= fun stderr ->
   Server_workdirs.init_base_job ~switch:name ~stderr workdir >>= fun () ->
   try
-    async_proc ~switch:name ~stderr begin fun () ->
+    Lwt.async begin fun () ->
       get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
       get_jobs ~stderr ~img_name ~switch:name workdir [] pkgs
     end;
