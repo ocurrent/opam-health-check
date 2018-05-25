@@ -14,6 +14,11 @@ let docker_build ~stderr ~img_name dockerfile =
 let docker_run ~stdout ~stderr img cmd =
   Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
 
+let rec read_lines fd =
+  Lwt_io.read_line_opt fd >>= function
+  | Some line -> read_lines fd >|= List.cons line
+  | None -> Lwt.return_nil
+
 let get_pkgs ~stderr ~dockerfile =
   let md5 = Digest.to_hex (Digest.string dockerfile) in
   let img_name = "opam-check-all-" ^ md5 in
@@ -21,11 +26,11 @@ let get_pkgs ~stderr ~dockerfile =
   let fd, stdout = Lwt_unix.pipe () in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   let get_pkgs = docker_run ~stdout ~stderr img_name [] in
-  Lwt_io.read (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
+  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
   get_pkgs >>= fun () ->
   Lwt_unix.close stdout >>= fun () ->
   Lwt_unix.close fd >|= fun () ->
-  (img_name, String.split_on_char '\n' pkgs)
+  (img_name, pkgs)
 
 let job_tbl = Hashtbl.create 32
 
