@@ -13,16 +13,17 @@ let hashtbl = Hashtbl.create 32
 let clear () =
   Hashtbl.clear hashtbl
 
-let get_html ~logdir compilers =
+let get_html workdir compilers =
+  let logdir = Server_workdirs.logdir workdir in
   let is_default = List.is_empty compilers in
   begin if is_default then Diff.get_dirs logdir else Lwt.return compilers end >>= fun compilers ->
-  Diff.get_pkgs ~logdir compilers >>= fun pkgs ->
+  Diff.get_pkgs workdir compilers >>= fun pkgs ->
   let html = Diff.get_html compilers pkgs in
   Hashtbl.add hashtbl compilers html;
   if is_default then Hashtbl.add hashtbl [] html;
   Lwt.return html
 
-let get_html ~logdir compilers =
+let get_html workdir compilers =
   match Hashtbl.find_opt hashtbl compilers with
   | Some html -> Lwt.return html
-  | None -> get_html ~logdir compilers
+  | None -> get_html workdir compilers

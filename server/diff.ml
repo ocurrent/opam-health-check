@@ -40,17 +40,14 @@ let pkg_update ~comp v pkgs pkg =
   in
   Pkgs.update pkg aux pkgs
 
-let get_pkgs_from_dir ~logdir pkgs comp =
-  let dir = Filename.concat logdir comp in
-  let gooddir = Filename.concat dir "good" in
-  let baddir = Filename.concat dir "bad" in
-  get_files gooddir >>= fun good_files ->
-  get_files baddir >|= fun bad_files ->
+let get_pkgs_from_dir workdir pkgs comp =
+  get_files (Server_workdirs.gooddir ~switch:comp workdir) >>= fun good_files ->
+  get_files (Server_workdirs.baddir ~switch:comp workdir) >|= fun bad_files ->
   let pkgs = List.fold_left (pkg_update ~comp Good) pkgs good_files in
   List.fold_left (pkg_update ~comp Bad) pkgs bad_files
 
-let get_pkgs ~logdir compilers =
-  Lwt_list.fold_left_s (get_pkgs_from_dir ~logdir) Pkgs.empty compilers >|= fun pkgs ->
+let get_pkgs workdir compilers =
+  Lwt_list.fold_left_s (get_pkgs_from_dir workdir) Pkgs.empty compilers >|= fun pkgs ->
   let pkgs = Pkgs.bindings pkgs in
   List.sort (fun (x, _) (y, _) -> OpamVersionCompare.compare x y) pkgs
 

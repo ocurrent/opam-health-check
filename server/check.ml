@@ -55,7 +55,7 @@ let get_pkgs ~stderr ~dockerfile =
 let job_queue = Queue.create ()
 let current_job = ref None
 
-let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir ~jid jobs = function
+let rec get_jobs ~stderr ~img_name ~jid ~switch workdir jobs = function
   | [] ->
       Lwt_pool.use pool begin fun () ->
         Lwt.join jobs >>= fun () ->
@@ -69,32 +69,24 @@ let rec get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir ~jid jobs = function
   | pkg::pkgs ->
       let job =
         Lwt_pool.use pool begin fun () ->
-          let goodlog = Filename.concat gooddir pkg in
-          let badlog = Filename.concat baddir pkg in
-          Lwt_unix.file_exists goodlog >>= fun goodlog_exists ->
-          Lwt_unix.file_exists badlog >>= fun badlog_exists ->
-          if goodlog_exists || badlog_exists then begin
-            write_line_unix stderr (pkg^" has already been checked. Skipping...")
-          end else begin
-            write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
-            let logfile = Filename.concat logdir pkg in
-            Lwt_unix.openfile logfile [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o640 >>= fun stdout ->
-            Lwt.finalize begin fun () ->
-              Lwt.catch begin fun () ->
-                docker_run ~stdout ~stderr:stdout img_name ["opam";"depext";"-ivy";pkg] >>= fun () ->
-                Lwt_unix.rename logfile goodlog
-              end begin function
-              | Process_failure -> Lwt_unix.rename logfile badlog
-              | e -> Lwt.fail e
-              end
-            end begin fun () ->
-              Lwt_unix.close stdout
+          write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
+          let logfile = Server_workdirs.logfile ~pkg ~switch workdir in
+          Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
+          Lwt.finalize begin fun () ->
+            Lwt.catch begin fun () ->
+              docker_run ~stdout ~stderr:stdout img_name ["opam";"depext";"-ivy";pkg] >>= fun () ->
+              Lwt_unix.rename logfile (Server_workdirs.tmpgoodlog ~pkg ~switch workdir)
+            end begin function
+            | Process_failure -> Lwt_unix.rename logfile (Server_workdirs.tmpbadlog ~pkg ~switch workdir)
+            | e -> Lwt.fail e
             end
+          end begin fun () ->
+            Lwt_unix.close stdout
           end
         end
       in
       (* TODO: Delete the directory first *)
-      get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir ~jid (job :: jobs) pkgs
+      get_jobs ~stderr ~img_name ~jid ~switch workdir (job :: jobs) pkgs
 
 let async_proc ~stderr ~jid f =
   let aux () =
@@ -127,27 +119,21 @@ let is_valid_name name =
   not (String.equal name Filename.parent_dir_name) &&
   not (String.equal name Filename.current_dir_name)
 
-let check ~logdir ~ilogdir ~dockerfile name =
+let check workdir ~dockerfile name =
   if not (is_valid_name name) then
     failwith "Name is not valid";
-  let ilogdir = Filename.concat ilogdir name in
-  Oca_lib.mkdir_p ilogdir >>= fun () ->
-  let current_time = Printf.sprintf "%.f" (Unix.time ()) in
-  let logfile = Filename.concat ilogdir current_time in
-  let logdir = Filename.concat logdir name in
+  Server_workdirs.init_base_job ~switch:name workdir >>= fun () ->
+  let time = Unix.time () in
+  let logfile = Server_workdirs.ilogfile ~switch:name ~time workdir in
   Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640 >>= fun stderr ->
-  Lwt.catch begin fun () ->
-    let gooddir = Filename.concat logdir "good" in
-    let baddir = Filename.concat logdir "bad" in
-    Oca_lib.mkdir_p gooddir >>= fun () ->
-    Oca_lib.mkdir_p baddir >|= fun () ->
-    let jid = (name, current_time) in
+  try
+    let jid = (name, time) in
     async_proc ~jid ~stderr begin fun () ->
       get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
-      get_jobs ~stderr ~img_name ~logdir ~gooddir ~baddir ~jid [] pkgs
-    end
-  end begin fun e ->
+      get_jobs ~stderr ~img_name ~jid ~switch:name workdir [] pkgs
+    end;
+    Lwt.return_unit
+  with e ->
     write_line_unix stderr (Printexc.to_string e) >>= fun () ->
     Lwt_unix.close stderr >>= fun () ->
     Lwt.fail e
-  end

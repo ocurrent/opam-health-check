@@ -1,6 +1,5 @@
 val check :
-  logdir:string ->
-  ilogdir:string ->
+  Server_workdirs.t ->
   dockerfile:string ->
   string ->
   unit Lwt.t

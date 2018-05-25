@@ -28,22 +28,22 @@ let serv_string ~content_type body =
   let headers = Cohttp.Header.init_with "Content-Type" content_type in
   Cohttp_lwt_unix.Server.respond_string ~headers ~status:`OK ~body ()
 
-let serv_file ~content_type ~logdir file =
+let serv_file ~content_type workdir file =
   let headers = Cohttp.Header.init_with "Content-Type" content_type in
-  let fname = Filename.concat logdir file in
+  let fname = Server_workdirs.file_from_logdir ~file workdir in
   Cohttp_lwt_unix.Server.respond_file ~headers ~fname ()
 
-let callback ~logdir _conn req _body =
+let callback workdir _conn req _body =
   match Path.of_uri (Cohttp.Request.uri req) with
   | [] ->
-      Cache.get_html ~logdir [] >>= fun html ->
+      Cache.get_html workdir [] >>= fun html ->
       serv_string ~content_type:"text/html" html
   | "diff"::compilers ->
       let compilers = List.map Diff.comp_from_string compilers in
-      Cache.get_html ~logdir compilers >>= fun html ->
+      Cache.get_html workdir compilers >>= fun html ->
       serv_string ~content_type:"text/html" html
   | path ->
-      serv_file ~content_type:"text/plain" ~logdir (Path.to_string path)
+      serv_file ~content_type:"text/plain" workdir (Path.to_string path)
 
 let tcp_server port callback =
   Cohttp_lwt_unix.Server.create
@@ -54,19 +54,14 @@ let tcp_server port callback =
 let main workdir =
   Lwt_main.run begin
     Nocrypto_entropy_lwt.initialize () >>= fun () ->
-    Oca_lib.mkdir_p workdir >>= fun () ->
+    let workdir = Server_workdirs.create workdir in
+    Server_workdirs.init_base workdir >>= fun () ->
     let conf = Server_configfile.from_workdir workdir in
-    let logdir = Filename.concat workdir "logs" in
-    let ilogdir = Filename.concat workdir "ilogs" in
-    let keysdir = Oca_lib.keysdir ~workdir in
-    Oca_lib.mkdir_p logdir >>= fun () ->
-    Oca_lib.mkdir_p ilogdir >>= fun () ->
-    Oca_lib.mkdir_p keysdir >>= fun () ->
     let port = Server_configfile.port conf in
     let admin_port = Server_configfile.admin_port conf in
-    let callback = callback ~logdir in
-    let admin_callback = Admin.callback ~logdir ~ilogdir ~keysdir in
-    Admin.create_admin_key ~keysdir >>= fun () ->
+    let callback = callback workdir in
+    let admin_callback = Admin.callback workdir in
+    Admin.create_admin_key workdir >>= fun () ->
     Lwt.join [
       tcp_server port callback;
       tcp_server admin_port admin_callback;
