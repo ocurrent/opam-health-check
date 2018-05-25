@@ -92,6 +92,7 @@ let check workdir ~dockerfile name =
   Server_workdirs.init_base_job ~switch:name ~stderr workdir >>= fun () ->
   try
     Lwt.async begin fun () ->
+      Hashtbl.add job_tbl name ();
       get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
       get_jobs ~stderr ~img_name ~switch:name workdir [] pkgs
     end;
