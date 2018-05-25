@@ -14,7 +14,7 @@ let tmplogdir workdir = workdir/"tmplogs"
 
 let ilogdir workdir = workdir/"ilogs"
 let switchilogdir ~switch workdir = ilogdir workdir/switch
-let ilogfile ~switch ~time workdir = switchilogdir ~switch workdir/Printf.sprintf "%.f" time
+let ilogfile ~switch workdir = switchilogdir ~switch workdir/Printf.sprintf "%.f" (Unix.time ())
 
 let switchlogdir ~switch workdir = logdir workdir/switch
 let gooddir ~switch workdir = switchlogdir ~switch workdir/"good"

@@ -52,18 +52,19 @@ let get_pkgs ~stderr ~dockerfile =
   Lwt_unix.close fd >|= fun () ->
   (img_name, String.split_on_char '\n' pkgs)
 
-let job_queue = Queue.create ()
-let current_job = ref None
+let job_tbl = Hashtbl.create 32
 
-let rec get_jobs ~stderr ~img_name ~jid ~switch workdir jobs = function
+let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
   | [] ->
       Lwt_pool.use pool begin fun () ->
         Lwt.join jobs >>= fun () ->
+        let logdir = Server_workdirs.switchlogdir ~switch workdir in
+        let tmplogdir = Server_workdirs.tmpswitchlogdir ~switch workdir in
+        (* TODO: replace by Oca_lib.rm_rf *)
+        exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";logdir] >>= fun () ->
+        Lwt_unix.rename tmplogdir logdir >>= fun () ->
         Cache.clear ();
-        begin match Queue.pop job_queue with
-        | f -> current_job := Some jid; f ()
-        | exception Queue.Empty -> current_job := None
-        end;
+        Hashtbl.remove job_tbl switch;
         Lwt_unix.close stderr
       end
   | pkg::pkgs ->
@@ -85,10 +86,9 @@ let rec get_jobs ~stderr ~img_name ~jid ~switch workdir jobs = function
           end
         end
       in
-      (* TODO: Delete the directory first *)
-      get_jobs ~stderr ~img_name ~jid ~switch workdir (job :: jobs) pkgs
+      get_jobs ~stderr ~img_name ~switch workdir (job :: jobs) pkgs
 
-let async_proc ~stderr ~jid f =
+let async_proc ~stderr ~switch f =
   let aux () =
     let old = !Lwt.async_exception_hook in
     let stderr = Lwt_unix.unix_file_descr stderr in
@@ -102,9 +102,9 @@ let async_proc ~stderr ~jid f =
     Lwt.async f;
     Lwt.async_exception_hook := old
   in
-  match Queue.is_empty job_queue with
-  | true -> current_job := Some jid; aux ()
-  | false -> Queue.add aux job_queue
+  if Hashtbl.mem job_tbl switch then
+    failwith "A job with the same name is already running";
+  aux ()
 
 let is_valid_name_char = function
   | '0'..'9'
@@ -123,14 +123,12 @@ let check workdir ~dockerfile name =
   if not (is_valid_name name) then
     failwith "Name is not valid";
   Server_workdirs.init_base_job ~switch:name workdir >>= fun () ->
-  let time = Unix.time () in
-  let logfile = Server_workdirs.ilogfile ~switch:name ~time workdir in
+  let logfile = Server_workdirs.ilogfile ~switch:name workdir in
   Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640 >>= fun stderr ->
   try
-    let jid = (name, time) in
-    async_proc ~jid ~stderr begin fun () ->
+    async_proc ~switch:name ~stderr begin fun () ->
       get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
-      get_jobs ~stderr ~img_name ~jid ~switch:name workdir [] pkgs
+      get_jobs ~stderr ~img_name ~switch:name workdir [] pkgs
     end;
     Lwt.return_unit
   with e ->

@@ -10,7 +10,7 @@ val tmplogdir : t -> string
 
 val ilogdir : t -> string
 val switchilogdir : switch:string -> t -> string
-val ilogfile : switch:string -> time:float -> t -> string
+val ilogfile : switch:string -> t -> string
 
 val switchlogdir : switch:string -> t -> string
 val gooddir : switch:string -> t -> string
