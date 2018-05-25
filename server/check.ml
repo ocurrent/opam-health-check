@@ -1,51 +1,24 @@
 open Containers
 open Lwt.Infix
 
-let write_line_unix fd s =
-  let fd = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
-  Lwt_io.write_line fd s >>= fun () ->
-  Lwt_io.flush fd
-
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
-
-let proc_fd_of_unix = function
-  | `Close -> `Close
-  | `Dev_null -> `Dev_null
-  | `FD_move fd -> `FD_move (Lwt_unix.unix_file_descr fd)
-  | `FD_copy fd -> `FD_copy (Lwt_unix.unix_file_descr fd)
-  | `Keep -> `Keep
-
-exception Process_failure
-
-let exec ~stdin ~stdout ~stderr cmd =
-  let stdin = proc_fd_of_unix stdin in
-  let stdout = proc_fd_of_unix (`FD_copy stdout) in
-  let stderr_lwt = stderr in
-  let stderr = proc_fd_of_unix (`FD_copy stderr) in
-  Lwt_process.exec ~stdin ~stdout ~stderr ("", Array.of_list cmd) >>= function
-  | Unix.WEXITED 0 ->
-      Lwt.return_unit
-  | _ ->
-      let cmd = String.concat " " cmd in
-      write_line_unix stderr_lwt ("Command '"^cmd^"' failed.") >>= fun () ->
-      Lwt.fail Process_failure
 
 let docker_build ~stderr ~img_name dockerfile =
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
-  write_line_unix fd dockerfile >>= fun () ->
+  Oca_lib.write_line_unix fd dockerfile >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
-  exec ~stdin ~stdout:stderr ~stderr ["docker";"build";"-t";img_name;"-"]
+  Oca_lib.exec ~stdin ~stdout:stderr ~stderr ["docker";"build";"-t";img_name;"-"]
 
 let docker_run ~stdout ~stderr img cmd =
-  exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
+  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
 
 let get_pkgs ~stderr ~dockerfile =
   let md5 = Digest.to_hex (Digest.string dockerfile) in
   let img_name = "opam-check-all-" ^ md5 in
   docker_build ~stderr ~img_name dockerfile >>= fun () ->
   let fd, stdout = Lwt_unix.pipe () in
-  write_line_unix stderr "Getting packages list..." >>= fun () ->
+  Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   docker_run ~stdout ~stderr img_name [] >>= fun () ->
   Lwt_unix.close stdout >>= fun () ->
   Lwt_io.read (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
@@ -61,7 +34,7 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
         let logdir = Server_workdirs.switchlogdir ~switch workdir in
         let tmplogdir = Server_workdirs.tmpswitchlogdir ~switch workdir in
         (* TODO: replace by Oca_lib.rm_rf *)
-        exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";logdir] >>= fun () ->
+        Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";logdir] >>= fun () ->
         Lwt_unix.rename tmplogdir logdir >>= fun () ->
         Cache.clear ();
         Hashtbl.remove job_tbl switch;
@@ -70,7 +43,7 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
   | pkg::pkgs ->
       let job =
         Lwt_pool.use pool begin fun () ->
-          write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
+          Oca_lib.write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
           let logfile = Server_workdirs.logfile ~pkg ~switch workdir in
           Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
           Lwt.finalize begin fun () ->
@@ -78,7 +51,7 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
               docker_run ~stdout ~stderr:stdout img_name ["opam";"depext";"-ivy";pkg] >>= fun () ->
               Lwt_unix.rename logfile (Server_workdirs.tmpgoodlog ~pkg ~switch workdir)
             end begin function
-            | Process_failure -> Lwt_unix.rename logfile (Server_workdirs.tmpbadlog ~pkg ~switch workdir)
+            | Oca_lib.Process_failure -> Lwt_unix.rename logfile (Server_workdirs.tmpbadlog ~pkg ~switch workdir)
             | e -> Lwt.fail e
             end
           end begin fun () ->
@@ -122,9 +95,10 @@ let is_valid_name name =
 let check workdir ~dockerfile name =
   if not (is_valid_name name) then
     failwith "Name is not valid";
-  Server_workdirs.init_base_job ~switch:name workdir >>= fun () ->
+  Oca_lib.mkdir_p (Server_workdirs.switchilogdir ~switch:name workdir) >>= fun () ->
   let logfile = Server_workdirs.ilogfile ~switch:name workdir in
   Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640 >>= fun stderr ->
+  Server_workdirs.init_base_job ~switch:name ~stderr workdir >>= fun () ->
   try
     async_proc ~switch:name ~stderr begin fun () ->
       get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
@@ -132,6 +106,6 @@ let check workdir ~dockerfile name =
     end;
     Lwt.return_unit
   with e ->
-    write_line_unix stderr (Printexc.to_string e) >>= fun () ->
+    Oca_lib.write_line_unix stderr (Printexc.to_string e) >>= fun () ->
     Lwt_unix.close stderr >>= fun () ->
     Lwt.fail e

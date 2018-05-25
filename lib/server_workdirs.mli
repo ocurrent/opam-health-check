@@ -28,4 +28,8 @@ val configfile : t -> string
 val file_from_logdir : file:string -> t -> string
 
 val init_base : t -> unit Lwt.t
-val init_base_job : switch:string -> t -> unit Lwt.t
+val init_base_job :
+  switch:string ->
+  stderr:Lwt_unix.file_descr ->
+  t ->
+  unit Lwt.t
