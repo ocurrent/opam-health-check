@@ -128,7 +128,7 @@ let is_valid_name name =
   not (String.equal name Filename.current_dir_name)
 
 let check ~logdir ~ilogdir ~dockerfile name =
-  if is_valid_name name then
+  if not (is_valid_name name) then
     failwith "Name is not valid";
   let ilogdir = Filename.concat ilogdir name in
   Oca_lib.mkdir_p ilogdir >>= fun () ->
