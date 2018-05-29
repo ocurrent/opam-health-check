@@ -21,7 +21,8 @@ let get_pkgs ~stderr ~dockerfile =
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   (* TODO: Find out what's wrong with Oca_lib.exec + pipe instead of pread *)
   Lwt_process.pread ~stderr:(`FD_copy (Lwt_unix.unix_file_descr stderr)) ("", [|"docker";"run";"--rm";img_name|]) >|= fun pkgs ->
-  (img_name, String.split_on_char '\n' pkgs)
+  (* TODO: Create a Path module with abstract types to avoid mistakes like this (filter) *)
+  (img_name, List.filter Fun.(not % String.is_empty) (String.split_on_char '\n' pkgs))
 
 let job_tbl = Hashtbl.create 32
 
