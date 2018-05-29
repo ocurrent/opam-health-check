@@ -19,11 +19,11 @@ let ilogfile ~switch workdir = switchilogdir ~switch workdir/Printf.sprintf "%.f
 let switchlogdir ~switch workdir = logdir workdir/switch
 let gooddir ~switch workdir = switchlogdir ~switch workdir/"good"
 let baddir ~switch workdir = switchlogdir ~switch workdir/"bad"
-let logfile ~pkg ~switch workdir = switchlogdir ~switch workdir/pkg
 
 let tmpswitchlogdir ~switch workdir = tmplogdir workdir/switch
 let tmpgooddir ~switch workdir = tmpswitchlogdir ~switch workdir/"good"
 let tmpbaddir ~switch workdir = tmpswitchlogdir ~switch workdir/"bad"
+let tmplogfile ~pkg ~switch workdir = tmpswitchlogdir ~switch workdir/pkg
 
 let tmpgoodlog ~pkg ~switch workdir = tmpgooddir ~switch workdir/pkg
 let tmpbadlog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg

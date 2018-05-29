@@ -42,7 +42,7 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
       let job =
         Lwt_pool.use pool begin fun () ->
           Oca_lib.write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
-          let logfile = Server_workdirs.logfile ~pkg ~switch workdir in
+          let logfile = Server_workdirs.tmplogfile ~pkg ~switch workdir in
           Lwt_unix.openfile logfile Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
           Lwt.finalize begin fun () ->
             Lwt.catch begin fun () ->

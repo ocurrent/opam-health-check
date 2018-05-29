@@ -15,11 +15,9 @@ val ilogfile : switch:string -> t -> string
 val switchlogdir : switch:string -> t -> string
 val gooddir : switch:string -> t -> string
 val baddir : switch:string -> t -> string
-val logfile : pkg:string -> switch:string -> t -> string
 
 val tmpswitchlogdir : switch:string -> t -> string
-val tmpgooddir : switch:string -> t -> string
-val tmpbaddir : switch:string -> t -> string
+val tmplogfile : pkg:string -> switch:string -> t -> string
 
 val tmpgoodlog : pkg:string -> switch:string -> t -> string
 val tmpbadlog : pkg:string -> switch:string -> t -> string
