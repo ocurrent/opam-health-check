@@ -44,11 +44,11 @@ let parse_raw_query workdir uri =
   let show_available = String.split_on_char ':' show_available in
   let logdir = Server_workdirs.logdir workdir in
   begin match compilers with
-  | [] -> Diff.get_dirs logdir
+  | [] | [""] -> Diff.get_dirs logdir
   | compilers -> Lwt.return (List.map Diff.comp_from_string compilers)
   end >>= fun compilers ->
   let show_available = match show_available with
-    | [] -> compilers
+    | [] | [""] -> compilers
     | show_available -> List.map Diff.comp_from_string show_available
   in
   Lwt.return {
