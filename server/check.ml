@@ -20,6 +20,7 @@ let get_pkgs ~stderr ~dockerfile =
   docker_build ~stderr ~img_name dockerfile >>= fun () ->
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   (* TODO: Find out what's wrong with Oca_lib.exec + pipe instead of pread *)
+  (* TODO: Try by closing the pipe in after *)
   Lwt_process.pread ~stderr:(`FD_copy (Lwt_unix.unix_file_descr stderr)) ("", [|"docker";"run";"--rm";img_name|]) >|= fun pkgs ->
   (* TODO: Create a Path module with abstract types to avoid mistakes like this (filter) *)
   (img_name, List.filter Fun.(not % String.is_empty) (String.split_on_char '\n' pkgs))

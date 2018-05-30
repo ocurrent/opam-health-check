@@ -9,6 +9,11 @@ type comp = string
 type pkg = string
 type pkgs = (pkg * (comp * state) list) list
 
+type query = {
+  compilers : comp list;
+  show_available : comp list;
+}
+
 let get_files dirname =
   Lwt_unix.opendir dirname >>= fun dir ->
   let rec aux files =
@@ -32,6 +37,13 @@ let get_dirs dir =
   get_files dir >|= fun files ->
   let dirs = List.filter (is_directory dir) files in
   List.sort OpamVersionCompare.compare dirs
+
+let default_query workdir =
+  let logdir = Server_workdirs.logdir workdir in
+  get_dirs logdir >|= fun compilers ->
+  { compilers;
+    show_available = compilers;
+  }
 
 let pkg_update ~comp v pkgs pkg =
   let aux = function
@@ -62,18 +74,20 @@ let instance_to_html ~pkg instances comp =
 let is_pkg_available instances compilers =
   List.exists (fun dir -> List.Assoc.mem ~eq:String.equal dir instances) compilers
 
-let pkg_to_html compilers (pkg, instances) =
+let pkg_to_html {compilers; show_available} (pkg, instances) =
   let open Tyxml.Html in
-  if is_pkg_available instances compilers then
+  if is_pkg_available instances show_available then
     Some (tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg instances) compilers))
   else
     None
 
-let get_html compilers pkgs =
+let get_html query pkgs =
   let open Tyxml.Html in
-  let col_width = string_of_int (100 / List.length compilers) in
-  let pkgs = List.filter_map (pkg_to_html compilers) pkgs in
-  let dirs = th [] :: List.map (fun dir -> th ~a:[a_class ["result-col"]] [pcdata (Filename.basename dir)]) compilers in
+  (* TODO: Handle cases where there is no compilers and the following
+     line will raise an exception *)
+  let col_width = string_of_int (100 / List.length query.compilers) in
+  let pkgs = List.filter_map (pkg_to_html query) pkgs in
+  let dirs = th [] :: List.map (fun dir -> th ~a:[a_class ["result-col"]] [pcdata (Filename.basename dir)]) query.compilers in
   let title = title (pcdata "opam-check-all") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let style_table = pcdata "table {border-collapse: collapse; min-width: 100%;}" in

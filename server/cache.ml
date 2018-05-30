@@ -2,9 +2,11 @@ open Containers
 open Lwt.Infix
 
 module Hashtbl = Hashtbl.Make (struct
-    type t = Diff.comp list
+    type t = Diff.query
     let hash = Hashtbl.hash
-    let equal = List.equal Diff.comp_equal
+    let equal x y =
+      List.equal Diff.comp_equal x.Diff.compilers y.Diff.compilers &&
+      List.equal Diff.comp_equal x.Diff.show_available y.Diff.show_available
   end)
 
 (* TODO: Also cache pkgs ? *)
@@ -13,17 +15,13 @@ let hashtbl = Hashtbl.create 32
 let clear () =
   Hashtbl.clear hashtbl
 
-let get_html workdir compilers =
-  let logdir = Server_workdirs.logdir workdir in
-  let is_default = List.is_empty compilers in
-  begin if is_default then Diff.get_dirs logdir else Lwt.return compilers end >>= fun compilers ->
-  Diff.get_pkgs workdir compilers >>= fun pkgs ->
-  let html = Diff.get_html compilers pkgs in
-  Hashtbl.add hashtbl compilers html;
-  if is_default then Hashtbl.add hashtbl [] html;
+let get_html workdir query =
+  Diff.get_pkgs workdir query.Diff.compilers >>= fun pkgs ->
+  let html = Diff.get_html query pkgs in
+  Hashtbl.add hashtbl query html;
   Lwt.return html
 
-let get_html workdir compilers =
-  match Hashtbl.find_opt hashtbl compilers with
+let get_html workdir query =
+  match Hashtbl.find_opt hashtbl query with
   | Some html -> Lwt.return html
-  | None -> get_html workdir compilers
+  | None -> get_html workdir query

@@ -33,14 +33,43 @@ let serv_file ~content_type workdir file =
   let fname = Server_workdirs.file_from_logdir ~file workdir in
   Cohttp_lwt_unix.Server.respond_file ~headers ~fname ()
 
+let parse_raw_query workdir raw_query =
+  let (variables, compilers) =
+    let aux (variables, compilers) str =
+      match String.Split.left ~by:":" str with
+      | None -> (variables, str::compilers)
+      | Some var -> (var::variables, compilers)
+    in
+    List.fold_left aux ([], []) raw_query
+  in
+  let (show_available, variables) =
+    List.partition (fun (x, _) -> String.equal x "show-available") variables
+  in
+  if not (List.is_empty variables) then
+    failwith "Option unrecognized";
+  let logdir = Server_workdirs.logdir workdir in
+  begin match compilers with
+  | [] -> Diff.get_dirs logdir
+  | compilers -> Lwt.return (List.map Diff.comp_from_string compilers)
+  end >>= fun compilers ->
+  let show_available = match show_available with
+    | [] ->
+        compilers
+    | [(_, show_available)] ->
+        List.map Diff.comp_from_string (String.split_on_char ':' show_available)
+    | _ ->
+        failwith "variable show-available already set"
+  in
+  Lwt.return {
+    Diff.compilers;
+    Diff.show_available;
+  }
+
 let callback workdir _conn req _body =
   match Path.of_uri (Cohttp.Request.uri req) with
-  | [] ->
-      Cache.get_html workdir [] >>= fun html ->
-      serv_string ~content_type:"text/html" html
-  | "diff"::compilers ->
-      let compilers = List.map Diff.comp_from_string compilers in
-      Cache.get_html workdir compilers >>= fun html ->
+  | [] as raw_query | "diff"::raw_query ->
+      parse_raw_query workdir raw_query >>= fun query ->
+      Cache.get_html workdir query >>= fun html ->
       serv_string ~content_type:"text/html" html
   | path ->
       serv_file ~content_type:"text/plain" workdir (Path.to_string path)
