@@ -83,6 +83,11 @@ let pkg_to_html {compilers; show_available} (pkg, instances) =
   else
     None
 
+let gen_table_form l =
+  let open Tyxml.Html in
+  let aux (txt, elt) = tr [td txt; td [elt]] in
+  form [table (List.map aux l)]
+
 let get_html query pkgs =
   let open Tyxml.Html in
   (* TODO: Handle cases where there is no compilers and the following
@@ -96,8 +101,13 @@ let get_html query pkgs =
   let style_col = pcdata (".result-col {text-align: center; width: "^col_width^"%;}") in
   let style_case = pcdata "td, th {border: 2px solid black;}" in
   let head = head title [charset; style [style_table; style_col; style_case]] in
+  let show_available_text = [pcdata "Show only packages available in [list of compilers separated by ':']:"] in
+  let show_available = input ~a:[a_input_type `Text; a_name "show-available"] () in
+  let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
+  let filter_form = gen_table_form [(show_available_text, show_available); ([], submit_form)] in
+  let filter = div [h3 [pcdata "Filter form"]; filter_form] in
   let doc = table ~thead:(thead [tr dirs]) pkgs in
-  let doc = html head (body [doc]) in
+  let doc = html head (body [filter; br (); doc]) in
   Format.sprintf "%a\n" (pp ()) doc
 
 let comp_from_string x = x
