@@ -67,7 +67,7 @@ let get_pkgs workdir compilers =
 
 let instance_to_html ~pkg instances comp =
   let open Tyxml.Html in
-  let td c = td ~a:[a_class ["result-col"]; a_style ("background-color: "^c^";")] in
+  let td c = td ~a:[a_class ["result-col"; "results-cell"]; a_style ("background-color: "^c^";")] in
   match List.Assoc.get ~eq:String.equal comp instances with
   | Some Good -> td "green" [pcdata "☑"]
   | Some Bad -> td "red" [a ~a:[a_href ("/"^comp^"/bad/"^pkg)] [pcdata "☒"]]
@@ -78,6 +78,7 @@ let is_pkg_available instances compilers =
 
 let pkg_to_html {compilers; show_available} (pkg, instances) =
   let open Tyxml.Html in
+  let td = td ~a:[a_class ["results-cell"]] in
   if is_pkg_available instances show_available then
     Some (tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg instances) compilers))
   else
@@ -94,19 +95,20 @@ let get_html query pkgs =
      line will raise an exception *)
   let col_width = string_of_int (100 / List.length query.compilers) in
   let pkgs = List.filter_map (pkg_to_html query) pkgs in
+  let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [pcdata comp]) query.compilers in
   let title = title (pcdata "opam-check-all") in
   let charset = meta ~a:[a_charset "utf-8"] () in
-  let style_table = pcdata "table {border-collapse: collapse; min-width: 100%;}" in
+  let style_table = pcdata ".results {border-collapse: collapse; min-width: 100%;}" in
   let style_col = pcdata (".result-col {text-align: center; width: "^col_width^"%;}") in
-  let style_case = pcdata "td, th {border: 2px solid black;}" in
+  let style_case = pcdata ".results-cell {border: 2px solid black;}" in
   let head = head title [charset; style [style_table; style_col; style_case]] in
   let show_available_text = [pcdata "Show only packages available in [list of compilers separated by ':']:"] in
   let show_available = input ~a:[a_input_type `Text; a_name "show-available"] () in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
   let filter_form = gen_table_form [(show_available_text, show_available); ([], submit_form)] in
   let filter = div [h3 [pcdata "Filter form"]; filter_form] in
-  let doc = table ~thead:(thead [tr dirs]) pkgs in
+  let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in
   let doc = html head (body [filter; br (); doc]) in
   Format.sprintf "%a\n" (pp ()) doc
 
