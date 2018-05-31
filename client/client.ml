@@ -2,7 +2,7 @@ open Lwt.Infix
 open Containers
 
 let parse_key key =
-  let key = IO.with_in key IO.read_all in
+  let key = IO.with_in (Fpath.to_string key) IO.read_all in
   let key = Nocrypto.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key) in
   Nocrypto.Rsa.pub_of_priv key
 
@@ -34,14 +34,13 @@ let process_response (res, body) =
       raise Exit
 
 let send_msg ~confdir ~conffile msg =
-  let conf = Configfile.from_file conffile in
+  let conf = Configfile.from_file ~confdir conffile in
   let conf = Configfile.profile ~profilename:None conf in
   let hostname = Configfile.hostname conf in
   let port = Configfile.port conf in
   let username = Configfile.username conf in
   let keyfile = Configfile.keyfile conf in
-  let key = Filename.concat confdir keyfile in
-  let key = parse_key key in
+  let key = parse_key keyfile in
   let prefix = username^"\n" in
   let msg = String.concat "\n" msg in
   let msg = encrypt_msg ~key (prefix^msg) in
@@ -105,8 +104,9 @@ let init_cmd ~confdir ~conffile =
 
 let cmds =
   let confdir = XDGBaseDir.(default.config_home) in
-  let confdir = Filename.concat confdir "opam-check-all" in
-  let conffile = Filename.concat confdir "config.yaml" in
+  let confdir = Fpath.v confdir in
+  let confdir = Fpath.add_seg confdir "opam-check-all" in
+  let conffile = Fpath.add_seg confdir "config.yaml" in
   [
     init_cmd ~confdir ~conffile;
     add_user_cmd ~confdir ~conffile;

@@ -1,13 +1,19 @@
+open Containers
 open Lwt.Infix
 
-type t = string
+type t = Fpath.t
 
-let (/) = Filename.concat
+let (/) path file =
+  if not (Oca_lib.is_valid_filename file) then
+    failwith "Wrong filename";
+  Fpath.(/) path file
 
-let create ~workdir = workdir
+let (+) = Fpath.(+)
+
+let create ~workdir = Fpath.v workdir
 
 let keysdir workdir = workdir/"keys"
-let keyfile ~username workdir = keysdir workdir/username^".key"
+let keyfile ~username workdir = keysdir workdir/username+"key"
 
 let logdir workdir = workdir/"logs"
 let tmplogdir workdir = workdir/"tmplogs"
@@ -39,6 +45,6 @@ let init_base workdir =
 let init_base_job ~switch ~stderr workdir =
   Oca_lib.mkdir_p (gooddir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (baddir ~switch workdir) >>= fun () ->
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";tmpswitchlogdir ~switch workdir] >>= fun () ->
+  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string (tmpswitchlogdir ~switch workdir)] >>= fun () ->
   Oca_lib.mkdir_p (tmpgooddir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (tmpbaddir ~switch workdir)

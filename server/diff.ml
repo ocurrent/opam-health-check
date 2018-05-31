@@ -15,12 +15,14 @@ type query = {
 }
 
 let get_files dirname =
-  Lwt_unix.opendir dirname >>= fun dir ->
+  Lwt_unix.opendir (Fpath.to_string dirname) >>= fun dir ->
   let rec aux files =
     Lwt.catch begin fun () ->
-      Lwt_unix.readdir dir >>= function
-      | "." | ".." -> aux files
-      | file -> aux (file :: files)
+      Lwt_unix.readdir dir >>= fun file ->
+      if Fpath.is_rel_seg file then
+        aux files
+      else
+        aux (file :: files)
     end begin function
     | End_of_file -> Lwt.return files
     | exn -> Lwt.fail exn
@@ -31,7 +33,7 @@ let get_files dirname =
   files
 
 let is_directory dir file =
-  Sys.is_directory (Filename.concat dir file)
+  Sys.is_directory (Fpath.to_string (Fpath.add_seg dir file))
 
 let get_dirs dir =
   get_files dir >|= fun files ->
@@ -87,7 +89,7 @@ let get_html query pkgs =
      line will raise an exception *)
   let col_width = string_of_int (100 / List.length query.compilers) in
   let pkgs = List.filter_map (pkg_to_html query) pkgs in
-  let dirs = th [] :: List.map (fun dir -> th ~a:[a_class ["result-col"]] [pcdata (Filename.basename dir)]) query.compilers in
+  let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [pcdata comp]) query.compilers in
   let title = title (pcdata "opam-check-all") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let style_table = pcdata "table {border-collapse: collapse; min-width: 100%;}" in

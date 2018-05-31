@@ -1,7 +1,7 @@
 open Containers
 
 type profile = {
-  keyfile : string;
+  keyfile : Fpath.t;
   mutable hostname : string option;
   mutable port : string option;
   mutable username : string option;
@@ -11,8 +11,8 @@ module Map = Map.Make (String)
 
 type t = profile Map.t
 
-let empty_profile profilename = {
-  keyfile = profilename^".key";
+let empty_profile ~confdir profilename = {
+  keyfile = Fpath.add_ext "key" (Fpath.add_seg confdir profilename);
   hostname = None;
   port = None;
   username = None;
@@ -25,16 +25,16 @@ let get_input ~name ~default =
   | x -> x
 
 let copy_file ~src ~dst =
-  IO.with_out ~flags:[Open_creat; Open_excl] dst begin fun out ->
-    let content = IO.with_in src IO.read_all in
+  IO.with_out ~flags:[Open_creat; Open_excl] (Fpath.to_string dst) begin fun out ->
+    let content = IO.with_in (Fpath.to_string src) IO.read_all in
     output_string out content;
   end
 
 let init_with_values ~confdir ~hostname ~port ~username ~keyfile yamlfile =
   let port = string_of_int port in
   Lwt_main.run (Oca_lib.mkdir_p confdir);
-  copy_file ~src:keyfile ~dst:(Filename.concat confdir "default.key");
-  IO.with_out ~flags:[Open_creat; Open_excl] yamlfile begin fun out ->
+  copy_file ~src:keyfile ~dst:(Fpath.add_seg confdir "default.key");
+  IO.with_out ~flags:[Open_creat; Open_excl] (Fpath.to_string yamlfile) begin fun out ->
     IO.write_line out "default:";
     IO.write_line out ("  hostname: "^hostname);
     IO.write_line out ("  port: "^port);
@@ -46,8 +46,7 @@ let init ~confdir yamlfile =
   let port = get_input ~name:"Server port" ~default:Oca_lib.default_admin_port in
   let username = get_input ~name:"Username" ~default:Oca_lib.default_admin_name in
   let keyfile = get_input ~name:"User key" ~default:"" in
-  if String.is_empty keyfile then
-    failwith "No key given. Abort.";
+  let keyfile = Fpath.v keyfile in
   let port = int_of_string port in
   init_with_values ~confdir ~hostname ~port ~username ~keyfile yamlfile
 
@@ -76,21 +75,23 @@ let check_missing_fields {hostname; port; username} =
     failwith "Config parser: Missing 'username' field";
   end
 
-let parse_profile profiles = function
+let parse_profile ~confdir profiles = function
   | profile, _ when Map.mem profile profiles ->
       failwith "Profile name already defined"
   | profile, `O fields ->
-      let p = empty_profile profile in
+      if not (Oca_lib.is_valid_filename profile) then
+        failwith "Profile name containers forbidden characters";
+      let p = empty_profile ~confdir profile in
       List.iter (parse_profile_fields p) fields;
       check_missing_fields p;
       Map.add profile p profiles
   | _, _ ->
       failwith "Cannot parse"
 
-let from_file yamlfile =
-  let yaml = IO.with_in ~flags:[Open_creat] yamlfile IO.read_all in
+let from_file ~confdir yamlfile =
+  let yaml = IO.with_in ~flags:[Open_creat] (Fpath.to_string yamlfile) IO.read_all in
   match Yaml.of_string_exn yaml with
-  | `O profiles -> List.fold_left parse_profile Map.empty profiles
+  | `O profiles -> List.fold_left (parse_profile ~confdir) Map.empty profiles
   | _ -> failwith "Cannot parse the config file"
 
 let profile ~profilename conf =

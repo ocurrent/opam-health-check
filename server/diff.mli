@@ -8,7 +8,7 @@ type query = {
 
 val default_query : Server_workdirs.t -> query Lwt.t
 
-val get_dirs : string -> comp list Lwt.t
+val get_dirs : Fpath.t -> comp list Lwt.t
 val get_pkgs : Server_workdirs.t -> comp list -> pkgs Lwt.t
 val get_html : query -> pkgs -> string
 

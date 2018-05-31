@@ -11,6 +11,7 @@ let is_username_char = function
   | _ -> false
 
 let get_keyfile workdir username =
+  (* TODO: Replace this test by Oca_lib.is_valid_filename ? *)
   if String.is_empty username || not (String.for_all is_username_char username) then
     failwith "Invalid username";
   Server_workdirs.keyfile ~username workdir
@@ -20,14 +21,14 @@ let create_userkey workdir username =
   let key = Nocrypto.Rsa.generate 2048 in
   let key = Nocrypto.Rsa.sexp_of_priv key in
   let key = Sexplib.Sexp.to_string key in
-  with_file_out ~flags:[Unix.O_EXCL] keyfile begin fun chan ->
+  with_file_out ~flags:[Unix.O_EXCL] (Fpath.to_string keyfile) begin fun chan ->
     Lwt_io.write_line chan key
   end
 
 let create_admin_key workdir =
   let username = Oca_lib.default_admin_name in
   let keyfile = get_keyfile workdir username in
-  Lwt_unix.file_exists keyfile >>= function
+  Lwt_unix.file_exists (Fpath.to_string keyfile) >>= function
   | true -> Lwt.return_unit
   | false -> create_userkey workdir username
 
@@ -47,7 +48,7 @@ let is_bzero = function
 
 let get_user_key workdir user =
   let keyfile = get_keyfile workdir user in
-  Lwt_io.with_file ~mode:Lwt_io.Input keyfile Lwt_io.read >|= fun key ->
+  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) Lwt_io.read >|= fun key ->
   Nocrypto.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key)
 
 let partial_decrypt key msg =

@@ -33,7 +33,7 @@ let set_defaults yamlfile conf =
     conf.admin_port <- Some Oca_lib.default_admin_port;
   end;
   if not (List.is_empty !r) then begin
-    IO.with_out_a yamlfile begin fun out ->
+    IO.with_out_a (Fpath.to_string yamlfile) begin fun out ->
       (* NOTE: Always prepend a newline in case the file doesn't end with one *)
       IO.write_line out "";
       List.iter (IO.write_line out) !r;
@@ -48,7 +48,7 @@ let create yamlfile yaml =
 
 let from_workdir workdir =
   let yamlfile = Server_workdirs.configfile workdir in
-  let yaml = IO.with_in ~flags:[Open_creat] yamlfile IO.read_all in
+  let yaml = IO.with_in ~flags:[Open_creat] (Fpath.to_string yamlfile) IO.read_all in
   match Yaml.of_string_exn yaml with
   | `O yaml -> create yamlfile yaml
   | `String "" | `Null -> create yamlfile []

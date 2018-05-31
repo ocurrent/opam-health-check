@@ -16,4 +16,5 @@ depends: [
   "opam-core"
   "nocrypto"
   "cmdliner"
+  "fpath"
 ]

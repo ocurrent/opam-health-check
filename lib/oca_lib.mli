@@ -1,4 +1,6 @@
-val mkdir_p : string -> unit Lwt.t
+val is_valid_filename : string -> bool
+
+val mkdir_p : Fpath.t -> unit Lwt.t
 
 val write_line_unix : Lwt_unix.file_descr -> string -> unit Lwt.t
 

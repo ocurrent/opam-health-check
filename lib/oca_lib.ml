@@ -1,23 +1,30 @@
 open Containers
 open Lwt.Infix
 
+let is_valid_filename file =
+  not begin
+    String.is_empty file ||
+    Fpath.is_rel_seg file ||
+    Fpath.is_seg file
+  end
+
 let mkdir_p dir =
   let rec aux base = function
     | [] ->
         Lwt.return_unit
     | x::xs ->
-        let dir = Filename.concat base x in
+        let dir = Fpath.add_seg base x in
         Lwt.catch begin fun () ->
-          Lwt_unix.mkdir dir 0o750
+          Lwt_unix.mkdir (Fpath.to_string dir) 0o750
         end begin function
         | Unix.Unix_error (Unix.EEXIST, _, _) -> Lwt.return_unit
         | e -> Lwt.fail e
         end >>= fun () ->
         aux dir xs
   in
-  match String.Split.list_cpy ~by:Filename.dir_sep dir with
-  | ""::dirs -> aux Filename.dir_sep dirs
-  | dirs -> aux "" dirs
+  match Fpath.segs dir with
+  | ""::dirs -> aux Fpath.(v dir_sep) dirs
+  | dirs -> aux (Fpath.v Filename.current_dir_name) dirs
 
 let write_line_unix fd s =
   let fd = Lwt_io.of_fd ~mode:Lwt_io.Output fd in

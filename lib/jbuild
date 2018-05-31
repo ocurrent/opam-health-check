@@ -6,4 +6,5 @@
   (libraries
    (lwt.unix
     yaml
+    fpath
     containers))))
