@@ -33,7 +33,8 @@ let parse_raw_query workdir uri =
     Diff.show_available;
   }
 
-let check_path path =
+let filter_path path =
+  let path = List.filter (fun file -> not (String.is_empty file)) path in
   if not (List.for_all Oca_lib.is_valid_filename path) then
     failwith "Forbidden path";
   path
@@ -41,7 +42,7 @@ let check_path path =
 let path_from_uri uri =
   match Uri.path uri with
   | "" -> []
-  | path -> check_path (Fpath.segs (Fpath.v path))
+  | path -> filter_path (Fpath.segs (Fpath.v path))
 
 let callback workdir _conn req _body =
   let uri = Cohttp.Request.uri req in
