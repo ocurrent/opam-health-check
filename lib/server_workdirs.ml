@@ -35,7 +35,10 @@ let tmpgoodlog ~pkg ~switch workdir = tmpgooddir ~switch workdir/pkg
 let tmpbadlog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
-let file_from_logdir ~file workdir = logdir workdir/file
+let file_from_logdir ~file workdir =
+  let file = Fpath.v file in
+  let file = Fpath.segs file in
+  List.fold_left (/) (logdir workdir) file
 
 let init_base workdir =
   Oca_lib.mkdir_p (keysdir workdir) >>= fun () ->
