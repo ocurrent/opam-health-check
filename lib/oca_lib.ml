@@ -5,7 +5,7 @@ let is_valid_filename file =
   not begin
     String.is_empty file ||
     Fpath.is_rel_seg file ||
-    Fpath.is_seg file
+    not (Fpath.is_seg file)
   end
 
 let mkdir_p dir =
