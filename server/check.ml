@@ -1,4 +1,3 @@
-open Containers
 open Lwt.Infix
 
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)

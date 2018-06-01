@@ -1,4 +1,3 @@
-open Containers
 open Lwt.Infix
 
 type t = Fpath.t

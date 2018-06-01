@@ -1,4 +1,3 @@
-open Containers
 open Lwt.Infix
 
 let is_valid_filename file =

@@ -1,5 +1,3 @@
-open Containers
-
 type profile = {
   keyfile : Fpath.t;
   mutable hostname : string option;
@@ -26,7 +24,7 @@ let get_input ~name ~default =
 
 let copy_file ~src ~dst =
   IO.with_out ~flags:[Open_creat; Open_excl] (Fpath.to_string dst) begin fun out ->
-    let content = IO.with_in (Fpath.to_string src) IO.read_all in
+    let content = IO.with_in (Fpath.to_string src) (IO.read_all ?size:None) in
     output_string out content;
   end
 
@@ -64,7 +62,7 @@ let parse_profile_fields p = function
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
-let check_missing_fields {hostname; port; username} =
+let check_missing_fields {keyfile = _; hostname; port; username} =
   if Option.is_none hostname then begin
     failwith "Config parser: Missing 'hostname' field";
   end;
@@ -89,7 +87,7 @@ let parse_profile ~confdir profiles = function
       failwith "Cannot parse"
 
 let from_file ~confdir yamlfile =
-  let yaml = IO.with_in ~flags:[Open_creat] (Fpath.to_string yamlfile) IO.read_all in
+  let yaml = IO.with_in ~flags:[Open_creat] (Fpath.to_string yamlfile) (IO.read_all ?size:None) in
   match Yaml.of_string_exn yaml with
   | `O profiles -> List.fold_left (parse_profile ~confdir) Map.empty profiles
   | _ -> failwith "Cannot parse the config file"

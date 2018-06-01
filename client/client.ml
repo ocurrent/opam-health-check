@@ -1,8 +1,7 @@
 open Lwt.Infix
-open Containers
 
 let parse_key key =
-  let key = IO.with_in (Fpath.to_string key) IO.read_all in
+  let key = IO.with_in (Fpath.to_string key) (IO.read_all ?size:None) in
   let key = Nocrypto.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key) in
   Nocrypto.Rsa.pub_of_priv key
 
@@ -54,7 +53,7 @@ let send_msg ~confdir ~conffile msg =
 
 let check ~confdir ~conffile comp dockerfile =
   (* TODO: Catch the exception if the config file doesn't exist *)
-  let dockerfile = IO.with_in dockerfile IO.read_all in
+  let dockerfile = IO.with_in dockerfile (IO.read_all ?size:None) in
   let msg = ["check";comp;dockerfile] in
   send_msg ~confdir ~conffile msg
 

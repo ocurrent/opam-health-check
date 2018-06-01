@@ -3,6 +3,7 @@
 (library
  ((name oca_lib)
   (wrapped false)
+  (flags (:standard -safe-string -w A-44-33-4 -open Containers))
   (libraries
    (lwt.unix
     yaml

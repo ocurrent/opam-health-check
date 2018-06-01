@@ -1,4 +1,3 @@
-open Containers
 open Lwt.Infix
 
 let with_file_out ~flags file f =
@@ -32,7 +31,7 @@ let create_admin_key workdir =
   | true -> Lwt.return_unit
   | false -> create_userkey workdir username
 
-let admin_action workdir user body =
+let admin_action workdir body =
   match String.split_on_char '\n' body with
   | "check"::dir::dockerfile ->
       let dockerfile = String.concat "\n" dockerfile in
@@ -48,7 +47,7 @@ let is_bzero = function
 
 let get_user_key workdir user =
   let keyfile = get_keyfile workdir user in
-  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) Lwt_io.read >|= fun key ->
+  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) (Lwt_io.read ?count:None) >|= fun key ->
   Nocrypto.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key)
 
 let partial_decrypt key msg =
@@ -62,21 +61,21 @@ let rec decrypt key msg =
     let msg, next = String.take_drop key_size msg in
     partial_decrypt key msg ^ decrypt key next
 
-let callback workdir conn req body =
+let callback workdir _conn _req body =
   Cohttp_lwt.Body.to_string body >>= fun body ->
   match String.Split.left ~by:"\n" body with
   | Some (pversion, body) when String.equal Oca_lib.protocol_version pversion ->
       begin match String.Split.left ~by:"\n" body with
-      | Some (user, "") ->
+      | Some (_, "") ->
           Lwt.fail_with "Empty message"
       | Some (user, body) ->
           get_user_key workdir user >>= fun key ->
           let body = decrypt key body in
           begin match String.Split.left ~by:"\n" body with
           | Some (user', body) when String.equal user user' ->
-              admin_action workdir user body >>= fun () ->
+              admin_action workdir body >>= fun () ->
               Cohttp_lwt_unix.Server.respond ~status:`OK ~body:`Empty ()
-          | Some (user', _) ->
+          | Some _ ->
               Lwt.fail_with "Identity couldn't be ensured"
           | None ->
               Lwt.fail_with "Identity check required"

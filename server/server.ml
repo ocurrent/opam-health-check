@@ -1,4 +1,3 @@
-open Containers
 open Lwt.Infix
 
 let serv_string ~content_type body =
@@ -66,7 +65,7 @@ let tcp_server port callback =
 let main workdir =
   Lwt_main.run begin
     Nocrypto_entropy_lwt.initialize () >>= fun () ->
-    let workdir = Server_workdirs.create workdir in
+    let workdir = Server_workdirs.create ~workdir in
     Server_workdirs.init_base workdir >>= fun () ->
     let conf = Server_configfile.from_workdir workdir in
     let port = Server_configfile.port conf in

@@ -1,5 +1,3 @@
-open Containers
-
 type t = {
   mutable port : string option;
   mutable admin_port : string option;
@@ -48,7 +46,7 @@ let create yamlfile yaml =
 
 let from_workdir workdir =
   let yamlfile = Server_workdirs.configfile workdir in
-  let yaml = IO.with_in ~flags:[Open_creat] (Fpath.to_string yamlfile) IO.read_all in
+  let yaml = IO.with_in ~flags:[Open_creat] (Fpath.to_string yamlfile) (IO.read_all ?size:None) in
   match Yaml.of_string_exn yaml with
   | `O yaml -> create yamlfile yaml
   | `String "" | `Null -> create yamlfile []

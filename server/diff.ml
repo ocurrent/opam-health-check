@@ -1,4 +1,3 @@
-open Containers
 open Lwt.Infix
 
 module Pkgs = Map.Make (String)
