@@ -4,6 +4,7 @@ type pkgs
 type query = {
   compilers : comp list;
   show_available : comp list;
+  show_failures_only : bool;
 }
 
 val default_query : Server_workdirs.t -> query Lwt.t

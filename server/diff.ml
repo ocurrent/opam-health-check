@@ -12,6 +12,7 @@ type pkgs = (pkg * (comp * state) list) list
 type query = {
   compilers : comp list;
   show_available : comp list;
+  show_failures_only : bool;
 }
 
 let get_files dirname =
@@ -45,6 +46,7 @@ let default_query workdir =
   get_dirs logdir >|= fun compilers ->
   { compilers;
     show_available = compilers;
+    show_failures_only = false;
   }
 
 let pkg_update ~comp v pkgs pkg =
@@ -108,8 +110,15 @@ let get_html query pkgs =
   let show_available = input ~a:[a_input_type `Text; a_name "show-available"; a_value (String.concat ":" query.show_available)] () in
   let compilers_text = [pcdata "Show only [list of compilers separated by ':']:"] in
   let compilers = input ~a:[a_input_type `Text; a_name "compilers"; a_value (String.concat ":" query.compilers)] () in
+  let show_failures_only_text = [pcdata "Show failures only:"] in
+  let show_failures_only = input ~a:(a_input_type `Checkbox::a_name "show-failures-only"::a_value "true"::if query.show_failures_only then [a_checked ()] else []) () in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form [(compilers_text, compilers); (show_available_text, show_available); ([], submit_form)] in
+  let filter_form = gen_table_form [
+    (compilers_text, compilers);
+    (show_available_text, show_available);
+    (show_failures_only_text, show_failures_only);
+    ([], submit_form);
+  ] in
   let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in
   let doc = html head (body [filter_form; br (); doc]) in
   Format.sprintf "%a\n" (pp ()) doc
