@@ -106,8 +106,10 @@ let get_html query pkgs =
   let head = head title [charset; style [style_table; style_col; style_case]] in
   let show_available_text = [pcdata "Show only packages available in [list of compilers separated by ':']:"] in
   let show_available = input ~a:[a_input_type `Text; a_name "show-available"; a_value (String.concat ":" query.show_available)] () in
+  let compilers_text = [pcdata "Show only [list of compilers separated by ':']:"] in
+  let compilers = input ~a:[a_input_type `Text; a_name "compilers"; a_value (String.concat ":" query.compilers)] () in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form [(show_available_text, show_available); ([], submit_form)] in
+  let filter_form = gen_table_form [(compilers_text, compilers); (show_available_text, show_available); ([], submit_form)] in
   let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in
   let doc = html head (body [filter_form; br (); doc]) in
   Format.sprintf "%a\n" (pp ()) doc
