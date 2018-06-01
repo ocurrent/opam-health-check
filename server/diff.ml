@@ -98,7 +98,7 @@ let must_show_package query instances =
 
 let pkg_to_html query (pkg, instances) =
   let open Tyxml.Html in
-  let td = td ~a:[a_class ["results-cell"]] in
+  let td = td ~a:[a_class ["results-cell"; "pkgname"]] in
   if must_show_package query instances then
     Some (tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg instances) query.compilers))
   else
@@ -123,7 +123,8 @@ let get_html query pkgs =
   let style_table = pcdata ".results {border-collapse: collapse; min-width: 100%;}" in
   let style_col = pcdata (".result-col {text-align: center; width: "^col_width^"%;}") in
   let style_case = pcdata ".results-cell {border: 2px solid black;}" in
-  let head = head title [charset; style [style_table; style_col; style_case]] in
+  let style_pkgname = pcdata ".pkgname {white-space: nowrap;}" in
+  let head = head title [charset; style [style_table; style_col; style_case; style_pkgname]] in
   let compilers_text = [pcdata "Show only [list of compilers separated by ':']:"] in
   let compilers = input ~a:[a_input_type `Text; a_name "compilers"; a_value (String.concat ":" query.compilers)] () in
   let show_available_text = [pcdata "Show only packages available in [list of compilers separated by ':']:"] in
