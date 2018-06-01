@@ -75,14 +75,18 @@ let instance_to_html ~pkg instances comp =
   | Some Bad -> td "red" [a ~a:[a_href ("/"^comp^"/bad/"^pkg)] [pcdata "☒"]]
   | None -> td "grey" [pcdata "☐"]
 
-let is_pkg_available instances compilers =
-  List.exists (fun dir -> List.Assoc.mem ~eq:String.equal dir instances) compilers
+let must_show_package query instances =
+  List.exists (fun comp -> List.Assoc.mem ~eq:String.equal comp instances) query.show_available &&
+  if query.show_failures_only then
+    List.exists (function (_, Bad) -> true | (_, Good) -> false) instances
+  else
+    true
 
-let pkg_to_html {compilers; show_available} (pkg, instances) =
+let pkg_to_html query (pkg, instances) =
   let open Tyxml.Html in
   let td = td ~a:[a_class ["results-cell"]] in
-  if is_pkg_available instances show_available then
-    Some (tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg instances) compilers))
+  if must_show_package query instances then
+    Some (tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg instances) query.compilers))
   else
     None
 
