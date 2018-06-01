@@ -19,7 +19,7 @@ let parse_raw_query workdir uri =
   let compilers = String.split_on_char ':' compilers in
   let show_available = option_to_string (Uri.get_query_param uri "show-available") in
   let show_available = String.split_on_char ':' show_available in
-  let show_failures_only = option_to_string (Uri.get_query_param uri "show-available") in
+  let show_failures_only = option_to_string (Uri.get_query_param uri "show-failures-only") in
   let show_failures_only = if String.is_empty show_failures_only then false else bool_of_string show_failures_only in
   let logdir = Server_workdirs.logdir workdir in
   begin match compilers with
