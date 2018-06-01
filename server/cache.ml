@@ -3,10 +3,11 @@ open Lwt.Infix
 module Hashtbl = Hashtbl.Make (struct
     type t = Diff.query
     let hash = Hashtbl.hash
-    let equal {Diff.compilers; show_available; show_failures_only} y =
+    let equal {Diff.compilers; show_available; show_failures_only; show_diff_only} y =
       List.equal Diff.comp_equal compilers y.Diff.compilers &&
       List.equal Diff.comp_equal show_available y.Diff.show_available &&
-      Bool.equal show_failures_only y.Diff.show_failures_only
+      Bool.equal show_failures_only y.Diff.show_failures_only &&
+      Bool.equal show_diff_only y.Diff.show_diff_only
   end)
 
 (* TODO: Also cache pkgs ? *)

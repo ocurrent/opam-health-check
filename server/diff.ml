@@ -12,7 +12,12 @@ type query = {
   compilers : comp list;
   show_available : comp list;
   show_failures_only : bool;
+  show_diff_only : bool;
 }
+
+let state_eq x y = match x, y with
+  | Good, Good | Bad, Bad -> true
+  | Good, Bad | Bad, Good -> false
 
 let get_files dirname =
   Lwt_unix.opendir (Fpath.to_string dirname) >>= fun dir ->
@@ -46,6 +51,7 @@ let default_query workdir =
   { compilers;
     show_available = compilers;
     show_failures_only = false;
+    show_diff_only = false;
   }
 
 let pkg_update ~comp v pkgs pkg =
@@ -76,10 +82,19 @@ let instance_to_html ~pkg instances comp =
 
 let must_show_package query instances =
   List.exists (fun comp -> List.Assoc.mem ~eq:String.equal comp instances) query.show_available &&
-  if query.show_failures_only then
-    List.exists (function (_, Bad) -> true | (_, Good) -> false) instances
-  else
-    true
+  begin
+    if query.show_failures_only then
+      List.exists (function (_, Bad) -> true | (_, Good) -> false) instances
+    else
+      true
+  end &&
+  begin
+    if query.show_diff_only && not (List.is_empty instances) then
+      let state = snd (List.hd instances) in
+      List.exists (fun (_, x) -> not (state_eq state x)) (List.tl instances)
+    else
+      true
+  end
 
 let pkg_to_html query (pkg, instances) =
   let open Tyxml.Html in
@@ -115,11 +130,14 @@ let get_html query pkgs =
   let show_available = input ~a:[a_input_type `Text; a_name "show-available"; a_value (String.concat ":" query.show_available)] () in
   let show_failures_only_text = [pcdata "Show failures only:"] in
   let show_failures_only = input ~a:(a_input_type `Checkbox::a_name "show-failures-only"::a_value "true"::if query.show_failures_only then [a_checked ()] else []) () in
+  let show_diff_only_text = [pcdata "Only show packages that have different build status between each compilers:"] in
+  let show_diff_only = input ~a:(a_input_type `Checkbox::a_name "show-diff-only"::a_value "true"::if query.show_diff_only then [a_checked ()] else []) () in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
   let filter_form = gen_table_form [
     (compilers_text, compilers);
     (show_available_text, show_available);
     (show_failures_only_text, show_failures_only);
+    (show_diff_only_text, show_diff_only);
     ([], submit_form);
   ] in
   let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in

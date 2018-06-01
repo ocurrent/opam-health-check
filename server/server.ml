@@ -20,6 +20,8 @@ let parse_raw_query workdir uri =
   let show_available = String.split_on_char ':' show_available in
   let show_failures_only = option_to_string (Uri.get_query_param uri "show-failures-only") in
   let show_failures_only = if String.is_empty show_failures_only then false else bool_of_string show_failures_only in
+  let show_diff_only = option_to_string (Uri.get_query_param uri "show-diff-only") in
+  let show_diff_only = if String.is_empty show_diff_only then false else bool_of_string show_diff_only in
   let logdir = Server_workdirs.logdir workdir in
   begin match compilers with
   | [] | [""] -> Diff.get_dirs logdir
@@ -33,6 +35,7 @@ let parse_raw_query workdir uri =
     Diff.compilers;
     Diff.show_available;
     Diff.show_failures_only;
+    Diff.show_diff_only;
   }
 
 let filter_path path =
