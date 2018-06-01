@@ -76,7 +76,7 @@ let instance_to_html ~pkg instances comp =
   let open Tyxml.Html in
   let td c = td ~a:[a_class ["result-col"; "results-cell"]; a_style ("background-color: "^c^";")] in
   match List.Assoc.get ~eq:String.equal comp instances with
-  | Some Good -> td "green" [pcdata "☑"]
+  | Some Good -> td "green" [a ~a:[a_href ("/"^comp^"/good/"^pkg)] [pcdata "☑"]]
   | Some Bad -> td "red" [a ~a:[a_href ("/"^comp^"/bad/"^pkg)] [pcdata "☒"]]
   | None -> td "grey" [pcdata "☐"]
 
