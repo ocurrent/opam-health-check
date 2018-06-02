@@ -1,4 +1,4 @@
-FROM ocaml/opam2:debian-unstable-opam
+FROM ocaml/opam2-staging:debian-unstable-opam
 RUN sudo apt-get update
 WORKDIR opam-repository
 RUN git checkout 632bc2eed
