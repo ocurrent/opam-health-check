@@ -22,7 +22,7 @@ let get_pkgs ~stderr ~dockerfile =
   (* TODO: Try by closing the pipe in after *)
   Lwt_process.pread ~stderr:(`FD_copy (Lwt_unix.unix_file_descr stderr)) ("", [|"docker";"run";"--rm";img_name|]) >|= fun pkgs ->
   let pkgs = String.split_on_char '\n' pkgs in
-  (img_name, List.filter (fun pkg -> not (Oca_lib.is_valid_filename pkg)) pkgs)
+  (img_name, List.filter Oca_lib.is_valid_filename pkgs)
 
 let job_tbl = Hashtbl.create 32
 
