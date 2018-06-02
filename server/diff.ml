@@ -98,6 +98,7 @@ let must_show_package query instances =
 
 let pkg_to_html query (pkg, instances) =
   let open Tyxml.Html in
+  let tr = tr ~a:[a_class ["results-row"]] in
   let td = td ~a:[a_class ["results-cell"; "pkgname"]] in
   if must_show_package query instances then
     Some (tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg instances) query.compilers))
@@ -120,11 +121,13 @@ let get_html query pkgs =
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [pcdata comp]) query.compilers in
   let title = title (pcdata "opam-check-all") in
   let charset = meta ~a:[a_charset "utf-8"] () in
-  let style_table = pcdata ".results {border-collapse: collapse; min-width: 100%;}" in
+  let style_table = pcdata ".results {border: 2px solid black; border-collapse: collapse; min-width: 100%;}" in
   let style_col = pcdata (".result-col {text-align: center; width: "^col_width^"%;}") in
-  let style_case = pcdata ".results-cell {border: 2px solid black;}" in
+  let style_case = pcdata ".results-cell {border-left: 2px solid black;}" in
+  let style_row = pcdata ".results-row {border-top: 2px solid black; border-bottom: 2px solid black;}" in
+  let style_row_hover = pcdata ".results-row {border-top-width: 4px; border-bottom-width: 4px;}" in
   let style_pkgname = pcdata ".pkgname {white-space: nowrap;}" in
-  let head = head title [charset; style [style_table; style_col; style_case; style_pkgname]] in
+  let head = head title [charset; style [style_table; style_col; style_case; style_pkgname; style_row; style_row_hover]] in
   let compilers_text = [pcdata "Show only [list of compilers separated by ':']:"] in
   let compilers = input ~a:[a_input_type `Text; a_name "compilers"; a_value (String.concat ":" query.compilers)] () in
   let show_available_text = [pcdata "Show only packages available in [list of compilers separated by ':']:"] in
