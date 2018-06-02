@@ -20,9 +20,12 @@ let get_pkgs ~stderr ~dockerfile =
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   (* TODO: Find out what's wrong with Oca_lib.exec + pipe instead of pread *)
   (* TODO: Try by closing the pipe in after *)
-  Lwt_process.pread ~stderr:(`FD_copy (Lwt_unix.unix_file_descr stderr)) ("", [|"docker";"run";"--rm";img_name|]) >|= fun pkgs ->
+  Lwt_process.pread ~stderr:(`FD_copy (Lwt_unix.unix_file_descr stderr)) ("", [|"docker";"run";"--rm";img_name|]) >>= fun pkgs ->
   let pkgs = String.split_on_char '\n' pkgs in
-  (img_name, List.filter Oca_lib.is_valid_filename pkgs)
+  let pkgs = List.filter Oca_lib.is_valid_filename pkgs in
+  let nelts = string_of_int (List.length pkgs) in
+  Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
+  (img_name, pkgs)
 
 let job_tbl = Hashtbl.create 32
 
