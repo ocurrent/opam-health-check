@@ -5,26 +5,34 @@ let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 let docker_build ~stderr ~img_name dockerfile =
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
-  (* TODO: Is this correct with a pipe ? What about writing a huge string ? *)
+  Lwt_unix.set_close_on_exec fd;
+  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr ["docker";"build";"-t";img_name;"-"] in
   Oca_lib.write_line_unix fd dockerfile >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
-  Oca_lib.exec ~stdin ~stdout:stderr ~stderr ["docker";"build";"-t";img_name;"-"]
+  proc
 
 let docker_run ~stdout ~stderr img cmd =
   Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
+
+let rec read_lines fd =
+  Lwt_io.read_line_opt fd >>= function
+  | Some line -> read_lines fd >|= List.cons line
+  | None -> Lwt.return_nil
 
 let get_pkgs ~stderr ~dockerfile =
   let md5 = Digest.to_hex (Digest.string dockerfile) in
   let img_name = "opam-check-all-" ^ md5 in
   docker_build ~stderr ~img_name dockerfile >>= fun () ->
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
-  (* TODO: Find out what's wrong with Oca_lib.exec + pipe instead of pread *)
-  (* TODO: Try by closing the pipe in after *)
-  Lwt_process.pread ~stderr:(`FD_copy (Lwt_unix.unix_file_descr stderr)) ("", [|"docker";"run";"--rm";img_name|]) >>= fun pkgs ->
-  let pkgs = String.split_on_char '\n' pkgs in
+  let stdout, fd = Lwt_unix.pipe () in
+  let proc = Oca_lib.exec ~stdin:`Close ~stderr ~stdout ["docker";"run";"--rm";img_name] in
+  Lwt_unix.close stdout >>= fun () ->
+  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
+  Lwt_unix.close fd >>= fun () ->
   let pkgs = List.filter Oca_lib.is_valid_filename pkgs in
   let nelts = string_of_int (List.length pkgs) in
-  Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
+  Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >>= fun () ->
+  proc >|= fun () ->
   (img_name, pkgs)
 
 let job_tbl = Hashtbl.create 32
