@@ -13,6 +13,7 @@ type query = {
   show_available : comp list;
   show_failures_only : bool;
   show_diff_only : bool;
+  show_latest_only : bool;
 }
 
 let state_eq x y = match x, y with
@@ -52,6 +53,7 @@ let default_query workdir =
     show_available = compilers;
     show_failures_only = false;
     show_diff_only = false;
+    show_latest_only = false;
   }
 
 let pkg_update ~comp v pkgs pkg =
@@ -80,7 +82,12 @@ let instance_to_html ~pkg instances comp =
   | Some Bad -> td "red" [a ~a:[a_href ("/"^comp^"/bad/"^pkg)] [pcdata "☒"]]
   | None -> td "grey" [pcdata "☐"]
 
-let must_show_package query instances =
+let get_pkg_name pkg =
+  match String.rindex_opt pkg '.' with
+  | Some idx -> String.sub pkg idx (String.length pkg - idx)
+  | None -> pkg (* TODO: Should raise an exception or a warning somewhere *)
+
+let must_show_package query ~last ~pkg instances =
   List.exists (fun comp -> List.Assoc.mem ~eq:String.equal comp instances) query.show_available &&
   begin
     if query.show_failures_only then
@@ -94,16 +101,25 @@ let must_show_package query instances =
       List.exists (fun (_, x) -> not (state_eq state x)) (List.tl instances)
     else
       true
+  end &&
+  begin
+    if query.show_latest_only then
+      match last with
+      | None -> true
+      | Some last when String.equal (get_pkg_name pkg) (get_pkg_name last) -> false
+      | Some _ -> true
+    else
+      true
   end
 
-let pkg_to_html query (pkg, instances) =
+let pkg_to_html query (acc, last) (pkg, instances) =
   let open Tyxml.Html in
   let tr = tr ~a:[a_class ["results-row"]] in
   let td = td ~a:[a_class ["results-cell"; "pkgname"]] in
-  if must_show_package query instances then
-    Some (tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg instances) query.compilers))
+  if must_show_package query ~last ~pkg instances then
+    ((tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg instances) query.compilers)) :: acc, Some pkg)
   else
-    None
+    (acc, Some pkg)
 
 let gen_table_form l =
   let open Tyxml.Html in
@@ -116,7 +132,7 @@ let get_html query pkgs =
   (* TODO: Handle cases where there is no compilers and the following
      line will raise an exception *)
   let col_width = string_of_int (100 / List.length query.compilers) in
-  let pkgs = List.filter_map (pkg_to_html query) pkgs in
+  let pkgs, _ = List.fold_left (pkg_to_html query) ([], None) (List.rev pkgs) in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [pcdata comp]) query.compilers in
   let title = title (pcdata "opam-check-all") in
@@ -136,12 +152,15 @@ let get_html query pkgs =
   let show_failures_only = input ~a:(a_input_type `Checkbox::a_name "show-failures-only"::a_value "true"::if query.show_failures_only then [a_checked ()] else []) () in
   let show_diff_only_text = [pcdata "Only show packages that have different build status between each compilers:"] in
   let show_diff_only = input ~a:(a_input_type `Checkbox::a_name "show-diff-only"::a_value "true"::if query.show_diff_only then [a_checked ()] else []) () in
+  let show_latest_only_text = [pcdata "Only show the latest version of each packages:"] in
+  let show_latest_only = input ~a:(a_input_type `Checkbox::a_name "show-latest-only"::a_value "true"::if query.show_latest_only then [a_checked ()] else []) () in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
   let filter_form = gen_table_form [
     (compilers_text, compilers);
     (show_available_text, show_available);
     (show_failures_only_text, show_failures_only);
     (show_diff_only_text, show_diff_only);
+    (show_latest_only_text, show_latest_only);
     ([], submit_form);
   ] in
   let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in

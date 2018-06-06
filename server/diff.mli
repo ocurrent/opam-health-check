@@ -6,6 +6,7 @@ type query = {
   show_available : comp list;
   show_failures_only : bool;
   show_diff_only : bool;
+  show_latest_only : bool;
 }
 
 val default_query : Server_workdirs.t -> query Lwt.t
