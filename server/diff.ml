@@ -84,7 +84,7 @@ let instance_to_html ~pkg instances comp =
 
 let get_pkg_name pkg =
   match String.rindex_opt pkg '.' with
-  | Some idx -> String.sub pkg idx (String.length pkg - idx)
+  | Some idx -> String.sub pkg 0 idx
   | None -> pkg (* TODO: Should raise an exception or a warning somewhere *)
 
 let must_show_package query ~last ~pkg instances =
@@ -106,8 +106,7 @@ let must_show_package query ~last ~pkg instances =
     if query.show_latest_only then
       match last with
       | None -> true
-      | Some last when String.equal (get_pkg_name pkg) (get_pkg_name last) -> false
-      | Some _ -> true
+      | Some last -> not (String.equal (get_pkg_name pkg) (get_pkg_name last))
     else
       true
   end
