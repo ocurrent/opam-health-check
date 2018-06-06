@@ -83,7 +83,7 @@ let instance_to_html ~pkg instances comp =
   | None -> td "grey" [pcdata "☐"]
 
 let get_pkg_name pkg =
-  match String.rindex_opt pkg '.' with
+  match String.index_opt pkg '.' with
   | Some idx -> String.sub pkg 0 idx
   | None -> pkg (* TODO: Should raise an exception or a warning somewhere *)
 
