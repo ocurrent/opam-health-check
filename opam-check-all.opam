@@ -17,4 +17,6 @@ depends: [
   "nocrypto"
   "cmdliner"
   "fpath"
+  "re" {>= "1.7.2"}
+  "git-unix" {>= "2.0"}
 ]

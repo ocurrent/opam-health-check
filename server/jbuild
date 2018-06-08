@@ -11,6 +11,8 @@
     opam-core
     nocrypto
     cmdliner
+    git-unix
+    re
     oca_lib))))
 
 (rule
