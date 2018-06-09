@@ -35,6 +35,17 @@ let get_pkgs ~stderr ~dockerfile =
   proc >|= fun () ->
   (img_name, pkgs)
 
+let is_partial_failure logfile =
+  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
+    let rec lookup () =
+      Lwt_io.read_line_opt ic >>= function
+      | Some "+- The following actions were aborted" -> Lwt.return_true
+      | Some _ -> lookup ()
+      | None -> Lwt.return_false
+    in
+    lookup ()
+  end
+
 let job_tbl = Hashtbl.create 32
 
 let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
@@ -61,7 +72,11 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
               docker_run ~stdout ~stderr:stdout img_name ["opam";"depext";"-ivy";pkg] >>= fun () ->
               Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch workdir))
             end begin function
-            | Oca_lib.Process_failure -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
+            | Oca_lib.Process_failure ->
+                is_partial_failure logfile >>= begin function
+                | true -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
+                | false -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
+                end
             | e -> Lwt.fail e
             end
           end begin fun () ->

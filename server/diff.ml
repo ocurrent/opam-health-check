@@ -2,7 +2,7 @@ open Lwt.Infix
 
 module Pkgs = Map.Make (String)
 
-type state = Good | Bad
+type state = Good | Partial | Bad
 
 type comp = string
 type pkg = string
@@ -18,8 +18,8 @@ type query = {
 }
 
 let state_eq x y = match x, y with
-  | Good, Good | Bad, Bad -> true
-  | Good, Bad | Bad, Good -> false
+  | Good, Good | Partial, Partial | Bad, Bad -> true
+  | Good, _ | Partial, _ | Bad, _ -> false
 
 let get_files dirname =
   Lwt_unix.opendir (Fpath.to_string dirname) >>= fun dir ->
@@ -67,8 +67,10 @@ let pkg_update ~comp v pkgs pkg =
 
 let get_pkgs_from_dir workdir pkgs comp =
   get_files (Server_workdirs.gooddir ~switch:comp workdir) >>= fun good_files ->
+  get_files (Server_workdirs.partialdir ~switch:comp workdir) >>= fun partial_files ->
   get_files (Server_workdirs.baddir ~switch:comp workdir) >|= fun bad_files ->
   let pkgs = List.fold_left (pkg_update ~comp Good) pkgs good_files in
+  let pkgs = List.fold_left (pkg_update ~comp Partial) pkgs partial_files in
   List.fold_left (pkg_update ~comp Bad) pkgs bad_files
 
 let get_pkgs workdir compilers =
@@ -81,6 +83,7 @@ let instance_to_html ~pkg instances comp =
   let td c = td ~a:[a_class ["result-col"; "results-cell"]; a_style ("background-color: "^c^";")] in
   match List.Assoc.get ~eq:String.equal comp instances with
   | Some Good -> td "green" [a ~a:[a_href ("/"^comp^"/good/"^pkg)] [pcdata "☑"]]
+  | Some Partial -> td "orange" [a ~a:[a_href ("/"^comp^"/partial/"^pkg)] [pcdata "☒"]]
   | Some Bad -> td "red" [a ~a:[a_href ("/"^comp^"/bad/"^pkg)] [pcdata "☒"]]
   | None -> td "grey" [pcdata "☐"]
 
@@ -93,7 +96,7 @@ let must_show_package query ~get_pkginfo ~last ~pkg instances =
   List.exists (fun comp -> List.Assoc.mem ~eq:String.equal comp instances) query.show_available &&
   begin
     if query.show_failures_only then
-      List.exists (function (_, Bad) -> true | (_, Good) -> false) instances
+      List.exists (function (_, (Bad | Partial)) -> true | (_, Good) -> false) instances
     else
       true
   end &&

@@ -14,12 +14,14 @@ val ilogfile : switch:string -> t -> Fpath.t
 
 val switchlogdir : switch:string -> t -> Fpath.t
 val gooddir : switch:string -> t -> Fpath.t
+val partialdir : switch:string -> t -> Fpath.t
 val baddir : switch:string -> t -> Fpath.t
 
 val tmpswitchlogdir : switch:string -> t -> Fpath.t
 val tmplogfile : pkg:string -> switch:string -> t -> Fpath.t
 
 val tmpgoodlog : pkg:string -> switch:string -> t -> Fpath.t
+val tmppartiallog : pkg:string -> switch:string -> t -> Fpath.t
 val tmpbadlog : pkg:string -> switch:string -> t -> Fpath.t
 
 val configfile : t -> Fpath.t

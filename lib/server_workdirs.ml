@@ -23,14 +23,17 @@ let ilogfile ~switch workdir = switchilogdir ~switch workdir/Printf.sprintf "%.f
 
 let switchlogdir ~switch workdir = logdir workdir/switch
 let gooddir ~switch workdir = switchlogdir ~switch workdir/"good"
+let partialdir ~switch workdir = switchlogdir ~switch workdir/"partial"
 let baddir ~switch workdir = switchlogdir ~switch workdir/"bad"
 
 let tmpswitchlogdir ~switch workdir = tmplogdir workdir/switch
 let tmpgooddir ~switch workdir = tmpswitchlogdir ~switch workdir/"good"
+let tmppartialdir ~switch workdir = tmpswitchlogdir ~switch workdir/"partial"
 let tmpbaddir ~switch workdir = tmpswitchlogdir ~switch workdir/"bad"
 let tmplogfile ~pkg ~switch workdir = tmpswitchlogdir ~switch workdir/pkg
 
 let tmpgoodlog ~pkg ~switch workdir = tmpgooddir ~switch workdir/pkg
+let tmppartiallog ~pkg ~switch workdir = tmppartialdir ~switch workdir/pkg
 let tmpbadlog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
@@ -45,8 +48,11 @@ let init_base workdir =
   Oca_lib.mkdir_p (ilogdir workdir)
 
 let init_base_job ~switch ~stderr workdir =
+  (* TODO: Do we really need to create those ? *)
   Oca_lib.mkdir_p (gooddir ~switch workdir) >>= fun () ->
+  Oca_lib.mkdir_p (partialdir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (baddir ~switch workdir) >>= fun () ->
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string (tmpswitchlogdir ~switch workdir)] >>= fun () ->
   Oca_lib.mkdir_p (tmpgooddir ~switch workdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmppartialdir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (tmpbaddir ~switch workdir)
