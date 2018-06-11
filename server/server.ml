@@ -25,7 +25,7 @@ let parse_raw_query workdir uri =
   let show_latest_only = option_to_string (Uri.get_query_param uri "show-latest-only") in
   let show_latest_only = if String.is_empty show_latest_only then false else bool_of_string show_latest_only in
   let maintainers = option_to_string (Uri.get_query_param uri "maintainers") in
-  let maintainers = (maintainers, Re.Posix.compile_pat maintainers) in
+  let maintainers = (maintainers, Re.Posix.compile_pat ~opts:[`ICase] maintainers) in
   let logdir = Server_workdirs.logdir workdir in
   begin match compilers with
   | [] | [""] -> Diff.get_dirs logdir
