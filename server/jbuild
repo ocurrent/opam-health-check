@@ -9,7 +9,7 @@
     cohttp-lwt-unix
     containers
     opam-core
-    nocrypto
+    nocrypto.lwt
     cmdliner
     git-unix
     re
