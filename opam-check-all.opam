@@ -19,4 +19,6 @@ depends: [
   "fpath"
   "re" {>= "1.7.2"}
   "git-unix" {>= "2.0"}
+  "yaml"
+  "ocaml-xdg-basedir"
 ]
