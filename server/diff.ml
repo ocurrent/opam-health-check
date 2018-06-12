@@ -139,9 +139,7 @@ let gen_table_form l =
 
 let get_html ~get_pkginfo query pkgs =
   let open Tyxml.Html in
-  (* TODO: Handle cases where there is no compilers and the following
-     line will raise an exception *)
-  let col_width = string_of_int (100 / List.length query.compilers) in
+  let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
   let pkgs, _ = List.fold_left (pkg_to_html ~get_pkginfo query) ([], None) (List.rev pkgs) in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [pcdata comp]) query.compilers in
