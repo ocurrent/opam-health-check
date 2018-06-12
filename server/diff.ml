@@ -131,11 +131,21 @@ let pkg_to_html ~get_pkginfo query (acc, last) (pkg, instances) =
   else
     (acc, Some pkg)
 
+let result_legend =
+  let open Tyxml.Html in
+  let legend = legend [b [pcdata "Legend:"]] in
+  fieldset ~legend [table ~a:[a_style "white-space: nowrap;"] [
+    tr [td ~a:[a_style "background-color: green;"] [pcdata "☑"]; td [pcdata "Package successfully built"]];
+    tr [td ~a:[a_style "background-color: orange;"] [pcdata "☒"]; td [pcdata "One of the dependencies failed to build"]];
+    tr [td ~a:[a_style "background-color: red;"] [pcdata "☒"]; td [pcdata "Package failed to build"]];
+    tr [td ~a:[a_style "background-color: grey;"] [pcdata "☐"]; td [pcdata "Package couldn't be installed"]];
+  ]]
+
 let gen_table_form l =
   let open Tyxml.Html in
   let aux (txt, elt) = tr [td txt; td [elt]] in
   let legend = legend [b [pcdata "Filter form:"]] in
-  form [fieldset ~legend [table (List.map aux l)]]
+  form [fieldset ~legend [table [tr [td ~a:[a_style "width: 100%;"] [table (List.map aux l)]; td [result_legend]]]]]
 
 let get_html ~get_pkginfo query pkgs =
   let open Tyxml.Html in
