@@ -24,7 +24,9 @@ let fill_pkg_metainfo ~add = function
   | Sexp.Atom _ -> failwith "Malformed package description"
 
 let fill_metainfo ~add = function
-  | Sexp.List l -> List.iter (fill_pkg_metainfo ~add) l
+  | Sexp.(List [List [Atom "version"; Atom "2"]; List [Atom "packages"; List l]]) ->
+      List.iter (fill_pkg_metainfo ~add) l
+  | Sexp.List _ -> failwith "Version unrecognized"
   | Sexp.Atom _ -> failwith "Malformed file"
 
 let skip_store_error = function
