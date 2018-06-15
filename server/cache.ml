@@ -13,13 +13,13 @@ module Html_cache = Hashtbl.Make (struct
   end)
 module Pkginfo_cache = Hashtbl.Make (String)
 
-(* TODO: Also cache pkgs ? *)
-let raw_pkginfo = ref (Metainfo.fetch_raw_metainfo ())
+let pkgsinfo = ref (Metainfo.get_pkgsinfo ())
 let html_tbl = Html_cache.create 32
+(* TODO: cache pkgs. i.e. use this *)
 let pkginfo_tbl = Pkginfo_cache.create 10_000
 
 let clear () =
-  raw_pkginfo := Metainfo.fetch_raw_metainfo ();
+  pkgsinfo := Metainfo.get_pkgsinfo ();
   Pkginfo_cache.clear pkginfo_tbl;
   Html_cache.clear html_tbl
 
@@ -27,15 +27,15 @@ let default_metainfo = {
   Metainfo.maintainers = [];
 }
 
-let get_pkginfo pkg =
-  Option.get_or ~default:default_metainfo (Pkginfo_cache.find_opt pkginfo_tbl pkg)
+let get_pkginfo pkgsinfo pkg =
+  match List.find_opt (fun pkg' -> String.equal pkg'.Obi.Index.name pkg) pkgsinfo with
+  | Some {Obi.Index.maintainers; _} -> {Metainfo.maintainers}
+  | None -> default_metainfo
 
 let get_html workdir query =
-  !raw_pkginfo >>= fun raw_pkginfo ->
-  if Pkginfo_cache.length pkginfo_tbl = 0 then begin
-    Metainfo.fill_metainfo ~add:(Pkginfo_cache.add pkginfo_tbl) raw_pkginfo;
-  end;
+  !pkgsinfo >>= fun pkgsinfo ->
   Diff.get_pkgs workdir query.Diff.compilers >>= fun pkgs ->
+  let get_pkginfo = get_pkginfo pkgsinfo in
   let html = Diff.get_html ~get_pkginfo query pkgs in
   Html_cache.add html_tbl query html;
   Lwt.return html

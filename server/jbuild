@@ -13,6 +13,7 @@
     cmdliner
     git-unix
     re
+    obi
     oca_lib))))
 
 (rule

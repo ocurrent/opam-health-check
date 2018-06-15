@@ -1,33 +1,11 @@
 open Lwt.Infix
 
-module Sexp = Sexplib.Sexp
-module Store = Git.Mem.Store(Digestif.SHA1)
-module Sync = Git_unix.Sync(Store)
-
 type t = {
   maintainers : string list;
 }
 
-let extract_maintainer = function
-  | Sexp.Atom x -> x
-  | Sexp.List _ -> failwith "Malformed maintainers field"
-
-let get_maintainers acc = function
-  | Sexp.(List [Atom "maintainers"; List maintainers]) -> List.map extract_maintainer maintainers @ acc
-  | _ -> acc
-
-let fill_pkg_metainfo ~add = function
-  | Sexp.(List (List [Atom "name"; Atom name] :: metainfo)) ->
-      let maintainers = List.fold_left get_maintainers [] metainfo in
-      add name {maintainers}
-  | Sexp.List _ -> failwith "Empty package description"
-  | Sexp.Atom _ -> failwith "Malformed package description"
-
-let fill_metainfo ~add = function
-  | Sexp.(List [List [Atom "version"; Atom "2"]; List [Atom "packages"; List l]]) ->
-      List.iter (fill_pkg_metainfo ~add) l
-  | Sexp.List _ -> failwith "Version unrecognized"
-  | Sexp.Atom _ -> failwith "Malformed file"
+module Store = Git.Mem.Store(Digestif.SHA1)
+module Sync = Git_unix.Sync(Store)
 
 let skip_store_error = function
   | Ok x -> Lwt.return x
@@ -37,7 +15,7 @@ let skip_sync_error = function
   | Ok x -> Lwt.return x
   | Error err -> Lwt.fail_with (Format.sprintf "Sync error %a" Sync.pp_error err)
 
-let fetch_raw_metainfo () =
+let get_pkgsinfo () =
   Store.v () >>= skip_store_error >>= fun store ->
   let reference = Git.Reference.of_string "refs/heads/index" in
   Sync.clone_ext store ~reference (Uri.of_string "git://github.com/avsm/obi-logs.git") >>= skip_sync_error >>= fun repo ->
@@ -53,7 +31,11 @@ let fetch_raw_metainfo () =
       | None, Some _ -> Lwt.return_none
       in
       Store.fold store aux ~path:Fpath.(v ".") None (Store.Value.Commit.tree commit) >>= begin function
-      | Some (Store.Value.Blob blob) -> Lwt.return (Sexp.of_string (Store.Value.Blob.to_string blob))
+      | Some (Store.Value.Blob blob) ->
+          let {Obi.Index.version; packages} = Obi.Index.t_of_sexp (Sexplib.Sexp.of_string (Store.Value.Blob.to_string blob)) in
+          if version <> Obi.Index.current_version then
+            failwith "Version missmatch. Please recompile";
+          Lwt.return packages
       | Some _ -> Lwt.fail_with "Something when wrong with the metadata repository"
       | None -> Lwt.fail_with "Metadata file not found"
       end
