@@ -22,12 +22,19 @@ let clear () =
   Pkginfo_cache.clear pkginfo_tbl;
   Html_cache.clear html_tbl
 
+(* TODO: Deduplicate with Diff.get_pkg_name *)
+let get_pkg_name pkg =
+  match String.index_opt pkg '.' with
+  | Some idx -> String.sub pkg 0 idx
+  | None -> pkg (* TODO: Should raise an exception or a warning somewhere *)
+
 let update_pkg pkgsinfo pkg f =
   let info =
     match Pkginfo_cache.find_opt pkginfo_tbl pkg with
     | Some info -> {info with Diff.instances = f info.Diff.instances}
     | None ->
         let instances = f [] in
+        let pkg = get_pkg_name pkg in
         begin match List.find_opt (fun pkg' -> String.equal pkg'.Obi.Index.name pkg) pkgsinfo with
         | Some pkginfo -> {Diff.maintainers = pkginfo.Obi.Index.maintainers; instances}
         | None -> {Diff.maintainers = []; instances}
