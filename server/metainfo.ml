@@ -1,9 +1,5 @@
 open Lwt.Infix
 
-type t = {
-  maintainers : string list;
-}
-
 module Store = Git.Mem.Store(Digestif.SHA1)
 module Sync = Git_unix.Sync(Store)
 

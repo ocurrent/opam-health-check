@@ -1,5 +1,10 @@
 type comp
-type pkgs
+type state
+
+type info = {
+  maintainers : string list;
+  instances : (comp * state) list;
+}
 
 type query = {
   compilers : comp list;
@@ -13,8 +18,8 @@ type query = {
 val default_query : Server_workdirs.t -> query Lwt.t
 
 val get_dirs : Fpath.t -> comp list Lwt.t
-val get_pkgs : Server_workdirs.t -> comp list -> pkgs Lwt.t
-val get_html : get_pkginfo:(string -> Metainfo.t) -> query -> pkgs -> string
+val fill_pkgs : update:(string -> ((comp * state) list -> (comp * state) list) -> unit) -> Server_workdirs.t -> unit Lwt.t
+val get_html : query -> (string * info) list -> string
 
 val comp_from_string : string -> comp
 val comp_equal : comp -> comp -> bool

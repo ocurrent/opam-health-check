@@ -1,12 +1,12 @@
 open Lwt.Infix
 
-module Pkgs = Map.Make (String)
-
 type state = Good | Partial | Bad
-
 type comp = string
-type pkg = string
-type pkgs = (pkg * (comp * state) list) list
+
+type info = {
+  maintainers : string list;
+  instances : (comp * state) list;
+}
 
 type query = {
   compilers : comp list;
@@ -58,25 +58,21 @@ let default_query workdir =
     maintainers = ("", Re.Posix.compile_pat "");
   }
 
-let pkg_update ~comp v pkgs pkg =
-  let aux = function
-    | None -> Some [(comp, v)]
-    | Some l -> Some ((comp, v) :: l)
-  in
-  Pkgs.update pkg aux pkgs
+let pkg_update ~comp ~update v pkg =
+  let aux l = (comp, v) :: l in
+  update pkg aux
 
-let get_pkgs_from_dir workdir pkgs comp =
+let fill_pkgs_from_dir workdir ~update comp =
   get_files (Server_workdirs.gooddir ~switch:comp workdir) >>= fun good_files ->
   get_files (Server_workdirs.partialdir ~switch:comp workdir) >>= fun partial_files ->
   get_files (Server_workdirs.baddir ~switch:comp workdir) >|= fun bad_files ->
-  let pkgs = List.fold_left (pkg_update ~comp Good) pkgs good_files in
-  let pkgs = List.fold_left (pkg_update ~comp Partial) pkgs partial_files in
-  List.fold_left (pkg_update ~comp Bad) pkgs bad_files
+  List.iter (pkg_update ~comp ~update Good) good_files;
+  List.iter (pkg_update ~comp ~update Partial) partial_files;
+  List.iter (pkg_update ~comp ~update Bad) bad_files
 
-let get_pkgs workdir compilers =
-  Lwt_list.fold_left_s (get_pkgs_from_dir workdir) Pkgs.empty compilers >|= fun pkgs ->
-  let pkgs = Pkgs.bindings pkgs in
-  List.sort (fun (x, _) (y, _) -> OpamVersionCompare.compare x y) pkgs
+let fill_pkgs ~update workdir =
+  get_dirs (Server_workdirs.logdir workdir) >>= fun compilers ->
+  Lwt_list.iter_s (fill_pkgs_from_dir workdir ~update) compilers
 
 let instance_to_html ~pkg instances comp =
   let open Tyxml.Html in
@@ -92,7 +88,7 @@ let get_pkg_name pkg =
   | Some idx -> String.sub pkg 0 idx
   | None -> pkg (* TODO: Should raise an exception or a warning somewhere *)
 
-let must_show_package query ~get_pkginfo ~last ~pkg instances =
+let must_show_package query ~last ~pkg {maintainers; instances} =
   List.exists (fun comp -> List.Assoc.mem ~eq:String.equal comp instances) query.show_available &&
   begin
     if query.show_failures_only then
@@ -117,17 +113,17 @@ let must_show_package query ~get_pkginfo ~last ~pkg instances =
   end &&
   begin
     if not (String.is_empty (fst query.maintainers)) then
-      List.exists (Re.execp (snd query.maintainers)) (get_pkginfo (get_pkg_name pkg)).Metainfo.maintainers
+      List.exists (Re.execp (snd query.maintainers)) maintainers
     else
       true
   end
 
-let pkg_to_html ~get_pkginfo query (acc, last) (pkg, instances) =
+let pkg_to_html query (acc, last) (pkg, info) =
   let open Tyxml.Html in
   let tr = tr ~a:[a_class ["results-row"]] in
   let td = td ~a:[a_class ["results-cell"; "pkgname"]] in
-  if must_show_package query ~get_pkginfo ~last ~pkg instances then
-    ((tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg instances) query.compilers)) :: acc, Some pkg)
+  if must_show_package query ~last ~pkg info then
+    ((tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg info.instances) query.compilers)) :: acc, Some pkg)
   else
     (acc, Some pkg)
 
@@ -147,10 +143,10 @@ let gen_table_form l =
   let legend = legend [b [pcdata "Filter form:"]] in
   form [fieldset ~legend [table [tr [td ~a:[a_style "width: 100%;"] [table (List.map aux l)]; td [result_legend]]]]]
 
-let get_html ~get_pkginfo query pkgs =
+let get_html query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
-  let pkgs, _ = List.fold_left (pkg_to_html ~get_pkginfo query) ([], None) (List.rev pkgs) in
+  let pkgs, _ = List.fold_left (pkg_to_html query) ([], None) (List.rev pkgs) in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [pcdata comp]) query.compilers in
   let title = title (pcdata "opam-check-all") in
