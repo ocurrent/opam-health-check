@@ -13,14 +13,9 @@ module Html_cache = Hashtbl.Make (struct
   end)
 module Pkginfo_cache = Hashtbl.Make (String)
 
-let pkgsinfo = ref (Metainfo.get_pkgsinfo ())
+let pkgsinfo = ref Lwt.return_nil
 let html_tbl = Html_cache.create 32
-let pkginfo_tbl = Pkginfo_cache.create 10_000
-
-let clear () =
-  pkgsinfo := Metainfo.get_pkgsinfo ();
-  Pkginfo_cache.clear pkginfo_tbl;
-  Html_cache.clear html_tbl
+let pkgs = ref Lwt.return_nil
 
 (* TODO: Deduplicate with Diff.get_pkg_name *)
 let get_pkg_name pkg =
@@ -28,7 +23,7 @@ let get_pkg_name pkg =
   | Some idx -> String.sub pkg 0 idx
   | None -> pkg (* TODO: Should raise an exception or a warning somewhere *)
 
-let update_pkg pkgsinfo pkg f =
+let update_pkg pkginfo_tbl pkgsinfo pkg f =
   let info =
     match Pkginfo_cache.find_opt pkginfo_tbl pkg with
     | Some info -> {info with Diff.instances = f info.Diff.instances}
@@ -42,23 +37,26 @@ let update_pkg pkgsinfo pkg f =
   in
   Pkginfo_cache.replace pkginfo_tbl pkg info
 
-let get_html workdir query =
+let update_pkgs workdir =
   !pkgsinfo >>= fun pkgsinfo ->
-  begin
-    if Pkginfo_cache.length pkginfo_tbl = 0 then
-      let update = update_pkg pkgsinfo in
-      Diff.fill_pkgs ~update workdir
-    else
-      Lwt.return_unit
-  end >>= fun () ->
+  let pkginfo_tbl = Pkginfo_cache.create 10_000 in
+  let update = update_pkg pkginfo_tbl pkgsinfo in
+  Diff.fill_pkgs ~update workdir >|= fun () ->
   let pkgs = Pkginfo_cache.fold (fun pkg info acc -> (pkg, info)::acc) pkginfo_tbl [] in
-  let pkgs = List.sort (fun (x, _) (y, _) -> OpamVersionCompare.compare x y) pkgs in
-  (* TODO: Cache pkgs ? *)
+  List.sort (fun (x, _) (y, _) -> OpamVersionCompare.compare x y) pkgs
+
+let clear_and_init workdir =
+  pkgsinfo := Metainfo.get_pkgsinfo ();
+  pkgs := update_pkgs workdir;
+  Html_cache.clear html_tbl
+
+let get_html query =
+  !pkgs >>= fun pkgs ->
   let html = Diff.get_html query pkgs in
   Html_cache.add html_tbl query html;
   Lwt.return html
 
-let get_html workdir query =
+let get_html query =
   match Html_cache.find_opt html_tbl query with
   | Some html -> Lwt.return html
-  | None -> get_html workdir query
+  | None -> get_html query

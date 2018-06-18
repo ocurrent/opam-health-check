@@ -57,7 +57,7 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
         (* TODO: replace by Oca_lib.rm_rf *)
         Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
         Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
-        Cache.clear ();
+        Cache.clear_and_init workdir;
         Hashtbl.remove job_tbl switch;
         Lwt_unix.close stderr
       end

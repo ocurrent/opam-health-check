@@ -60,7 +60,7 @@ let callback workdir _conn req _body =
   match path_from_uri uri with
   | [] ->
       parse_raw_query workdir uri >>= fun query ->
-      Cache.get_html workdir query >>= fun html ->
+      Cache.get_html query >>= fun html ->
       serv_string ~content_type:"text/html" html
   | path ->
       serv_file ~content_type:"text/plain" workdir (String.concat Fpath.dir_sep path)
@@ -82,6 +82,7 @@ let main workdir =
     let callback = callback workdir in
     let admin_callback = Admin.callback workdir in
     Admin.create_admin_key workdir >>= fun () ->
+    Cache.clear_and_init workdir;
     Lwt.join [
       tcp_server port callback;
       tcp_server admin_port admin_callback;
