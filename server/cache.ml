@@ -1,5 +1,7 @@
 open Lwt.Infix
 
+module Pkg = Backend.Pkg
+
 module Html_cache = Hashtbl.Make (struct
     type t = Diff.query
     let hash = Hashtbl.hash
@@ -11,17 +13,15 @@ module Html_cache = Hashtbl.Make (struct
       Bool.equal show_latest_only y.Diff.show_latest_only &&
       String.equal (fst maintainers) (fst y.Diff.maintainers)
   end)
-module Pkginfo_cache = Hashtbl.Make (String)
+module Pkginfo_cache = Hashtbl.Make (struct
+    type t = Pkg.pkg
+    let hash = Hashtbl.hash
+    let equal = Pkg.pkg_equal
+  end)
 
 let pkgsinfo = ref Lwt.return_nil
 let html_tbl = Html_cache.create 32
 let pkgs = ref Lwt.return_nil
-
-(* TODO: Deduplicate with Diff.get_pkg_name *)
-let get_pkg_name pkg =
-  match String.index_opt pkg '.' with
-  | Some idx -> String.sub pkg 0 idx
-  | None -> pkg (* TODO: Should raise an exception or a warning somewhere *)
 
 let update_pkg pkginfo_tbl pkgsinfo pkg f =
   let info =
@@ -29,7 +29,7 @@ let update_pkg pkginfo_tbl pkgsinfo pkg f =
     | Some info -> {info with Pkg.instances = f info.Pkg.instances}
     | None ->
         let instances = f [] in
-        let pkg = get_pkg_name pkg in
+        let pkg = Pkg.pkg_name_to_string pkg in
         begin match List.find_opt (fun pkg' -> String.equal pkg'.Obi.Index.name pkg) pkgsinfo with
         | Some pkginfo -> {Pkg.maintainers = pkginfo.Obi.Index.maintainers; instances}
         | None -> {Pkg.maintainers = []; instances}
@@ -37,17 +37,17 @@ let update_pkg pkginfo_tbl pkgsinfo pkg f =
   in
   Pkginfo_cache.replace pkginfo_tbl pkg info
 
-let update_pkgs workdir =
+let update_pkgs backend =
   !pkgsinfo >>= fun pkgsinfo ->
   let pkginfo_tbl = Pkginfo_cache.create 10_000 in
   let update = update_pkg pkginfo_tbl pkgsinfo in
-  Pkg.fill_pkgs ~update workdir >|= fun () ->
+  Pkg.fill_pkgs ~update backend >|= fun () ->
   let pkgs = Pkginfo_cache.fold (fun pkg info acc -> (pkg, info)::acc) pkginfo_tbl [] in
-  List.sort (fun (x, _) (y, _) -> OpamVersionCompare.compare x y) pkgs
+  List.sort (fun (x, _) (y, _) -> Pkg.pkg_compare x y) pkgs
 
-let clear_and_init workdir =
+let clear_and_init backend =
   pkgsinfo := Metainfo.get_pkgsinfo ();
-  pkgs := update_pkgs workdir;
+  pkgs := update_pkgs backend;
   Html_cache.clear html_tbl
 
 let get_html query =

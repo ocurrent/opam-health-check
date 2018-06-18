@@ -1,3 +1,3 @@
-val clear_and_init : Server_workdirs.t -> unit
+val clear_and_init : Backend.t -> unit
 
 val get_html : Diff.query -> string Lwt.t

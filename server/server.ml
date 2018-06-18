@@ -13,7 +13,7 @@ let option_to_string = function
   | None -> ""
   | Some s -> s
 
-let parse_raw_query workdir uri =
+let parse_raw_query backend uri =
   let compilers = option_to_string (Uri.get_query_param uri "compilers") in
   let compilers = String.split_on_char ':' compilers in
   let show_available = option_to_string (Uri.get_query_param uri "show-available") in
@@ -26,14 +26,13 @@ let parse_raw_query workdir uri =
   let show_latest_only = if String.is_empty show_latest_only then false else bool_of_string show_latest_only in
   let maintainers = option_to_string (Uri.get_query_param uri "maintainers") in
   let maintainers = (maintainers, Re.Posix.compile_pat ~opts:[`ICase] maintainers) in
-  let logdir = Server_workdirs.logdir workdir in
   begin match compilers with
-  | [] | [""] -> Pkg.get_dirs logdir
-  | compilers -> Lwt.return (List.map Pkg.comp_from_string compilers)
+  | [] | [""] -> Backend.Pkg.get_compilers backend
+  | compilers -> Lwt.return (List.map Backend.Pkg.comp_from_string compilers)
   end >>= fun compilers ->
   let show_available = match show_available with
     | [] | [""] -> compilers
-    | show_available -> List.map Pkg.comp_from_string show_available
+    | show_available -> List.map Backend.Pkg.comp_from_string show_available
   in
   Lwt.return {
     Diff.compilers;
@@ -55,11 +54,11 @@ let path_from_uri uri =
   | "" -> []
   | path -> filter_path (Fpath.segs (Fpath.v path))
 
-let callback workdir _conn req _body =
+let callback backend workdir _conn req _body =
   let uri = Cohttp.Request.uri req in
   match path_from_uri uri with
   | [] ->
-      parse_raw_query workdir uri >>= fun query ->
+      parse_raw_query backend uri >>= fun query ->
       Cache.get_html query >>= fun html ->
       serv_string ~content_type:"text/html" html
   | path ->
@@ -78,14 +77,11 @@ let main workdir =
     Server_workdirs.init_base workdir >>= fun () ->
     let conf = Server_configfile.from_workdir workdir in
     let port = Server_configfile.port conf in
-    let admin_port = Server_configfile.admin_port conf in
-    let callback = callback workdir in
-    let admin_callback = Admin.callback ~on_finished:(fun () -> Cache.clear_and_init workdir) workdir in
-    Admin.create_admin_key workdir >>= fun () ->
-    Cache.clear_and_init workdir;
+    Backend.start ~on_finished:Cache.clear_and_init conf workdir >>= fun (backend, backend_task) ->
+    Cache.clear_and_init backend;
     Lwt.join [
-      tcp_server port callback;
-      tcp_server admin_port admin_callback;
+      tcp_server port (callback backend workdir);
+      backend_task ();
     ]
   end
 
