@@ -28,12 +28,12 @@ let parse_raw_query workdir uri =
   let maintainers = (maintainers, Re.Posix.compile_pat ~opts:[`ICase] maintainers) in
   let logdir = Server_workdirs.logdir workdir in
   begin match compilers with
-  | [] | [""] -> Diff.get_dirs logdir
-  | compilers -> Lwt.return (List.map Diff.comp_from_string compilers)
+  | [] | [""] -> Pkg.get_dirs logdir
+  | compilers -> Lwt.return (List.map Pkg.comp_from_string compilers)
   end >>= fun compilers ->
   let show_available = match show_available with
     | [] | [""] -> compilers
-    | show_available -> List.map Diff.comp_from_string show_available
+    | show_available -> List.map Pkg.comp_from_string show_available
   in
   Lwt.return {
     Diff.compilers;
@@ -80,7 +80,7 @@ let main workdir =
     let port = Server_configfile.port conf in
     let admin_port = Server_configfile.admin_port conf in
     let callback = callback workdir in
-    let admin_callback = Admin.callback workdir in
+    let admin_callback = Admin.callback ~on_finished:(fun () -> Cache.clear_and_init workdir) workdir in
     Admin.create_admin_key workdir >>= fun () ->
     Cache.clear_and_init workdir;
     Lwt.join [

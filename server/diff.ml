@@ -1,86 +1,19 @@
-open Lwt.Infix
-
-type state = Good | Partial | Bad
-type comp = string
-
-type info = {
-  maintainers : string list;
-  instances : (comp * state) list;
-}
-
 type query = {
-  compilers : comp list;
-  show_available : comp list;
+  compilers : Pkg.comp list;
+  show_available : Pkg.comp list;
   show_failures_only : bool;
   show_diff_only : bool;
   show_latest_only : bool;
   maintainers : string * Re.re;
 }
 
-let state_eq x y = match x, y with
-  | Good, Good | Partial, Partial | Bad, Bad -> true
-  | Good, _ | Partial, _ | Bad, _ -> false
-
-let get_files dirname =
-  Lwt_unix.opendir (Fpath.to_string dirname) >>= fun dir ->
-  let rec aux files =
-    Lwt.catch begin fun () ->
-      Lwt_unix.readdir dir >>= fun file ->
-      if Fpath.is_rel_seg file then
-        aux files
-      else
-        aux (file :: files)
-    end begin function
-    | End_of_file -> Lwt.return files
-    | exn -> Lwt.fail exn
-    end
-  in
-  aux [] >>= fun files ->
-  Lwt_unix.closedir dir >|= fun () ->
-  files
-
-let is_directory dir file =
-  Sys.is_directory (Fpath.to_string (Fpath.add_seg dir file))
-
-let get_dirs dir =
-  get_files dir >|= fun files ->
-  let dirs = List.filter (is_directory dir) files in
-  List.sort OpamVersionCompare.compare dirs
-
-let default_query workdir =
-  let logdir = Server_workdirs.logdir workdir in
-  get_dirs logdir >|= fun compilers ->
-  { compilers;
-    show_available = compilers;
-    show_failures_only = false;
-    show_diff_only = false;
-    show_latest_only = false;
-    maintainers = ("", Re.Posix.compile_pat "");
-  }
-
-let pkg_update ~comp ~update v pkg =
-  let aux l = (comp, v) :: l in
-  update pkg aux
-
-let fill_pkgs_from_dir workdir ~update comp =
-  get_files (Server_workdirs.gooddir ~switch:comp workdir) >>= fun good_files ->
-  get_files (Server_workdirs.partialdir ~switch:comp workdir) >>= fun partial_files ->
-  get_files (Server_workdirs.baddir ~switch:comp workdir) >|= fun bad_files ->
-  List.iter (pkg_update ~comp ~update Good) good_files;
-  List.iter (pkg_update ~comp ~update Partial) partial_files;
-  List.iter (pkg_update ~comp ~update Bad) bad_files
-
-let fill_pkgs ~update workdir =
-  get_dirs (Server_workdirs.logdir workdir) >>= fun compilers ->
-  Lwt_list.iter_s (fill_pkgs_from_dir workdir ~update) compilers
-
 let instance_to_html ~pkg instances comp =
   let open Tyxml.Html in
   let td c = td ~a:[a_class ["result-col"; "results-cell"]; a_style ("background-color: "^c^";")] in
   match List.Assoc.get ~eq:String.equal comp instances with
-  | Some Good -> td "green" [a ~a:[a_href ("/"^comp^"/good/"^pkg)] [pcdata "☑"]]
-  | Some Partial -> td "orange" [a ~a:[a_href ("/"^comp^"/partial/"^pkg)] [pcdata "☒"]]
-  | Some Bad -> td "red" [a ~a:[a_href ("/"^comp^"/bad/"^pkg)] [pcdata "☒"]]
+  | Some Pkg.Good -> td "green" [a ~a:[a_href ("/"^comp^"/good/"^pkg)] [pcdata "☑"]]
+  | Some Pkg.Partial -> td "orange" [a ~a:[a_href ("/"^comp^"/partial/"^pkg)] [pcdata "☒"]]
+  | Some Pkg.Bad -> td "red" [a ~a:[a_href ("/"^comp^"/bad/"^pkg)] [pcdata "☒"]]
   | None -> td "grey" [pcdata "☐"]
 
 let get_pkg_name pkg =
@@ -88,18 +21,18 @@ let get_pkg_name pkg =
   | Some idx -> String.sub pkg 0 idx
   | None -> pkg (* TODO: Should raise an exception or a warning somewhere *)
 
-let must_show_package query ~last ~pkg {maintainers; instances} =
+let must_show_package query ~last ~pkg {Pkg.maintainers; instances} =
   List.exists (fun comp -> List.Assoc.mem ~eq:String.equal comp instances) query.show_available &&
   begin
     if query.show_failures_only then
-      List.exists (function (_, (Bad | Partial)) -> true | (_, Good) -> false) instances
+      List.exists (function (_, (Pkg.Bad | Pkg.Partial)) -> true | (_, Pkg.Good) -> false) instances
     else
       true
   end &&
   begin
     if query.show_diff_only && not (List.is_empty instances) then
       let state = snd (List.hd instances) in
-      List.exists (fun (_, x) -> not (state_eq state x)) (List.tl instances)
+      List.exists (fun (_, x) -> not (Pkg.state_eq state x)) (List.tl instances)
     else
       true
   end &&
@@ -123,7 +56,7 @@ let pkg_to_html query (acc, last) (pkg, info) =
   let tr = tr ~a:[a_class ["results-row"]] in
   let td = td ~a:[a_class ["results-cell"; "pkgname"]] in
   if must_show_package query ~last ~pkg info then
-    ((tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg info.instances) query.compilers)) :: acc, Some pkg)
+    ((tr (td [pcdata pkg] :: List.map (instance_to_html ~pkg info.Pkg.instances) query.compilers)) :: acc, Some pkg)
   else
     (acc, Some pkg)
 
@@ -183,6 +116,3 @@ let get_html query pkgs =
   let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in
   let doc = html head (body [filter_form; br (); doc]) in
   Format.sprintf "%a\n" (pp ()) doc
-
-let comp_from_string x = x
-let comp_equal = String.equal

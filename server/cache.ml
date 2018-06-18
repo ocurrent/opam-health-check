@@ -4,8 +4,8 @@ module Html_cache = Hashtbl.Make (struct
     type t = Diff.query
     let hash = Hashtbl.hash
     let equal {Diff.compilers; show_available; show_failures_only; show_diff_only; show_latest_only; maintainers} y =
-      List.equal Diff.comp_equal compilers y.Diff.compilers &&
-      List.equal Diff.comp_equal show_available y.Diff.show_available &&
+      List.equal Pkg.comp_equal compilers y.Diff.compilers &&
+      List.equal Pkg.comp_equal show_available y.Diff.show_available &&
       Bool.equal show_failures_only y.Diff.show_failures_only &&
       Bool.equal show_diff_only y.Diff.show_diff_only &&
       Bool.equal show_latest_only y.Diff.show_latest_only &&
@@ -26,13 +26,13 @@ let get_pkg_name pkg =
 let update_pkg pkginfo_tbl pkgsinfo pkg f =
   let info =
     match Pkginfo_cache.find_opt pkginfo_tbl pkg with
-    | Some info -> {info with Diff.instances = f info.Diff.instances}
+    | Some info -> {info with Pkg.instances = f info.Pkg.instances}
     | None ->
         let instances = f [] in
         let pkg = get_pkg_name pkg in
         begin match List.find_opt (fun pkg' -> String.equal pkg'.Obi.Index.name pkg) pkgsinfo with
-        | Some pkginfo -> {Diff.maintainers = pkginfo.Obi.Index.maintainers; instances}
-        | None -> {Diff.maintainers = []; instances}
+        | Some pkginfo -> {Pkg.maintainers = pkginfo.Obi.Index.maintainers; instances}
+        | None -> {Pkg.maintainers = []; instances}
         end
   in
   Pkginfo_cache.replace pkginfo_tbl pkg info
@@ -41,7 +41,7 @@ let update_pkgs workdir =
   !pkgsinfo >>= fun pkgsinfo ->
   let pkginfo_tbl = Pkginfo_cache.create 10_000 in
   let update = update_pkg pkginfo_tbl pkgsinfo in
-  Diff.fill_pkgs ~update workdir >|= fun () ->
+  Pkg.fill_pkgs ~update workdir >|= fun () ->
   let pkgs = Pkginfo_cache.fold (fun pkg info acc -> (pkg, info)::acc) pkginfo_tbl [] in
   List.sort (fun (x, _) (y, _) -> OpamVersionCompare.compare x y) pkgs
 

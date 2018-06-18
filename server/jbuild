@@ -8,12 +8,11 @@
    (tyxml
     cohttp-lwt-unix
     containers
-    opam-core
-    nocrypto.lwt
     cmdliner
-    git-unix
     re
     obi
+    git-unix
+    backend
     oca_lib))))
 
 (rule

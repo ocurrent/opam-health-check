@@ -48,7 +48,7 @@ let is_partial_failure logfile =
 
 let job_tbl = Hashtbl.create 32
 
-let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
+let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
   | [] ->
       Lwt_pool.use pool begin fun () ->
         Lwt.join jobs >>= fun () ->
@@ -57,7 +57,7 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
         (* TODO: replace by Oca_lib.rm_rf *)
         Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
         Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
-        Cache.clear_and_init workdir;
+        on_finished ();
         Hashtbl.remove job_tbl switch;
         Lwt_unix.close stderr
       end
@@ -84,7 +84,7 @@ let rec get_jobs ~stderr ~img_name ~switch workdir jobs = function
           end
         end
       in
-      get_jobs ~stderr ~img_name ~switch workdir (job :: jobs) pkgs
+      get_jobs ~on_finished ~stderr ~img_name ~switch workdir (job :: jobs) pkgs
 
 let () =
   Lwt.async_exception_hook := begin fun e ->
@@ -93,7 +93,7 @@ let () =
     (* TODO: Close stderr *)
   end
 
-let check workdir ~dockerfile name =
+let check workdir ~on_finished ~dockerfile name =
   if not (Oca_lib.is_valid_filename name) then
     failwith "Name is not valid";
   if Hashtbl.mem job_tbl name then
@@ -105,5 +105,5 @@ let check workdir ~dockerfile name =
   Lwt.async begin fun () ->
     Hashtbl.add job_tbl name ();
     get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
-    get_jobs ~stderr ~img_name ~switch:name workdir [] pkgs
+    get_jobs ~on_finished ~stderr ~img_name ~switch:name workdir [] pkgs
   end

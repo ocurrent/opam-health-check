@@ -31,11 +31,11 @@ let create_admin_key workdir =
   | true -> Lwt.return_unit
   | false -> create_userkey workdir username
 
-let admin_action workdir body =
+let admin_action ~on_finished workdir body =
   match String.split_on_char '\n' body with
   | "check"::dir::dockerfile ->
       let dockerfile = String.concat "\n" dockerfile in
-      Check.check workdir ~dockerfile dir
+      Check.check workdir ~on_finished ~dockerfile dir
   | ["add-user";username] ->
       create_userkey workdir username
   | _ ->
@@ -61,7 +61,7 @@ let rec decrypt key msg =
     let msg, next = String.take_drop key_size msg in
     partial_decrypt key msg ^ decrypt key next
 
-let callback workdir _conn _req body =
+let callback ~on_finished workdir _conn _req body =
   Cohttp_lwt.Body.to_string body >>= fun body ->
   match String.Split.left ~by:"\n" body with
   | Some (pversion, body) when String.equal Oca_lib.protocol_version pversion ->
@@ -73,7 +73,7 @@ let callback workdir _conn _req body =
           let body = decrypt key body in
           begin match String.Split.left ~by:"\n" body with
           | Some (user', body) when String.equal user user' ->
-              admin_action workdir body >>= fun () ->
+              admin_action ~on_finished workdir body >>= fun () ->
               Cohttp_lwt_unix.Server.respond ~status:`OK ~body:`Empty ()
           | Some _ ->
               Lwt.fail_with "Identity couldn't be ensured"
