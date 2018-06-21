@@ -64,7 +64,7 @@ let result_legend =
     tr [td ~a:[a_style "background-color: green;"] [pcdata "☑"]; td [pcdata "Package successfully built"]];
     tr [td ~a:[a_style "background-color: orange;"] [pcdata "☒"]; td [pcdata "One of the dependencies failed to build"]];
     tr [td ~a:[a_style "background-color: red;"] [pcdata "☒"]; td [pcdata "Package failed to build"]];
-    tr [td ~a:[a_style "background-color: grey;"] [pcdata "☐"]; td [pcdata "Package couldn't be installed"]];
+    tr [td ~a:[a_style "background-color: grey;"] [pcdata "☐"]; td [pcdata "Package is not available in this environment"]];
   ]]
 
 let gen_table_form l =
