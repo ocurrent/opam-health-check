@@ -22,6 +22,7 @@ module Pkginfo_cache = Hashtbl.Make (struct
 let pkgsinfo = ref Lwt.return_nil
 let html_tbl = Html_cache.create 32
 let pkgs = ref Lwt.return_nil
+let compilers = ref Lwt.return_nil
 
 let update_pkg pkginfo_tbl pkgsinfo pkg f =
   let info =
@@ -48,6 +49,7 @@ let update_pkgs backend =
 let clear_and_init backend =
   pkgsinfo := Metainfo.get_pkgsinfo ();
   pkgs := update_pkgs backend;
+  compilers := Pkg.get_compilers backend;
   Html_cache.clear html_tbl
 
 let get_html query =
@@ -60,3 +62,6 @@ let get_html query =
   match Html_cache.find_opt html_tbl query with
   | Some html -> Lwt.return html
   | None -> get_html query
+
+let get_compilers () =
+  !compilers

@@ -13,7 +13,7 @@ let option_to_string = function
   | None -> ""
   | Some s -> s
 
-let parse_raw_query backend uri =
+let parse_raw_query uri =
   let compilers = option_to_string (Uri.get_query_param uri "compilers") in
   let compilers = String.split_on_char ':' compilers in
   let show_available = option_to_string (Uri.get_query_param uri "show-available") in
@@ -27,7 +27,7 @@ let parse_raw_query backend uri =
   let maintainers = option_to_string (Uri.get_query_param uri "maintainers") in
   let maintainers = (maintainers, Re.Posix.compile_pat ~opts:[`ICase] maintainers) in
   begin match compilers with
-  | [] | [""] -> Backend.Pkg.get_compilers backend
+  | [] | [""] -> Cache.get_compilers ()
   | compilers -> Lwt.return (List.map Backend.Pkg.comp_from_string compilers)
   end >>= fun compilers ->
   let show_available = match show_available with
@@ -54,11 +54,11 @@ let path_from_uri uri =
   | "" -> []
   | path -> filter_path (Fpath.segs (Fpath.v path))
 
-let callback backend workdir _conn req _body =
+let callback workdir _conn req _body =
   let uri = Cohttp.Request.uri req in
   match path_from_uri uri with
   | [] ->
-      parse_raw_query backend uri >>= fun query ->
+      parse_raw_query uri >>= fun query ->
       Cache.get_html query >>= fun html ->
       serv_string ~content_type:"text/html" html
   | path ->
@@ -80,7 +80,7 @@ let main workdir =
     Backend.start ~on_finished:Cache.clear_and_init conf workdir >>= fun (backend, backend_task) ->
     Cache.clear_and_init backend;
     Lwt.join [
-      tcp_server port (callback backend workdir);
+      tcp_server port (callback workdir);
       backend_task ();
     ]
   end
