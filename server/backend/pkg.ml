@@ -73,6 +73,10 @@ let fill_pkgs ~update workdir =
   get_compilers workdir >>= fun compilers ->
   Lwt_list.iter_s (fill_pkgs_from_dir workdir ~update) compilers
 
-let comp_from_string x = x
+let comp_from_string x =
+  if not (Fpath.is_seg x) || Fpath.is_rel_seg x then
+    failwith "Forbidden switch name";
+  x
+
 let comp_to_string x = x
 let comp_equal = String.equal
