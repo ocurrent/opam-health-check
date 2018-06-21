@@ -26,15 +26,17 @@ let parse_raw_query uri =
   let show_latest_only = if String.is_empty show_latest_only then false else bool_of_string show_latest_only in
   let maintainers = option_to_string (Uri.get_query_param uri "maintainers") in
   let maintainers = (maintainers, Re.Posix.compile_pat ~opts:[`ICase] maintainers) in
-  begin match compilers with
-  | [] | [""] -> Cache.get_compilers ()
-  | compilers -> Lwt.return (List.map Backend.Pkg.comp_from_string compilers)
-  end >>= fun compilers ->
+  Cache.get_compilers () >>= fun available_compilers ->
+  let compilers = match compilers with
+    | [] | [""] -> available_compilers
+    | compilers -> List.map Backend.Pkg.comp_from_string compilers
+  in
   let show_available = match show_available with
     | [] | [""] -> compilers
     | show_available -> List.map Backend.Pkg.comp_from_string show_available
   in
   Lwt.return {
+    Diff.available_compilers;
     Diff.compilers;
     Diff.show_available;
     Diff.show_failures_only;

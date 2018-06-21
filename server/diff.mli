@@ -1,4 +1,5 @@
 type query = {
+  available_compilers : Backend.Pkg.comp list;
   compilers : Backend.Pkg.comp list;
   show_available : Backend.Pkg.comp list;
   show_failures_only : bool;

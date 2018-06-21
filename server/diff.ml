@@ -1,6 +1,7 @@
 module Pkg = Backend.Pkg
 
 type query = {
+  available_compilers : Pkg.comp list;
   compilers : Pkg.comp list;
   show_available : Pkg.comp list;
   show_failures_only : bool;
@@ -57,21 +58,22 @@ let pkg_to_html query (acc, last) (pkg, info) =
   else
     (acc, last)
 
-let result_legend =
+let result_legend query =
   let open Tyxml.Html in
   let legend = legend [b [pcdata "Legend:"]] in
   fieldset ~legend [table ~a:[a_style "white-space: nowrap;"] [
+    tr [td [pcdata "Available compilers:"]; td [pcdata (String.concat ", " (List.map Pkg.comp_to_string query.available_compilers))]];
     tr [td ~a:[a_style "background-color: green;"] [pcdata "☑"]; td [pcdata "Package successfully built"]];
     tr [td ~a:[a_style "background-color: orange;"] [pcdata "☒"]; td [pcdata "One of the dependencies failed to build"]];
     tr [td ~a:[a_style "background-color: red;"] [pcdata "☒"]; td [pcdata "Package failed to build"]];
     tr [td ~a:[a_style "background-color: grey;"] [pcdata "☐"]; td [pcdata "Package is not available in this environment"]];
   ]]
 
-let gen_table_form l =
+let gen_table_form query l =
   let open Tyxml.Html in
   let aux (txt, elt) = tr [td txt; td [elt]] in
   let legend = legend [b [pcdata "Filter form:"]] in
-  form [fieldset ~legend [table [tr [td ~a:[a_style "width: 100%;"] [table (List.map aux l)]; td [result_legend]]]]]
+  form [fieldset ~legend [table [tr [td ~a:[a_style "width: 100%;"] [table (List.map aux l)]; td [result_legend query]]]]]
 
 let get_html query pkgs =
   let open Tyxml.Html in
@@ -101,7 +103,7 @@ let get_html query pkgs =
   let maintainers_text = [pcdata "Show only packages maintained by [posix regexp]:"] in
   let maintainers = input ~a:[a_input_type `Text; a_name "maintainers"; a_value (fst query.maintainers)] () in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form [
+  let filter_form = gen_table_form query [
     (compilers_text, compilers);
     (show_available_text, show_available);
     (show_failures_only_text, show_failures_only);

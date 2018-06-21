@@ -5,7 +5,8 @@ module Pkg = Backend.Pkg
 module Html_cache = Hashtbl.Make (struct
     type t = Diff.query
     let hash = Hashtbl.hash
-    let equal {Diff.compilers; show_available; show_failures_only; show_diff_only; show_latest_only; maintainers} y =
+    let equal {Diff.available_compilers; compilers; show_available; show_failures_only; show_diff_only; show_latest_only; maintainers} y =
+      List.equal Pkg.comp_equal available_compilers y.Diff.available_compilers &&
       List.equal Pkg.comp_equal compilers y.Diff.compilers &&
       List.equal Pkg.comp_equal show_available y.Diff.show_available &&
       Bool.equal show_failures_only y.Diff.show_failures_only &&
