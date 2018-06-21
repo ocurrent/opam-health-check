@@ -63,10 +63,10 @@ let result_legend query =
   let legend = legend [b [pcdata "Legend:"]] in
   fieldset ~legend [table ~a:[a_style "white-space: nowrap;"] [
     tr [td [pcdata "Available compilers:"]; td [pcdata (String.concat ", " (List.map Pkg.comp_to_string query.available_compilers))]];
-    tr [td ~a:[a_style "background-color: green;"] [pcdata "☑"]; td [pcdata "Package successfully built"]];
-    tr [td ~a:[a_style "background-color: orange;"] [pcdata "☒"]; td [pcdata "One of the dependencies failed to build"]];
-    tr [td ~a:[a_style "background-color: red;"] [pcdata "☒"]; td [pcdata "Package failed to build"]];
-    tr [td ~a:[a_style "background-color: grey;"] [pcdata "☐"]; td [pcdata "Package is not available in this environment"]];
+    tr [td ~a:[a_style "background-color: green; text-align: center;"] [pcdata "☑"]; td [pcdata "Package successfully built"]];
+    tr [td ~a:[a_style "background-color: orange; text-align: center;"] [pcdata "☒"]; td [pcdata "One of the dependencies failed to build"]];
+    tr [td ~a:[a_style "background-color: red; text-align: center;"] [pcdata "☒"]; td [pcdata "Package failed to build"]];
+    tr [td ~a:[a_style "background-color: grey; text-align: center;"] [pcdata "☐"]; td [pcdata "Package is not available in this environment"]];
   ]]
 
 let gen_table_form query l =
