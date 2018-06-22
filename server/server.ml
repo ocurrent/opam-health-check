@@ -62,7 +62,7 @@ let callback backend _conn req _body =
       let comp = Backend.Intf.Compiler.from_string comp in
       let state = Backend.Intf.State.from_string state in
       Backend.get_log backend ~comp ~state ~pkg >>= fun log ->
-      serv_text ~content_type:"text/plain" log
+      serv_text ~content_type:"text/plain; charset=utf-8" log
   | _ ->
       failwith "path non recognized: 404"
 
