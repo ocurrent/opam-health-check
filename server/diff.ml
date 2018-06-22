@@ -36,12 +36,12 @@ let must_show_package query ~last pkg =
       true
   end &&
   begin
-    (* TODO: Replace by match + when *)
-    if query.show_diff_only && not (List.is_empty instances) then
-      let state = Instance.state (List.hd instances) in
-      List.exists (fun x -> not (State.equal state (Instance.state x))) (List.tl instances)
-    else
-      true
+    match instances with
+    | hd::tl when query.show_diff_only ->
+        let state = Instance.state hd in
+        List.exists (fun x -> not (State.equal state (Instance.state x))) tl
+    | [] | _::_ ->
+        true
   end &&
   begin
     if query.show_latest_only then
