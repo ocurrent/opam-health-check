@@ -3,16 +3,16 @@ open Lwt.Infix
 open Backend.Intf
 
 module Html_cache = Hashtbl.Make (struct
-    type t = Diff.query
+    type t = Html.query
     let hash = Hashtbl.hash
-    let equal {Diff.available_compilers; compilers; show_available; show_failures_only; show_diff_only; show_latest_only; maintainers} y =
-      List.equal Compiler.equal available_compilers y.Diff.available_compilers &&
-      List.equal Compiler.equal compilers y.Diff.compilers &&
-      List.equal Compiler.equal show_available y.Diff.show_available &&
-      Bool.equal show_failures_only y.Diff.show_failures_only &&
-      Bool.equal show_diff_only y.Diff.show_diff_only &&
-      Bool.equal show_latest_only y.Diff.show_latest_only &&
-      String.equal (fst maintainers) (fst y.Diff.maintainers)
+    let equal {Html.available_compilers; compilers; show_available; show_failures_only; show_diff_only; show_latest_only; maintainers} y =
+      List.equal Compiler.equal available_compilers y.Html.available_compilers &&
+      List.equal Compiler.equal compilers y.Html.compilers &&
+      List.equal Compiler.equal show_available y.Html.show_available &&
+      Bool.equal show_failures_only y.Html.show_failures_only &&
+      Bool.equal show_diff_only y.Html.show_diff_only &&
+      Bool.equal show_latest_only y.Html.show_latest_only &&
+      String.equal (fst maintainers) (fst y.Html.maintainers)
   end)
 
 let pkgsinfo = ref Lwt.return_nil
@@ -28,7 +28,7 @@ let clear_and_init backend =
 
 let get_html query =
   !pkgs >>= fun pkgs ->
-  let html = Diff.get_html query pkgs in
+  let html = Html.get_html query pkgs in
   Html_cache.add html_tbl query html;
   Lwt.return html
 

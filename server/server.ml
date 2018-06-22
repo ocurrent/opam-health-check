@@ -36,13 +36,13 @@ let parse_raw_query uri =
     | show_available -> List.map Backend.Intf.Compiler.from_string show_available
   in
   Lwt.return {
-    Diff.available_compilers;
-    Diff.compilers;
-    Diff.show_available;
-    Diff.show_failures_only;
-    Diff.show_diff_only;
-    Diff.show_latest_only;
-    Diff.maintainers;
+    Html.available_compilers;
+    Html.compilers;
+    Html.show_available;
+    Html.show_failures_only;
+    Html.show_diff_only;
+    Html.show_latest_only;
+    Html.maintainers;
   }
 
 let filter_path path =
