@@ -40,6 +40,7 @@ module Pkg : sig
 
   val full_name : t -> string
   val name : t -> string
+  val version : t -> string
   val maintainers : t -> string list
   val instances : t -> Instance.t list
 end

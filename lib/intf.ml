@@ -46,23 +46,25 @@ module Pkg = struct
   type t = {
     full_name : string;
     name : string;
+    version : string;
     maintainers : string list;
     instances : Instance.t list;
   }
 
   let create ~full_name ~instances ~maintainers =
-    let name =
-      match String.index_opt full_name '.' with
-      | Some idx -> String.sub full_name 0 idx
+    let (name, version) =
+      match String.Split.left ~by:"." full_name with
+      | Some x -> x
       | None -> failwith "packages must have a version separated by a dot"
     in
-    {full_name; name; maintainers; instances}
+    {full_name; name; version; maintainers; instances}
 
   let equal x y = OpamVersionCompare.equal x.full_name y.full_name
   let compare x y = OpamVersionCompare.compare x.full_name y.full_name
 
   let full_name x = x.full_name
   let name x = x.name
+  let version x = x.version
   let maintainers x = x.maintainers
   let instances x = x.instances
 end
