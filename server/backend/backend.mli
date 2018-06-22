@@ -37,6 +37,7 @@ end
 type t
 type task = unit -> unit Lwt.t
 
+val get_log_url : Intf.Pkg.t -> Intf.Instance.t -> string
 val get_compilers : t -> Intf.Compiler.t list Lwt.t
 val get_pkgs : Obi.Index.pkg list Lwt.t -> Intf.Compiler.t list Lwt.t -> t -> Intf.Pkg.t list Lwt.t
 

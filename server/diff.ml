@@ -13,11 +13,13 @@ type query = {
 let instance_to_html ~pkg instances comp =
   let open Tyxml.Html in
   let td c = td ~a:[a_class ["result-col"; "results-cell"]; a_style ("background-color: "^c^";")] in
-  let instance = List.find_opt (fun i -> Compiler.equal (Instance.compiler i) comp) instances in
-  match Option.map Instance.state instance with
-  | Some State.Good -> td "green" [a ~a:[a_href ("/"^Compiler.to_string comp^"/good/"^Pkg.full_name pkg)] [pcdata "☑"]]
-  | Some State.Partial -> td "orange" [a ~a:[a_href ("/"^Compiler.to_string comp^"/partial/"^Pkg.full_name pkg)] [pcdata "☒"]]
-  | Some State.Bad -> td "red" [a ~a:[a_href ("/"^Compiler.to_string comp^"/bad/"^Pkg.full_name pkg)] [pcdata "☒"]]
+  match List.find_opt (fun i -> Compiler.equal (Instance.compiler i) comp) instances with
+  | Some instance ->
+      begin match Instance.state instance with
+      | State.Good -> td "green" [a ~a:[a_href (Backend.get_log_url pkg instance)] [pcdata "☑"]]
+      | State.Partial -> td "orange" [a ~a:[a_href (Backend.get_log_url pkg instance)] [pcdata "☒"]]
+      | State.Bad -> td "red" [a ~a:[a_href (Backend.get_log_url pkg instance)] [pcdata "☒"]]
+      end
   | None -> td "grey" [pcdata "☐"]
 
 let must_show_package query ~last pkg =

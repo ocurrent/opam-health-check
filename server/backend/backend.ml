@@ -82,3 +82,14 @@ let start ~on_finished conf workdir =
   let callback = Admin.callback ~on_finished workdir in
   Admin.create_admin_key workdir >|= fun () ->
   (workdir, fun () -> tcp_server port callback)
+
+let get_log_url pkg instance =
+  let comp = Intf.Instance.compiler instance in
+  let comp = Intf.Compiler.to_string comp in
+  let state = match Intf.Instance.state instance with
+    | Intf.State.Good -> "good"
+    | Intf.State.Partial -> "partial"
+    | Intf.State.Bad -> "bad"
+  in
+  let pkg = Intf.Pkg.full_name pkg in
+  Printf.sprintf "/%s/%s/%s" comp state pkg
