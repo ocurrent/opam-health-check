@@ -124,11 +124,3 @@ let get_html query pkgs =
   let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in
   let doc = html head (body [filter_form; br (); doc]) in
   Format.sprintf "%a\n" (pp ()) doc
-
-let from_text ~title:title_msg txt =
-  let open Tyxml.Html in
-  let title = title (pcdata title_msg) in
-  let charset = meta ~a:[a_charset "utf-8"] () in
-  let head = head title [charset] in
-  let doc = html head (body [pcdata txt]) in
-  Format.sprintf "%a\n" (pp ()) doc

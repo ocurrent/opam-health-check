@@ -1,7 +1,7 @@
 open Lwt.Infix
 
-let serv_html body =
-  let headers = Cohttp.Header.init_with "Content-Type" "text/html" in
+let serv_text ~content_type body =
+  let headers = Cohttp.Header.init_with "Content-Type" content_type in
   Cohttp_lwt_unix.Server.respond_string ~headers ~status:`OK ~body ()
 
 let option_to_string = function
@@ -57,14 +57,12 @@ let callback backend _conn req _body =
   | [] ->
       parse_raw_query uri >>= fun query ->
       Cache.get_html query >>= fun html ->
-      serv_html html
+      serv_text ~content_type:"text/html" html
   | [comp; state; pkg] ->
-      let title = comp^"/"^pkg in
       let comp = Backend.Intf.Compiler.from_string comp in
       let state = Backend.Intf.State.from_string state in
       Backend.get_log backend ~comp ~state ~pkg >>= fun log ->
-      let html = Html.from_text ~title log in
-      serv_html html
+      serv_text ~content_type:"text/plain" log
   | _ ->
       failwith "path non recognized: 404"
 
