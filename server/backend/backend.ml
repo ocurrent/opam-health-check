@@ -83,6 +83,15 @@ let start ~on_finished conf workdir =
   Admin.create_admin_key workdir >|= fun () ->
   (workdir, fun () -> tcp_server port callback)
 
+let get_log workdir ~comp ~state ~pkg =
+  let comp = Intf.Compiler.to_string comp in
+  let state = Intf.State.to_string state in
+  if not (Oca_lib.is_valid_filename pkg) then
+    failwith "Wrong filename";
+  let file = Fpath.(to_string (v comp/state/pkg)) in
+  let file = Server_workdirs.file_from_logdir ~file workdir in
+  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
+
 let get_log_url pkg instance =
   let comp = Intf.Instance.compiler instance in
   let comp = Intf.Compiler.to_string comp in

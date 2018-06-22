@@ -1,13 +1,8 @@
 open Lwt.Infix
 
-let serv_string ~content_type body =
-  let headers = Cohttp.Header.init_with "Content-Type" content_type in
+let serv_html body =
+  let headers = Cohttp.Header.init_with "Content-Type" "text/html" in
   Cohttp_lwt_unix.Server.respond_string ~headers ~status:`OK ~body ()
-
-let serv_file ~content_type workdir file =
-  let headers = Cohttp.Header.init_with "Content-Type" content_type in
-  let fname = Fpath.to_string (Server_workdirs.file_from_logdir ~file workdir) in
-  Cohttp_lwt_unix.Server.respond_file ~headers ~fname ()
 
 let option_to_string = function
   | None -> ""
@@ -56,15 +51,22 @@ let path_from_uri uri =
   | "" -> []
   | path -> filter_path (Fpath.segs (Fpath.v path))
 
-let callback workdir _conn req _body =
+let callback backend _conn req _body =
   let uri = Cohttp.Request.uri req in
   match path_from_uri uri with
   | [] ->
       parse_raw_query uri >>= fun query ->
       Cache.get_html query >>= fun html ->
-      serv_string ~content_type:"text/html" html
-  | path ->
-      serv_file ~content_type:"text/plain" workdir (String.concat Fpath.dir_sep path)
+      serv_html html
+  | [comp; state; pkg] ->
+      let title = comp^"/"^pkg in
+      let comp = Backend.Intf.Compiler.from_string comp in
+      let state = Backend.Intf.State.from_string state in
+      Backend.get_log backend ~comp ~state ~pkg >>= fun log ->
+      let html = Html.from_text ~title log in
+      serv_html html
+  | _ ->
+      failwith "path non recognized: 404"
 
 let tcp_server port callback =
   Cohttp_lwt_unix.Server.create
@@ -82,7 +84,7 @@ let main workdir =
     Backend.start ~on_finished:Cache.clear_and_init conf workdir >>= fun (backend, backend_task) ->
     Cache.clear_and_init backend;
     Lwt.join [
-      tcp_server port (callback workdir);
+      tcp_server port (callback backend);
       backend_task ();
     ]
   end

@@ -9,3 +9,4 @@ type query = {
 }
 
 val get_html : query -> Backend.Intf.Pkg.t list -> string
+val from_text : title:string -> string -> string
