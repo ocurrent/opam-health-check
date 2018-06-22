@@ -10,7 +10,7 @@ module Compiler = struct
   type t = Comp of string
 
   let from_string x =
-    if Oca_lib.is_valid_filename x then
+    if not (Oca_lib.is_valid_filename x) then
       failwith "Forbidden switch name";
     Comp x
 
