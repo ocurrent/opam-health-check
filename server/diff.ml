@@ -1,9 +1,9 @@
-module Pkg = Backend.Pkg
+open Backend.Intf
 
 type query = {
-  available_compilers : Pkg.comp list;
-  compilers : Pkg.comp list;
-  show_available : Pkg.comp list;
+  available_compilers : Compiler.t list;
+  compilers : Compiler.t list;
+  show_available : Compiler.t list;
   show_failures_only : bool;
   show_diff_only : bool;
   show_latest_only : bool;
@@ -13,24 +13,31 @@ type query = {
 let instance_to_html ~pkg instances comp =
   let open Tyxml.Html in
   let td c = td ~a:[a_class ["result-col"; "results-cell"]; a_style ("background-color: "^c^";")] in
-  match List.Assoc.get ~eq:Pkg.comp_equal comp instances with
-  | Some Pkg.Good -> td "green" [a ~a:[a_href ("/"^Pkg.comp_to_string comp^"/good/"^Pkg.pkg_to_string pkg)] [pcdata "☑"]]
-  | Some Pkg.Partial -> td "orange" [a ~a:[a_href ("/"^Pkg.comp_to_string comp^"/partial/"^Pkg.pkg_to_string pkg)] [pcdata "☒"]]
-  | Some Pkg.Bad -> td "red" [a ~a:[a_href ("/"^Pkg.comp_to_string comp^"/bad/"^Pkg.pkg_to_string pkg)] [pcdata "☒"]]
+  let instance = List.find_opt (fun i -> Compiler.equal (Instance.compiler i) comp) instances in
+  match Option.map Instance.state instance with
+  | Some State.Good -> td "green" [a ~a:[a_href ("/"^Compiler.to_string comp^"/good/"^Pkg.full_name pkg)] [pcdata "☑"]]
+  | Some State.Partial -> td "orange" [a ~a:[a_href ("/"^Compiler.to_string comp^"/partial/"^Pkg.full_name pkg)] [pcdata "☒"]]
+  | Some State.Bad -> td "red" [a ~a:[a_href ("/"^Compiler.to_string comp^"/bad/"^Pkg.full_name pkg)] [pcdata "☒"]]
   | None -> td "grey" [pcdata "☐"]
 
-let must_show_package query ~last ~pkg {Pkg.maintainers; instances} =
-  List.exists (fun comp -> List.Assoc.mem ~eq:Pkg.comp_equal comp instances) query.show_available &&
+let must_show_package query ~last pkg =
+  let maintainers = Pkg.maintainers pkg in
+  let instances = Pkg.instances pkg in
+  List.exists (fun comp -> List.exists (fun instance -> Compiler.equal comp (Instance.compiler instance)) instances) query.show_available &&
   begin
     if query.show_failures_only then
-      List.exists (function (_, (Pkg.Bad | Pkg.Partial)) -> true | (_, Pkg.Good) -> false) instances
+      List.exists (fun instance -> match Instance.state instance with
+        | State.Bad | State.Partial -> true
+        | State.Good -> false
+      ) instances
     else
       true
   end &&
   begin
+    (* TODO: Replace by match + when *)
     if query.show_diff_only && not (List.is_empty instances) then
-      let state = snd (List.hd instances) in
-      List.exists (fun (_, x) -> not (Pkg.state_eq state x)) (List.tl instances)
+      let state = Instance.state (List.hd instances) in
+      List.exists (fun x -> not (State.equal state (Instance.state x))) (List.tl instances)
     else
       true
   end &&
@@ -38,7 +45,7 @@ let must_show_package query ~last ~pkg {Pkg.maintainers; instances} =
     if query.show_latest_only then
       match last with
       | None -> true
-      | Some last -> not (String.equal (Pkg.pkg_name_to_string pkg) (Pkg.pkg_name_to_string last))
+      | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
     else
       true
   end &&
@@ -49,12 +56,12 @@ let must_show_package query ~last ~pkg {Pkg.maintainers; instances} =
       true
   end
 
-let pkg_to_html query (acc, last) (pkg, info) =
+let pkg_to_html query (acc, last) pkg =
   let open Tyxml.Html in
   let tr = tr ~a:[a_class ["results-row"]] in
   let td = td ~a:[a_class ["results-cell"; "pkgname"]] in
-  if must_show_package query ~last ~pkg info then
-    ((tr (td [pcdata (Pkg.pkg_to_string pkg)] :: List.map (instance_to_html ~pkg info.Pkg.instances) query.compilers)) :: acc, Some pkg)
+  if must_show_package query ~last pkg then
+    ((tr (td [pcdata (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg (Pkg.instances pkg)) query.compilers)) :: acc, Some pkg)
   else
     (acc, last)
 
@@ -62,7 +69,7 @@ let result_legend query =
   let open Tyxml.Html in
   let legend = legend [b [pcdata "Legend:"]] in
   fieldset ~legend [table ~a:[a_style "white-space: nowrap;"] [
-    tr [td [pcdata "Available compilers:"]; td [pcdata (String.concat ", " (List.map Pkg.comp_to_string query.available_compilers))]];
+    tr [td [pcdata "Available compilers:"]; td [pcdata (String.concat ", " (List.map Compiler.to_string query.available_compilers))]];
     tr [td ~a:[a_style "background-color: green; text-align: center;"] [pcdata "☑"]; td [pcdata "Package successfully built"]];
     tr [td ~a:[a_style "background-color: orange; text-align: center;"] [pcdata "☒"]; td [pcdata "One of the dependencies failed to build"]];
     tr [td ~a:[a_style "background-color: red; text-align: center;"] [pcdata "☒"]; td [pcdata "Package failed to build"]];
@@ -80,7 +87,7 @@ let get_html query pkgs =
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
   let pkgs, _ = List.fold_left (pkg_to_html query) ([], None) (List.rev pkgs) in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
-  let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [pcdata (Pkg.comp_to_string comp)]) query.compilers in
+  let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [pcdata (Compiler.to_string comp)]) query.compilers in
   let title = title (pcdata "opam-check-all") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let style_table = pcdata ".results {border: 2px solid black; border-collapse: collapse; min-width: 100%;}" in
@@ -91,9 +98,9 @@ let get_html query pkgs =
   let style_pkgname = pcdata ".pkgname {white-space: nowrap;}" in
   let head = head title [charset; style [style_table; style_col; style_case; style_pkgname; style_row; style_row_hover]] in
   let compilers_text = [pcdata "Show only [list of compilers separated by ':']:"] in
-  let compilers = input ~a:[a_input_type `Text; a_name "compilers"; a_value (String.concat ":" (List.map Pkg.comp_to_string query.compilers))] () in
+  let compilers = input ~a:[a_input_type `Text; a_name "compilers"; a_value (String.concat ":" (List.map Compiler.to_string query.compilers))] () in
   let show_available_text = [pcdata "Show only packages available in [list of compilers separated by ':']:"] in
-  let show_available = input ~a:[a_input_type `Text; a_name "show-available"; a_value (String.concat ":" (List.map Pkg.comp_to_string query.show_available))] () in
+  let show_available = input ~a:[a_input_type `Text; a_name "show-available"; a_value (String.concat ":" (List.map Compiler.to_string query.show_available))] () in
   let show_failures_only_text = [pcdata "Show failures only:"] in
   let show_failures_only = input ~a:(a_input_type `Checkbox::a_name "show-failures-only"::a_value "true"::if query.show_failures_only then [a_checked ()] else []) () in
   let show_diff_only_text = [pcdata "Only show packages that have different build status between each compilers:"] in

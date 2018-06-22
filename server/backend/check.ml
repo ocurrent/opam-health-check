@@ -46,7 +46,14 @@ let is_partial_failure logfile =
     lookup ()
   end
 
-let job_tbl = Hashtbl.create 32
+module Jobs = Hashtbl.Make (struct
+    type t = Intf.Compiler.t
+
+    let hash = Hashtbl.hash
+    let equal = Intf.Compiler.equal
+  end)
+
+let job_tbl = Jobs.create 32
 
 let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
   | [] ->
@@ -58,7 +65,7 @@ let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
         Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
         Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
         on_finished workdir;
-        Hashtbl.remove job_tbl switch;
+        Jobs.remove job_tbl switch;
         Lwt_unix.close stderr
       end
   | pkg::pkgs ->
@@ -94,16 +101,15 @@ let () =
   end
 
 let check workdir ~on_finished ~dockerfile name =
-  if not (Oca_lib.is_valid_filename name) then
-    failwith "Name is not valid";
-  if Hashtbl.mem job_tbl name then
+  let name = Intf.Compiler.from_string name in
+  if Jobs.mem job_tbl name then
     failwith "A job with the same name is already running";
   Oca_lib.mkdir_p (Server_workdirs.switchilogdir ~switch:name workdir) >>= fun () ->
   let logfile = Server_workdirs.ilogfile ~switch:name workdir in
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640 >>= fun stderr ->
   Server_workdirs.init_base_job ~switch:name ~stderr workdir >|= fun () ->
   Lwt.async begin fun () ->
-    Hashtbl.add job_tbl name ();
+    Jobs.add job_tbl name ();
     get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
     get_jobs ~on_finished ~stderr ~img_name ~switch:name workdir [] pkgs
   end

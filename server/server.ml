@@ -29,11 +29,11 @@ let parse_raw_query uri =
   Cache.get_compilers () >>= fun available_compilers ->
   let compilers = match compilers with
     | [] | [""] -> available_compilers
-    | compilers -> List.map Backend.Pkg.comp_from_string compilers
+    | compilers -> List.map Backend.Intf.Compiler.from_string compilers
   in
   let show_available = match show_available with
     | [] | [""] -> compilers
-    | show_available -> List.map Backend.Pkg.comp_from_string show_available
+    | show_available -> List.map Backend.Intf.Compiler.from_string show_available
   in
   Lwt.return {
     Diff.available_compilers;

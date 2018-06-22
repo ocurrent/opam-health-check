@@ -7,5 +7,5 @@
    (oca_lib
     cohttp-lwt-unix
     containers
-    opam-core
+    obi
     nocrypto.lwt))))

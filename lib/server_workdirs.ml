@@ -18,15 +18,15 @@ let logdir workdir = workdir/"logs"
 let tmplogdir workdir = workdir/"tmplogs"
 
 let ilogdir workdir = workdir/"ilogs"
-let switchilogdir ~switch workdir = ilogdir workdir/switch
+let switchilogdir ~switch workdir = ilogdir workdir/Intf.Compiler.to_string switch
 let ilogfile ~switch workdir = switchilogdir ~switch workdir/Printf.sprintf "%.f" (Unix.time ())
 
-let switchlogdir ~switch workdir = logdir workdir/switch
+let switchlogdir ~switch workdir = logdir workdir/Intf.Compiler.to_string switch
 let gooddir ~switch workdir = switchlogdir ~switch workdir/"good"
 let partialdir ~switch workdir = switchlogdir ~switch workdir/"partial"
 let baddir ~switch workdir = switchlogdir ~switch workdir/"bad"
 
-let tmpswitchlogdir ~switch workdir = tmplogdir workdir/switch
+let tmpswitchlogdir ~switch workdir = tmplogdir workdir/Intf.Compiler.to_string switch
 let tmpgooddir ~switch workdir = tmpswitchlogdir ~switch workdir/"good"
 let tmppartialdir ~switch workdir = tmpswitchlogdir ~switch workdir/"partial"
 let tmpbaddir ~switch workdir = tmpswitchlogdir ~switch workdir/"bad"
