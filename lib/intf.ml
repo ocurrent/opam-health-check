@@ -4,6 +4,17 @@ module State = struct
   let equal x y = match x, y with
     | Good, Good | Partial, Partial | Bad, Bad -> true
     | Good, _ | Partial, _ | Bad, _ -> false
+
+  let from_string = function
+    | "good" -> Good
+    | "partial" -> Partial
+    | "bad" -> Bad
+    | _ -> failwith "not a state"
+
+  let to_string = function
+    | Good -> "good"
+    | Partial -> "partial"
+    | Bad -> "bad"
 end
 
 module Compiler = struct

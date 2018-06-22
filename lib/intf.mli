@@ -2,6 +2,9 @@ module State : sig
   type t = Good | Partial | Bad
 
   val equal : t -> t -> bool
+
+  val from_string : string -> t
+  val to_string : t -> string
 end
 
 module Compiler : sig

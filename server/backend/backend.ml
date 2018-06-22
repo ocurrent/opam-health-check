@@ -86,10 +86,6 @@ let start ~on_finished conf workdir =
 let get_log_url pkg instance =
   let comp = Intf.Instance.compiler instance in
   let comp = Intf.Compiler.to_string comp in
-  let state = match Intf.Instance.state instance with
-    | Intf.State.Good -> "good"
-    | Intf.State.Partial -> "partial"
-    | Intf.State.Bad -> "bad"
-  in
+  let state = Intf.State.to_string (Intf.Instance.state instance) in
   let pkg = Intf.Pkg.full_name pkg in
   Printf.sprintf "/%s/%s/%s" comp state pkg
