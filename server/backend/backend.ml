@@ -1,92 +1,35 @@
 open Lwt.Infix
 
-type t = Server_workdirs.t
+type t = unit -> Obi.Index.pkg list Lwt.t
 type task = unit -> unit Lwt.t
 
-let get_files dirname =
-  Lwt_unix.opendir (Fpath.to_string dirname) >>= fun dir ->
-  let rec aux files =
-    Lwt.catch begin fun () ->
-      Lwt_unix.readdir dir >>= fun file ->
-      if Fpath.is_rel_seg file then
-        aux files
-      else
-        aux (file :: files)
-    end begin function
-    | End_of_file -> Lwt.return files
-    | exn -> Lwt.fail exn
-    end
+let get_log obi ~comp ~state ~pkg =
+  assert false
+
+let get_compilers obi =
+  let aux acc x =
+    let x = x.Obi.Index.params in
+    match x.Obi.Index.arch, x.Obi.Index.distro with
+    | `X86_64, `Debian `V9 ->
+        let comp = Intf.Compiler.from_string (Ocaml_version.to_string x.Obi.Index.ov) in
+        if List.mem ~eq:Intf.Compiler.equal comp acc then
+          acc
+        else
+          comp :: acc
+    | _, _ -> acc
   in
-  aux [] >>= fun files ->
-  Lwt_unix.closedir dir >|= fun () ->
-  files
+  let aux acc (_, x) = List.fold_left aux acc x in
+  let aux acc x = List.fold_left aux acc x.Obi.Index.versions in
+  List.fold_left aux [] obi
 
-let is_directory dir file =
-  if Sys.is_directory (Fpath.to_string (Fpath.add_seg dir file)) then
-    Some (Intf.Compiler.from_string file)
-  else
-    None
+let get_compilers obi =
+  obi () >|= fun obi ->
+  let compilers = get_compilers obi in
+  List.sort Intf.Compiler.compare compilers
 
-let get_compilers workdir =
-  let dir = Server_workdirs.logdir workdir in
-  get_files dir >|= fun files ->
-  let dirs = List.filter_map (is_directory dir) files in
-  List.sort Intf.Compiler.compare dirs
+let get_pkgs _ obi compilers =
+  assert false
 
-module Pkg_tbl = Hashtbl.Make (String)
-
-let pkg_update pkg_tbl comp state pkg =
-  let instances =
-    match Pkg_tbl.find_opt pkg_tbl pkg with
-    | Some instances -> Intf.Instance.create comp state :: instances
-    | None -> [Intf.Instance.create comp state]
-  in
-  Pkg_tbl.replace pkg_tbl pkg instances
-
-let fill_pkgs_from_dir pkg_tbl workdir comp =
-  get_files (Server_workdirs.gooddir ~switch:comp workdir) >>= fun good_files ->
-  get_files (Server_workdirs.partialdir ~switch:comp workdir) >>= fun partial_files ->
-  get_files (Server_workdirs.baddir ~switch:comp workdir) >|= fun bad_files ->
-  List.iter (pkg_update pkg_tbl comp Intf.State.Good) good_files;
-  List.iter (pkg_update pkg_tbl comp Intf.State.Partial) partial_files;
-  List.iter (pkg_update pkg_tbl comp Intf.State.Bad) bad_files
-
-let add_pkg obi full_name instances acc =
-  let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
-  let maintainers =
-    match List.find_opt (fun pkg' -> String.equal pkg'.Obi.Index.name pkg) obi with
-    | Some obi -> obi.Obi.Index.maintainers
-    | None -> []
-  in
-  Intf.Pkg.create ~full_name ~instances ~maintainers :: acc
-
-let get_pkgs obi compilers workdir =
-  let pkg_tbl = Pkg_tbl.create 10_000 in
-  obi >>= fun obi ->
-  compilers >>= fun compilers ->
-  Lwt_list.iter_s (fill_pkgs_from_dir pkg_tbl workdir) compilers >|= fun () ->
-  let pkgs = Pkg_tbl.fold (add_pkg obi) pkg_tbl [] in
-  List.sort Intf.Pkg.compare pkgs
-
-(* TODO: Deduplicate with Server.tcp_server *)
-let tcp_server port callback =
-  Cohttp_lwt_unix.Server.create
-    ~on_exn:(fun _ -> ())
-    ~mode:(`TCP (`Port port))
-    (Cohttp_lwt_unix.Server.make ~callback ())
-
-let start ~on_finished conf workdir =
-  let port = Server_configfile.admin_port conf in
-  let callback = Admin.callback ~on_finished workdir in
-  Nocrypto_entropy_lwt.initialize () >>= fun () ->
-  Admin.create_admin_key workdir >|= fun () ->
-  (workdir, fun () -> tcp_server port callback)
-
-let get_log workdir ~comp ~state ~pkg =
-  let comp = Intf.Compiler.to_string comp in
-  let state = Intf.State.to_string state in
-  if not (Oca_lib.is_valid_filename pkg) then
-    failwith "Wrong filename";
-  let file = Fpath.(to_string (v comp/state/pkg)) in
-  let file = Server_workdirs.file_from_logdir ~file workdir in
-  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
+let start ~on_finished:_ obi =
+  (* TODO: Do a clock that calls on_finished every hour *)
+  Lwt.return (obi, fun () -> Lwt.return_unit)

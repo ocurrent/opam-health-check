@@ -78,7 +78,7 @@ let main workdir =
     Server_workdirs.init_base workdir >>= fun () ->
     let conf = Server_configfile.from_workdir workdir in
     let port = Server_configfile.port conf in
-    Backend.start ~on_finished:Cache.clear_and_init conf workdir >>= fun (backend, backend_task) ->
+    Backend.start ~on_finished:Cache.clear_and_init Cache.get_pkgsinfo >>= fun (backend, backend_task) ->
     Cache.clear_and_init backend;
     Lwt.join [
       tcp_server port (callback backend);
