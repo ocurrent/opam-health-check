@@ -74,7 +74,6 @@ let tcp_server port callback =
 
 let main workdir =
   Lwt_main.run begin
-    Nocrypto_entropy_lwt.initialize () >>= fun () ->
     let workdir = Server_workdirs.create ~workdir in
     Server_workdirs.init_base workdir >>= fun () ->
     let conf = Server_configfile.from_workdir workdir in

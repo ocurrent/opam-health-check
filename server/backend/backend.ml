@@ -80,6 +80,7 @@ let tcp_server port callback =
 let start ~on_finished conf workdir =
   let port = Server_configfile.admin_port conf in
   let callback = Admin.callback ~on_finished workdir in
+  Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->
   (workdir, fun () -> tcp_server port callback)
 
