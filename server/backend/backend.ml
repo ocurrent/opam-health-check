@@ -3,6 +3,8 @@ open Lwt.Infix
 type t = Server_workdirs.t
 type task = unit -> unit Lwt.t
 
+let cache = Oca_server.Cache.create ()
+
 let get_files dirname =
   Lwt_unix.opendir (Fpath.to_string dirname) >>= fun dir ->
   let rec aux files =
@@ -60,10 +62,10 @@ let add_pkg obi full_name instances acc =
   in
   Intf.Pkg.create ~full_name ~instances ~maintainers :: acc
 
-let get_pkgs workdir obi compilers =
+let get_pkgs workdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
-  obi >>= fun obi ->
-  compilers >>= fun compilers ->
+  Oca_server.Cache.get_pkgsinfo cache >>= fun obi ->
+  Oca_server.Cache.get_compilers cache >>= fun compilers ->
   Lwt_list.iter_s (fill_pkgs_from_dir pkg_tbl workdir) compilers >|= fun () ->
   let pkgs = Pkg_tbl.fold (add_pkg obi) pkg_tbl [] in
   List.sort Intf.Pkg.compare pkgs
@@ -77,14 +79,6 @@ let get_log workdir ~comp ~state ~pkg =
   let file = Server_workdirs.file_from_logdir ~file workdir in
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
 
-module Cache = Oca_server.Cache.Make (struct
-    type nonrec t = t
-
-    let get_log = get_log
-    let get_compilers = get_compilers
-    let get_pkgs = get_pkgs
-  end)
-
 (* TODO: Deduplicate with Server.tcp_server *)
 let tcp_server port callback =
   Cohttp_lwt_unix.Server.create
@@ -92,9 +86,13 @@ let tcp_server port callback =
     ~mode:(`TCP (`Port port))
     (Cohttp_lwt_unix.Server.make ~callback ())
 
+let cache_clear_and_init workdir =
+  Oca_server.Cache.clear_and_init cache (get_pkgs workdir) (get_compilers workdir)
+
 let start conf workdir =
   let port = Server_configfile.admin_port conf in
-  let callback = Admin.callback ~on_finished:Cache.clear_and_init workdir in
+  let callback = Admin.callback ~on_finished:cache_clear_and_init workdir in
+  cache_clear_and_init workdir;
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->
   (workdir, fun () -> tcp_server port callback)

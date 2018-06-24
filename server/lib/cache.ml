@@ -2,9 +2,6 @@ open Lwt.Infix
 
 open Intf
 
-module Make (Backend : Backend_intf.BACKEND) = struct
-type backend = Backend.t
-
 module Html_cache = Hashtbl.Make (struct
     type t = Html.query
     let hash = Hashtbl.hash
@@ -18,31 +15,39 @@ module Html_cache = Hashtbl.Make (struct
       String.equal (fst maintainers) (fst y.Html.maintainers)
   end)
 
-let pkgsinfo = ref Lwt.return_nil
-let html_tbl = Html_cache.create 32
-let pkgs = ref Lwt.return_nil
-let compilers = ref Lwt.return_nil
+type t = {
+  mutable pkgsinfo : Obi.Index.pkg list Lwt.t;
+  html_tbl : string Html_cache.t;
+  mutable pkgs : Intf.Pkg.t list Lwt.t;
+  mutable compilers : Intf.Compiler.t list Lwt.t;
+}
 
-let clear_and_init backend =
-  pkgsinfo := Metainfo.get_pkgsinfo ();
-  compilers := Backend.get_compilers backend;
-  pkgs := Backend.get_pkgs backend !pkgsinfo !compilers;
-  Html_cache.clear html_tbl
+let create () = {
+  pkgsinfo = Lwt.return_nil;
+  html_tbl = Html_cache.create 32;
+  pkgs = Lwt.return_nil;
+  compilers = Lwt.return_nil;
+}
 
-let get_html query =
-  !pkgs >>= fun pkgs ->
+let clear_and_init self pkgs compilers =
+  self.pkgsinfo <- Metainfo.get_pkgsinfo ();
+  self.compilers <- compilers;
+  self.pkgs <- pkgs;
+  Html_cache.clear self.html_tbl
+
+let get_html self query =
+  self.pkgs >>= fun pkgs ->
   let html = Html.get_html query pkgs in
-  Html_cache.add html_tbl query html;
+  Html_cache.add self.html_tbl query html;
   Lwt.return html
 
-let get_html query =
-  match Html_cache.find_opt html_tbl query with
+let get_html self query =
+  match Html_cache.find_opt self.html_tbl query with
   | Some html -> Lwt.return html
-  | None -> get_html query
+  | None -> get_html self query
 
-let get_compilers () =
-  !compilers
+let get_compilers self =
+  self.compilers
 
-let get_pkgsinfo () =
-  !pkgsinfo
-end
+let get_pkgsinfo self =
+  self.pkgsinfo

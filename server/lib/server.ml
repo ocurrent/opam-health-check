@@ -1,7 +1,6 @@
 open Lwt.Infix
 
 module Make (Backend : Backend_intf.S) = struct
-module Cache = Backend.Cache
 
 let serv_text ~content_type body =
   let headers = Cohttp.Header.init_with "Content-Type" content_type in
@@ -24,7 +23,7 @@ let parse_raw_query uri =
   let show_latest_only = if String.is_empty show_latest_only then false else bool_of_string show_latest_only in
   let maintainers = option_to_string (Uri.get_query_param uri "maintainers") in
   let maintainers = (maintainers, Re.Posix.compile_pat ~opts:[`ICase] maintainers) in
-  Cache.get_compilers () >>= fun available_compilers ->
+  Cache.get_compilers Backend.cache >>= fun available_compilers ->
   let compilers = match compilers with
     | [] | [""] -> available_compilers
     | compilers -> List.map Intf.Compiler.from_string compilers
@@ -59,7 +58,7 @@ let callback backend _conn req _body =
   match path_from_uri uri with
   | [] ->
       parse_raw_query uri >>= fun query ->
-      Cache.get_html query >>= fun html ->
+      Cache.get_html Backend.cache query >>= fun html ->
       serv_text ~content_type:"text/html" html
   | [comp; state; pkg] ->
       let comp = Intf.Compiler.from_string comp in
@@ -81,7 +80,6 @@ let main ~workdir =
   let conf = Server_configfile.from_workdir workdir in
   let port = Server_configfile.port conf in
   Backend.start conf workdir >>= fun (backend, backend_task) ->
-  Cache.clear_and_init backend;
   Lwt.join [
     tcp_server port (callback backend);
     backend_task ();
