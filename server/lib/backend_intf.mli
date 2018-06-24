@@ -1,6 +1,7 @@
+type task = unit -> unit Lwt.t
+
 module type S = sig
   type t
-  type task = unit -> unit Lwt.t
 
   val cache : Cache.t
 

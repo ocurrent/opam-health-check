@@ -1,7 +1,6 @@
 open Lwt.Infix
 
 type t = Server_workdirs.t
-type task = unit -> unit Lwt.t
 
 let cache = Oca_server.Cache.create ()
 
