@@ -1,18 +1,10 @@
 (jbuild_version 1)
 
 (executable
- ((name server)
+ ((name main)
   (public_name opam-serve-all)
   (flags (:standard -safe-string -w A-44-33-4 -open Containers))
-  (libraries
-   (tyxml
-    cohttp-lwt-unix
-    containers
-    cmdliner
-    re
-    git-unix
-    backend
-    oca_lib))))
+  (libraries (backend cmdliner oca_server))))
 
 (rule
   (with-stdout-to config.ml

@@ -68,20 +68,6 @@ let get_pkgs workdir obi compilers =
   let pkgs = Pkg_tbl.fold (add_pkg obi) pkg_tbl [] in
   List.sort Intf.Pkg.compare pkgs
 
-(* TODO: Deduplicate with Server.tcp_server *)
-let tcp_server port callback =
-  Cohttp_lwt_unix.Server.create
-    ~on_exn:(fun _ -> ())
-    ~mode:(`TCP (`Port port))
-    (Cohttp_lwt_unix.Server.make ~callback ())
-
-let start ~on_finished conf workdir =
-  let port = Server_configfile.admin_port conf in
-  let callback = Admin.callback ~on_finished workdir in
-  Nocrypto_entropy_lwt.initialize () >>= fun () ->
-  Admin.create_admin_key workdir >|= fun () ->
-  (workdir, fun () -> tcp_server port callback)
-
 let get_log workdir ~comp ~state ~pkg =
   let comp = Intf.Compiler.to_string comp in
   let state = Intf.State.to_string state in
@@ -90,3 +76,25 @@ let get_log workdir ~comp ~state ~pkg =
   let file = Fpath.(to_string (v comp/state/pkg)) in
   let file = Server_workdirs.file_from_logdir ~file workdir in
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
+
+module Cache = Oca_server.Cache.Make (struct
+    type nonrec t = t
+
+    let get_log = get_log
+    let get_compilers = get_compilers
+    let get_pkgs = get_pkgs
+  end)
+
+(* TODO: Deduplicate with Server.tcp_server *)
+let tcp_server port callback =
+  Cohttp_lwt_unix.Server.create
+    ~on_exn:(fun _ -> ())
+    ~mode:(`TCP (`Port port))
+    (Cohttp_lwt_unix.Server.make ~callback ())
+
+let start conf workdir =
+  let port = Server_configfile.admin_port conf in
+  let callback = Admin.callback ~on_finished:Cache.clear_and_init workdir in
+  Nocrypto_entropy_lwt.initialize () >>= fun () ->
+  Admin.create_admin_key workdir >|= fun () ->
+  (workdir, fun () -> tcp_server port callback)

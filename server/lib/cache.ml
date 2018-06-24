@@ -2,6 +2,9 @@ open Lwt.Infix
 
 open Intf
 
+module Make (Backend : Backend_intf.BACKEND) = struct
+type backend = Backend.t
+
 module Html_cache = Hashtbl.Make (struct
     type t = Html.query
     let hash = Hashtbl.hash
@@ -42,3 +45,4 @@ let get_compilers () =
 
 let get_pkgsinfo () =
   !pkgsinfo
+end

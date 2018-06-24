@@ -1,5 +1,8 @@
 open Lwt.Infix
 
+module Make (Backend : Backend_intf.S) = struct
+module Cache = Backend.Cache
+
 let serv_text ~content_type body =
   let headers = Cohttp.Header.init_with "Content-Type" content_type in
   Cohttp_lwt_unix.Server.respond_string ~headers ~status:`OK ~body ()
@@ -72,32 +75,15 @@ let tcp_server port callback =
     ~mode:(`TCP (`Port port))
     (Cohttp_lwt_unix.Server.make ~callback ())
 
-let main workdir =
-  Lwt_main.run begin
-    let workdir = Server_workdirs.create ~workdir in
-    Server_workdirs.init_base workdir >>= fun () ->
-    let conf = Server_configfile.from_workdir workdir in
-    let port = Server_configfile.port conf in
-    Backend.start ~on_finished:Cache.clear_and_init conf workdir >>= fun (backend, backend_task) ->
-    Cache.clear_and_init backend;
-    Lwt.join [
-      tcp_server port (callback backend);
-      backend_task ();
-    ]
-  end
-
-let term =
-  let ($) = Cmdliner.Term.($) in
-  Cmdliner.Term.pure main $
-  Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"WORKDIR" [])
-
-let info =
-  Cmdliner.Term.info
-    ~doc:"A server to check for broken opam packages."
-    ~man:[`P "This program takes a work directory where every files created \
-              are stored. This includes logs, config file and user private \
-              keys."]
-    ~version:Config.version
-    Config.name
-
-let () = Cmdliner.Term.exit (Cmdliner.Term.eval (term, info))
+let main ~workdir =
+  let workdir = Server_workdirs.create ~workdir in
+  Server_workdirs.init_base workdir >>= fun () ->
+  let conf = Server_configfile.from_workdir workdir in
+  let port = Server_configfile.port conf in
+  Backend.start conf workdir >>= fun (backend, backend_task) ->
+  Cache.clear_and_init backend;
+  Lwt.join [
+    tcp_server port (callback backend);
+    backend_task ();
+  ]
+end
