@@ -1,7 +1,5 @@
 open Lwt.Infix
 
-module Intf = Intf
-
 type t = Server_workdirs.t
 type task = unit -> unit Lwt.t
 
@@ -92,10 +90,3 @@ let get_log workdir ~comp ~state ~pkg =
   let file = Fpath.(to_string (v comp/state/pkg)) in
   let file = Server_workdirs.file_from_logdir ~file workdir in
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
-
-let get_log_url pkg instance =
-  let comp = Intf.Instance.compiler instance in
-  let comp = Intf.Compiler.to_string comp in
-  let state = Intf.State.to_string (Intf.Instance.state instance) in
-  let pkg = Intf.Pkg.full_name pkg in
-  Printf.sprintf "/%s/%s/%s" comp state pkg

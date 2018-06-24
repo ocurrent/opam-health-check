@@ -1,6 +1,6 @@
 open Lwt.Infix
 
-open Backend.Intf
+open Intf
 
 module Html_cache = Hashtbl.Make (struct
     type t = Html.query

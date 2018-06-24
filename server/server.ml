@@ -24,11 +24,11 @@ let parse_raw_query uri =
   Cache.get_compilers () >>= fun available_compilers ->
   let compilers = match compilers with
     | [] | [""] -> available_compilers
-    | compilers -> List.map Backend.Intf.Compiler.from_string compilers
+    | compilers -> List.map Intf.Compiler.from_string compilers
   in
   let show_available = match show_available with
     | [] | [""] -> compilers
-    | show_available -> List.map Backend.Intf.Compiler.from_string show_available
+    | show_available -> List.map Intf.Compiler.from_string show_available
   in
   Lwt.return {
     Html.available_compilers;
@@ -59,8 +59,8 @@ let callback backend _conn req _body =
       Cache.get_html query >>= fun html ->
       serv_text ~content_type:"text/html" html
   | [comp; state; pkg] ->
-      let comp = Backend.Intf.Compiler.from_string comp in
-      let state = Backend.Intf.State.from_string state in
+      let comp = Intf.Compiler.from_string comp in
+      let state = Intf.State.from_string state in
       Backend.get_log backend ~comp ~state ~pkg >>= fun log ->
       serv_text ~content_type:"text/plain; charset=utf-8" log
   | _ ->

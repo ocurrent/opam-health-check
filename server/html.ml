@@ -1,4 +1,4 @@
-open Backend.Intf
+open Intf
 
 type query = {
   available_compilers : Compiler.t list;
@@ -10,15 +10,22 @@ type query = {
   maintainers : string * Re.re;
 }
 
+let log_url pkg instance =
+  let comp = Instance.compiler instance in
+  let comp = Compiler.to_string comp in
+  let state = State.to_string (Instance.state instance) in
+  let pkg = Pkg.full_name pkg in
+  Printf.sprintf "/%s/%s/%s" comp state pkg
+
 let instance_to_html ~pkg instances comp =
   let open Tyxml.Html in
   let td c = td ~a:[a_class ["result-col"; "results-cell"]; a_style ("background-color: "^c^";")] in
   match List.find_opt (fun i -> Compiler.equal (Instance.compiler i) comp) instances with
   | Some instance ->
       begin match Instance.state instance with
-      | State.Good -> td "green" [a ~a:[a_href (Backend.get_log_url pkg instance)] [pcdata "☑"]]
-      | State.Partial -> td "orange" [a ~a:[a_href (Backend.get_log_url pkg instance)] [pcdata "☒"]]
-      | State.Bad -> td "red" [a ~a:[a_href (Backend.get_log_url pkg instance)] [pcdata "☒"]]
+      | State.Good -> td "green" [a ~a:[a_href (log_url pkg instance)] [pcdata "☑"]]
+      | State.Partial -> td "orange" [a ~a:[a_href (log_url pkg instance)] [pcdata "☒"]]
+      | State.Bad -> td "red" [a ~a:[a_href (log_url pkg instance)] [pcdata "☒"]]
       end
   | None -> td "grey" [pcdata "☐"]
 
