@@ -31,8 +31,8 @@ let create () = {
 
 let clear_and_init self pkgs compilers =
   self.pkgsinfo <- Metainfo.get_pkgsinfo ();
-  self.compilers <- compilers;
-  self.pkgs <- pkgs;
+  self.compilers <- compilers ();
+  self.pkgs <- pkgs ();
   Html_cache.clear self.html_tbl
 
 let get_html self query =

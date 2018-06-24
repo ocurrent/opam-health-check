@@ -86,7 +86,7 @@ let tcp_server port callback =
     (Cohttp_lwt_unix.Server.make ~callback ())
 
 let cache_clear_and_init workdir =
-  Oca_server.Cache.clear_and_init cache (get_pkgs workdir) (get_compilers workdir)
+  Oca_server.Cache.clear_and_init cache (fun ()-> get_pkgs workdir) (fun () -> get_compilers workdir)
 
 let start conf workdir =
   let port = Server_configfile.admin_port conf in
