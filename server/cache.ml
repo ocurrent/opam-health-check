@@ -23,7 +23,7 @@ let compilers = ref Lwt.return_nil
 let clear_and_init backend =
   pkgsinfo := Metainfo.get_pkgsinfo ();
   compilers := Backend.get_compilers backend;
-  pkgs := Backend.get_pkgs !pkgsinfo !compilers backend;
+  pkgs := Backend.get_pkgs backend !pkgsinfo !compilers;
   Html_cache.clear html_tbl
 
 let get_html query =

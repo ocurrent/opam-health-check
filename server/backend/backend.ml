@@ -60,7 +60,7 @@ let add_pkg obi full_name instances acc =
   in
   Intf.Pkg.create ~full_name ~instances ~maintainers :: acc
 
-let get_pkgs obi compilers workdir =
+let get_pkgs workdir obi compilers =
   let pkg_tbl = Pkg_tbl.create 10_000 in
   obi >>= fun obi ->
   compilers >>= fun compilers ->
