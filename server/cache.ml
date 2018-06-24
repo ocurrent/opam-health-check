@@ -39,3 +39,6 @@ let get_html query =
 
 let get_compilers () =
   !compilers
+
+let get_pkgsinfo () =
+  !pkgsinfo
