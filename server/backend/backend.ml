@@ -3,8 +3,35 @@ open Lwt.Infix
 type t = unit -> Obi.Index.pkg list Lwt.t
 type task = unit -> unit Lwt.t
 
+(* TODO: Do a PR to ocaml-dockerfile *)
+let arch_eq x y = match x, y with
+  | `X86_64, `X86_64
+  | `Aarch64, `Aarch64
+  | `Ppc64le, `Ppc64le -> true
+  | (`X86_64 | `Aarch64 | `Ppc64le), _ -> false
+
+let params_eq {Obi.Index.arch; distro; ov} comp =
+  String.equal (Ocaml_version.to_string ov) (Intf.Compiler.to_string comp) &&
+  Dockerfile_distro.compare distro (`Debian `V9) = 0 &&
+  arch_eq arch `X86_64
+
 let get_log obi ~comp ~state ~pkg =
-  assert false
+  let pkg_name = Intf.Pkg.name pkg in
+  match List.find_opt (fun p -> String.equal p.Obi.Index.name pkg_name) obi with
+  | Some {Obi.Index.versions; _} ->
+      let pkg_ver = Intf.Pkg.version pkg in
+      begin match List.assoc_opt ~eq:String.equal pkg_ver versions with
+      | Some metadata ->
+          begin match List.find_opt (fun {Obi.Index.params; _} -> params_eq params comp) metadata, state with
+          | Some {Obi.Index.log = []; _}, Intf.State.Good -> Lwt.return ""
+          | Some {Obi.Index.log; _}, Intf.State.Bad -> Lwt.return (String.concat "\n" log)
+          | Some _, _ -> failwith "Can't find the log with the good state"
+          | None, _ -> failwith "Can't find the right compiler version / env"
+          end
+      | None -> failwith "Can't find the right package version"
+      end
+  | None ->
+      failwith "Can't find the package name"
 
 let get_compilers obi =
   let aux acc x =
