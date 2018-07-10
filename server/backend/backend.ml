@@ -60,9 +60,7 @@ let get_compilers obi =
   let compilers = get_compilers obi in
   List.sort Intf.Compiler.compare compilers
 
-let get_pkgs _ obi compilers =
-  obi >>= fun obi ->
-  compilers >|= fun compilers ->
+let get_pkgs obi compilers =
   List.fold_left
     begin fun acc {Obi.Index.name; maintainers; versions; _} ->
       List.fold_left
@@ -90,6 +88,12 @@ let get_pkgs _ obi compilers =
     end
     []
     obi
+
+let get_pkgs _ obi compilers =
+  obi >>= fun obi ->
+  compilers >|= fun compilers ->
+  let pkgs = get_pkgs obi compilers in
+  List.sort Intf.Pkg.compare pkgs
 
 let start ~on_finished:_ obi =
   (* TODO: Do a clock that calls on_finished every hour *)
