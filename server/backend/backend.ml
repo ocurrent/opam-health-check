@@ -72,12 +72,11 @@ let get_pkgs _ obi compilers =
               begin fun acc {Obi.Index.params; build_result; _} ->
                 if List.exists (params_eq params) compilers then
                   let comp = Intf.Compiler.from_string (Ocaml_version.to_string params.Obi.Index.ov) in
-                  let state = match build_result with
-                    | `Ok -> Intf.State.Good
-                    | `Fail _ -> Intf.State.Bad
-                    | _ -> Intf.State.Partial
-                  in
-                  Intf.Instance.create comp state :: acc
+                  match build_result with
+                  | `Ok -> Intf.Instance.create comp Intf.State.Good :: acc
+                  | `Fail _ -> Intf.Instance.create comp Intf.State.Bad :: acc
+                  | `Uninstallable _ -> acc
+                  | _ -> Intf.Instance.create comp Intf.State.Partial :: acc
                 else
                   acc
               end
