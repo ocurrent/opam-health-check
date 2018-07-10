@@ -56,7 +56,36 @@ let get_compilers obi =
   List.sort Intf.Compiler.compare compilers
 
 let get_pkgs _ obi compilers =
-  assert false
+  Lwt.return begin
+    List.fold_left
+      begin fun acc {Obi.Index.name; maintainers; versions; _} ->
+        List.fold_left
+          begin fun acc (v, metadata) ->
+            let instances =
+              List.fold_left
+                begin fun acc {Obi.Index.params; build_result; _} ->
+                  if List.exists (params_eq params) compilers then
+                    let comp = Intf.Compiler.from_string (Ocaml_version.to_string params.Obi.Index.ov) in
+                    let state = match build_result with
+                      | `Ok -> Intf.State.Good
+                      | `Fail _ -> Intf.State.Bad
+                      | _ -> Intf.State.Partial
+                    in
+                    Intf.Instance.create comp state :: acc
+                  else
+                    acc
+                end
+                []
+                metadata
+            in
+            Intf.Pkg.create ~full_name:(name^"."^v) ~instances ~maintainers :: acc
+          end
+          acc
+          versions
+      end
+      []
+      obi
+  end
 
 let start ~on_finished:_ obi =
   (* TODO: Do a clock that calls on_finished every hour *)
