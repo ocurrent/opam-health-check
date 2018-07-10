@@ -23,8 +23,9 @@ let get_log obi ~comp ~state ~pkg =
       begin match List.assoc_opt ~eq:String.equal pkg_ver versions with
       | Some metadata ->
           begin match List.find_opt (fun {Obi.Index.params; _} -> params_eq params comp) metadata, state with
-          | Some {Obi.Index.log = []; _}, Intf.State.Good -> Lwt.return ""
-          | Some {Obi.Index.log; _}, Intf.State.Bad -> Lwt.return (String.concat "\n" log)
+          | Some {Obi.Index.build_result = `Ok; log; _}, Intf.State.Good
+          | Some {Obi.Index.build_result = `Fail _; log; _}, Intf.State.Bad
+          | Some {Obi.Index.build_result = _; log; _}, Intf.State.Partial -> Lwt.return (String.concat "\n" log)
           | Some _, _ -> failwith "Can't find the log with the good state"
           | None, _ -> failwith "Can't find the right compiler version / env"
           end
