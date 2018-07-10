@@ -16,6 +16,8 @@ let params_eq {Obi.Index.arch; distro; ov} comp =
   arch_eq arch `X86_64
 
 let get_log obi ~comp ~state ~pkg =
+  obi () >|= fun obi ->
+  let pkg = Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] in
   let pkg_name = Intf.Pkg.name pkg in
   match List.find_opt (fun p -> String.equal p.Obi.Index.name pkg_name) obi with
   | Some {Obi.Index.versions; _} ->
@@ -25,7 +27,7 @@ let get_log obi ~comp ~state ~pkg =
           begin match List.find_opt (fun {Obi.Index.params; _} -> params_eq params comp) metadata, state with
           | Some {Obi.Index.build_result = `Ok; log; _}, Intf.State.Good
           | Some {Obi.Index.build_result = `Fail _; log; _}, Intf.State.Bad
-          | Some {Obi.Index.build_result = _; log; _}, Intf.State.Partial -> Lwt.return (String.concat "\n" log)
+          | Some {Obi.Index.build_result = _; log; _}, Intf.State.Partial -> String.concat "\n" log
           | Some _, _ -> failwith "Can't find the log with the good state"
           | None, _ -> failwith "Can't find the right compiler version / env"
           end
@@ -56,36 +58,36 @@ let get_compilers obi =
   List.sort Intf.Compiler.compare compilers
 
 let get_pkgs _ obi compilers =
-  Lwt.return begin
-    List.fold_left
-      begin fun acc {Obi.Index.name; maintainers; versions; _} ->
-        List.fold_left
-          begin fun acc (v, metadata) ->
-            let instances =
-              List.fold_left
-                begin fun acc {Obi.Index.params; build_result; _} ->
-                  if List.exists (params_eq params) compilers then
-                    let comp = Intf.Compiler.from_string (Ocaml_version.to_string params.Obi.Index.ov) in
-                    let state = match build_result with
-                      | `Ok -> Intf.State.Good
-                      | `Fail _ -> Intf.State.Bad
-                      | _ -> Intf.State.Partial
-                    in
-                    Intf.Instance.create comp state :: acc
-                  else
-                    acc
-                end
-                []
-                metadata
-            in
-            Intf.Pkg.create ~full_name:(name^"."^v) ~instances ~maintainers :: acc
-          end
-          acc
-          versions
-      end
-      []
-      obi
-  end
+  obi >>= fun obi ->
+  compilers >|= fun compilers ->
+  List.fold_left
+    begin fun acc {Obi.Index.name; maintainers; versions; _} ->
+      List.fold_left
+        begin fun acc (v, metadata) ->
+          let instances =
+            List.fold_left
+              begin fun acc {Obi.Index.params; build_result; _} ->
+                if List.exists (params_eq params) compilers then
+                  let comp = Intf.Compiler.from_string (Ocaml_version.to_string params.Obi.Index.ov) in
+                  let state = match build_result with
+                    | `Ok -> Intf.State.Good
+                    | `Fail _ -> Intf.State.Bad
+                    | _ -> Intf.State.Partial
+                  in
+                  Intf.Instance.create comp state :: acc
+                else
+                  acc
+              end
+              []
+              metadata
+          in
+          Intf.Pkg.create ~full_name:(name^"."^v) ~instances ~maintainers :: acc
+        end
+        acc
+        versions
+    end
+    []
+    obi
 
 let start ~on_finished:_ obi =
   (* TODO: Do a clock that calls on_finished every hour *)
