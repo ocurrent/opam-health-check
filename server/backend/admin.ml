@@ -41,6 +41,16 @@ let admin_action ~on_finished workdir body =
   | ["clear-cache"] ->
       on_finished workdir;
       Lwt.return_unit
+  | ["remove-column"; switch] ->
+      let switch = Intf.Compiler.from_string switch in
+      let logdir = Server_workdirs.switchlogdir ~switch workdir in
+      let fd, stdout = Lwt_unix.pipe () in
+      let proc = Oca_lib.exec ~stdin:`Close ~stdout ~stderr:stdout ["rm";"-rf";Fpath.to_string logdir] in
+      Lwt_unix.close stdout >>= fun () ->
+      Lwt_io.read (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun _ -> (* TODO: Do something with the error message *)
+      Lwt_unix.close fd >>= fun () ->
+      proc >|= fun () ->
+      on_finished workdir;
   | _ ->
       Lwt.fail_with "Action unrecognized."
 
