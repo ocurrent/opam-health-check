@@ -38,6 +38,9 @@ let admin_action ~on_finished workdir body =
       Check.check workdir ~on_finished ~dockerfile dir
   | ["add-user";username] ->
       create_userkey workdir username
+  | ["clear-cache"] ->
+      on_finished workdir;
+      Lwt.return_unit
   | _ ->
       Lwt.fail_with "Action unrecognized."
 
