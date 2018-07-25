@@ -3,7 +3,7 @@ open Lwt.Infix
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 
 let docker_build ~no_cache ~stderr ~img_name dockerfile =
-  let no_cache = if no_cache then ["--no-cache"] else [] in
+  let no_cache = if no_cache then ["--pull";"--no-cache"] else [] in
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
   Lwt_unix.set_close_on_exec fd;
