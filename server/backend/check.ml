@@ -24,10 +24,12 @@ let rec read_lines fd =
 let build_task = ref Lwt.return_unit
 
 let get_pkgs ~no_cache ~stderr ~dockerfile =
-  Lwt.catch (fun () -> !build_task) (fun _ -> Lwt.return_unit) >>= fun () ->
   let md5 = Digest.to_hex (Digest.string dockerfile) in
   let img_name = "opam-check-all-" ^ md5 in
-  docker_build ~no_cache ~stderr ~img_name dockerfile >>= fun () ->
+  Lwt.catch (fun () -> !build_task) (fun _ -> Lwt.return_unit) >>= fun () ->
+  let build = docker_build ~no_cache ~stderr ~img_name dockerfile in
+  build_task := build;
+  build >>= fun () ->
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   let fd, stdout = Lwt_unix.pipe () in
   let proc = docker_run ~stderr ~stdout img_name [] in
@@ -115,8 +117,6 @@ let check workdir ~no_cache ~on_finished ~dockerfile name =
   Server_workdirs.init_base_job ~switch:name ~stderr workdir >|= fun () ->
   Lwt.async begin fun () ->
     Jobs.add job_tbl name ();
-    let get_pkgs = get_pkgs ~no_cache ~stderr ~dockerfile in
-    build_task := get_pkgs >>= (fun _ -> Lwt.return_unit);
-    get_pkgs >>= fun (img_name, pkgs) ->
+    get_pkgs ~no_cache ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
     get_jobs ~on_finished ~stderr ~img_name ~switch:name workdir [] pkgs
   end
