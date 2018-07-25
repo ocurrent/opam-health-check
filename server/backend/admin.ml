@@ -34,9 +34,11 @@ let create_admin_key workdir =
 let admin_action ~on_finished workdir body =
   match String.split_on_char '\n' body with
   | "check"::dir::dockerfile ->
+      let dir = Intf.Compiler.from_string dir in
       let dockerfile = String.concat "\n" dockerfile in
       Check.check workdir ~no_cache:false ~on_finished ~dockerfile dir
   | "check-no-cache"::dir::dockerfile ->
+      let dir = Intf.Compiler.from_string dir in
       let dockerfile = String.concat "\n" dockerfile in
       Check.check workdir ~no_cache:true ~on_finished ~dockerfile dir
   | ["add-user";username] ->
