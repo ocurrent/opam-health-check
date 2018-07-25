@@ -37,6 +37,7 @@ let tmppartiallog ~pkg ~switch workdir = tmppartialdir ~switch workdir/pkg
 let tmpbadlog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
+let dockerfile ~switch workdir = switchilogdir ~switch workdir/"Dockerfile"
 let file_from_logdir ~file workdir =
   let file = Fpath.v file in
   let file = Fpath.segs file in

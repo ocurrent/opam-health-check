@@ -118,5 +118,7 @@ let check workdir ~no_cache ~on_finished ~dockerfile name =
   Lwt.async begin fun () ->
     Jobs.add job_tbl name ();
     get_pkgs ~no_cache ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
+    let dfile = Server_workdirs.dockerfile ~switch:name workdir in
+    Lwt_io.with_file ~flags:Unix.[O_CREAT] ~mode:Lwt_io.Output (Fpath.to_string dfile) (fun c -> Lwt_io.write c dockerfile) >>= fun () ->
     get_jobs ~on_finished ~stderr ~img_name ~switch:name workdir [] pkgs
   end

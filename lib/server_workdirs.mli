@@ -25,6 +25,7 @@ val tmppartiallog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 val tmpbadlog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 
 val configfile : t -> Fpath.t
+val dockerfile : switch:Intf.Compiler.t -> t -> Fpath.t
 val file_from_logdir : file:string -> t -> Fpath.t
 
 val init_base : t -> unit Lwt.t
