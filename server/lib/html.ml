@@ -33,6 +33,7 @@ let must_show_package query ~last pkg =
   let maintainers = Pkg.maintainers pkg in
   let instances = Pkg.instances pkg in
   List.exists (fun comp -> List.exists (fun instance -> Compiler.equal comp (Instance.compiler instance)) instances) query.show_available &&
+  let instances = List.filter (fun inst -> List.mem ~eq:Intf.Compiler.equal (Intf.Instance.compiler inst) query.compilers) instances in
   begin
     if query.show_failures_only then
       List.exists (fun instance -> match Instance.state instance with
