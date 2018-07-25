@@ -2,11 +2,12 @@ open Lwt.Infix
 
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 
-let docker_build ~stderr ~img_name dockerfile =
+let docker_build ~no_cache ~stderr ~img_name dockerfile =
+  let no_cache = if no_cache then ["--no-cache"] else [] in
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
   Lwt_unix.set_close_on_exec fd;
-  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr ["docker";"build";"-t";img_name;"-"] in
+  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build"]@no_cache@["-t";img_name;"-"]) in
   Oca_lib.write_line_unix fd dockerfile >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
   proc
@@ -22,11 +23,11 @@ let rec read_lines fd =
 (* NOTE: We need that so that docker won't build two exact things twice *)
 let build_task = ref Lwt.return_unit
 
-let get_pkgs ~stderr ~dockerfile =
+let get_pkgs ~no_cache ~stderr ~dockerfile =
   Lwt.catch (fun () -> !build_task) (fun _ -> Lwt.return_unit) >>= fun () ->
   let md5 = Digest.to_hex (Digest.string dockerfile) in
   let img_name = "opam-check-all-" ^ md5 in
-  docker_build ~stderr ~img_name dockerfile >>= fun () ->
+  docker_build ~no_cache ~stderr ~img_name dockerfile >>= fun () ->
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   let fd, stdout = Lwt_unix.pipe () in
   let proc = Oca_lib.exec ~stdin:`Close ~stderr ~stdout ["docker";"run";"--rm";img_name] in
@@ -104,7 +105,7 @@ let () =
     (* TODO: Close stderr *)
   end
 
-let check workdir ~on_finished ~dockerfile name =
+let check workdir ~no_cache ~on_finished ~dockerfile name =
   let name = Intf.Compiler.from_string name in
   if Jobs.mem job_tbl name then
     failwith "A job with the same name is already running";
@@ -114,7 +115,7 @@ let check workdir ~on_finished ~dockerfile name =
   Server_workdirs.init_base_job ~switch:name ~stderr workdir >|= fun () ->
   Lwt.async begin fun () ->
     Jobs.add job_tbl name ();
-    let get_pkgs = get_pkgs ~stderr ~dockerfile in
+    let get_pkgs = get_pkgs ~no_cache ~stderr ~dockerfile in
     build_task := get_pkgs >>= (fun _ -> Lwt.return_unit);
     get_pkgs >>= fun (img_name, pkgs) ->
     get_jobs ~on_finished ~stderr ~img_name ~switch:name workdir [] pkgs

@@ -35,7 +35,10 @@ let admin_action ~on_finished workdir body =
   match String.split_on_char '\n' body with
   | "check"::dir::dockerfile ->
       let dockerfile = String.concat "\n" dockerfile in
-      Check.check workdir ~on_finished ~dockerfile dir
+      Check.check workdir ~no_cache:false ~on_finished ~dockerfile dir
+  | "check-no-cache"::dir::dockerfile ->
+      let dockerfile = String.concat "\n" dockerfile in
+      Check.check workdir ~no_cache:true ~on_finished ~dockerfile dir
   | ["add-user";username] ->
       create_userkey workdir username
   | ["clear-cache"] ->
