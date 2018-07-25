@@ -108,7 +108,6 @@ let () =
   end
 
 let check workdir ~no_cache ~on_finished ~dockerfile name =
-  let name = Intf.Compiler.from_string name in
   if Jobs.mem job_tbl name then
     failwith "A job with the same name is already running";
   Oca_lib.mkdir_p (Server_workdirs.switchilogdir ~switch:name workdir) >>= fun () ->
