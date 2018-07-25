@@ -19,7 +19,11 @@ let rec read_lines fd =
   | Some line -> read_lines fd >|= List.cons line
   | None -> Lwt.return_nil
 
+(* NOTE: We need that so that docker won't build two exact things twice *)
+let build_task = ref Lwt.return_unit
+
 let get_pkgs ~stderr ~dockerfile =
+  Lwt.catch (fun () -> !build_task) (fun _ -> Lwt.return_unit) >>= fun () ->
   let md5 = Digest.to_hex (Digest.string dockerfile) in
   let img_name = "opam-check-all-" ^ md5 in
   docker_build ~stderr ~img_name dockerfile >>= fun () ->
@@ -110,6 +114,8 @@ let check workdir ~on_finished ~dockerfile name =
   Server_workdirs.init_base_job ~switch:name ~stderr workdir >|= fun () ->
   Lwt.async begin fun () ->
     Jobs.add job_tbl name ();
-    get_pkgs ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
+    let get_pkgs = get_pkgs ~stderr ~dockerfile in
+    build_task := get_pkgs >>= (fun _ -> Lwt.return_unit);
+    get_pkgs >>= fun (img_name, pkgs) ->
     get_jobs ~on_finished ~stderr ~img_name ~switch:name workdir [] pkgs
   end
