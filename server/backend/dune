@@ -1,0 +1,10 @@
+(library
+  (name backend)
+  (flags :standard -safe-string -w A-44-33-4 -open Containers)
+  (libraries
+    oca_lib
+    cohttp-lwt-unix
+    containers
+    obi
+    oca_server
+    nocrypto.lwt))

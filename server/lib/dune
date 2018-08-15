@@ -1,0 +1,12 @@
+(library
+  (name oca_server)
+  (flags :standard -safe-string -w A-44-33-4 -open Containers)
+  (modules_without_implementation backend_intf)
+  (libraries
+    tyxml
+    cohttp-lwt-unix
+    containers
+    re
+    git-unix
+    obi
+    oca_lib))

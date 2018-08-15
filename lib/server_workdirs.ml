@@ -19,7 +19,7 @@ let tmplogdir workdir = workdir/"tmplogs"
 
 let ilogdir workdir = workdir/"ilogs"
 let switchilogdir ~switch workdir = ilogdir workdir/Intf.Compiler.to_string switch
-let ilogfile ~switch workdir = switchilogdir ~switch workdir/Printf.sprintf "%.f" (Unix.time ())
+let ilogfile ~switch workdir = switchilogdir ~switch workdir/Printf.sprintf "%.0f" (Unix.time ())
 
 let switchlogdir ~switch workdir = logdir workdir/Intf.Compiler.to_string switch
 let gooddir ~switch workdir = switchlogdir ~switch workdir/"good"

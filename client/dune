@@ -1,20 +1,18 @@
-(jbuild_version 1)
-
 (executable
- ((name client)
+  (name client)
   (public_name opam-check-all)
-  (flags (:standard -safe-string -w A-44-33-4 -open Containers))
+  (flags :standard -safe-string -w A-44-33-4 -open Containers)
   (libraries
-   (nocrypto
+    nocrypto
     cohttp-lwt-unix
     containers
     xdg-basedir
     oca_lib
     cmdliner
-    yaml))))
+    yaml))
 
 (rule
   (with-stdout-to config.ml
     (progn
       (echo "let name = {|opam-check-all|}\n")
-      (echo "let version = {|${version:opam-check-all}|}\n"))))
+      (echo "let version = {|%{version:opam-check-all}|}\n"))))
