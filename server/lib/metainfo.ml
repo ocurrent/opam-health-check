@@ -12,7 +12,7 @@ let skip_sync_error = function
   | Error err -> Lwt.fail_with (Format.sprintf "Sync error %a" Sync.pp_error err)
 
 let get_pkgsinfo () =
-  Store.v () >>= skip_store_error >>= fun store ->
+  Store.v (Fpath.v Filename.current_dir_name) >>= skip_store_error >>= fun store ->
   let reference = Git.Reference.of_string "refs/heads/index" in
   Sync.clone_ext store ~reference (Uri.of_string "git://github.com/avsm/obi-logs.git") >>= skip_sync_error >>= fun repo ->
   Store.Ref.write store reference (Store.Reference.Hash repo) >>= skip_store_error >>= fun () ->
