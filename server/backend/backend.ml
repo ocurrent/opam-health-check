@@ -88,6 +88,7 @@ let tcp_server port callback =
 let cache_clear_and_init workdir =
   Oca_server.Cache.clear_and_init cache (fun ()-> get_pkgs workdir) (fun () -> get_compilers workdir)
 
+(* NOTE: now, at midnight then at midnight every other day *)
 let at_midnight f =
   let tm = Unix.localtime (Unix.time ()) in
   let hours_left = 24 - tm.Unix.tm_hour in
@@ -95,7 +96,7 @@ let at_midnight f =
   Lwt_unix.sleep (float_of_int (hours_left * 60 * 60 - mins_left * 60)) >>=
   let rec loop () =
     f () >>= fun () ->
-    Lwt_unix.sleep (float_of_int (24 * 60 * 60)) >>=
+    Lwt_unix.sleep (float_of_int (48 * 60 * 60)) >>=
     (* NOTE: Might not be *exactly* at midnight after a while but whatever *)
     loop
   in

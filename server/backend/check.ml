@@ -1,6 +1,6 @@
 open Lwt.Infix
 
-let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
+let pool = Lwt_pool.create 16 (fun () -> Lwt.return_unit)
 
 let docker_build ~no_cache ~stderr ~img_name dockerfile =
   let no_cache = if no_cache then ["--pull";"--no-cache"] else [] in
@@ -37,6 +37,7 @@ let get_pkgs ~no_cache ~stderr ~dockerfile =
   read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
   Lwt_unix.close fd >>= fun () ->
   let pkgs = List.filter Oca_lib.is_valid_filename pkgs in
+  let pkgs = List.sort (fun _ _ -> Random.(run (int 3)) - 1) pkgs in
   let nelts = string_of_int (List.length pkgs) in
   Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >>= fun () ->
   proc >|= fun () ->
