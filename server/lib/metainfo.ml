@@ -14,7 +14,7 @@ let skip_sync_error = function
 let get_pkgsinfo () =
   Store.v (Fpath.v Filename.current_dir_name) >>= skip_store_error >>= fun store ->
   let reference = Git.Reference.of_string "refs/heads/index" in
-  Sync.clone_ext store ~reference (Uri.of_string "git://github.com/avsm/obi-logs.git") >>= skip_sync_error >>= fun repo ->
+  Sync.clone_ext store ~reference (Uri.of_string "git://github.com/ocaml/obi-logs.git") >>= skip_sync_error >>= fun repo ->
   Store.Ref.write store reference (Store.Reference.Hash repo) >>= skip_store_error >>= fun () ->
   Store.Ref.write store Store.Reference.head (Store.Reference.Ref reference) >>= skip_store_error >>= fun () ->
   Store.Ref.resolve store Store.Reference.head >>= skip_store_error >>= fun hash ->
