@@ -11,7 +11,7 @@ let skip_sync_error = function
   | Ok x -> Lwt.return x
   | Error err -> Lwt.fail_with (Format.sprintf "Sync error %a" Sync.pp_error err)
 
-let get_pkgsinfo () =
+let get_pkgsinfo' () =
   Store.v (Fpath.v Filename.current_dir_name) >>= skip_store_error >>= fun store ->
   let reference = Git.Reference.of_string "refs/heads/index" in
   Sync.clone_ext store ~reference (Uri.of_string "git://github.com/ocaml/obi-logs.git") >>= skip_sync_error >>= fun repo ->
@@ -36,3 +36,7 @@ let get_pkgsinfo () =
       | None -> Lwt.fail_with "Metadata file not found"
       end
   | _ -> assert false
+
+(* Retry every minutes if something has gone wrong *)
+let rec get_pkgsinfo () =
+  Lwt.catch get_pkgsinfo' (fun _ -> Lwt_unix.sleep 60. >>= get_pkgsinfo)
