@@ -118,6 +118,7 @@ let cmds =
   [
     init_cmd ~confdir ~conffile;
     add_user_cmd ~confdir ~conffile;
+    set_ocaml_switches_cmd ~confdir ~conffile;
     run_cmd ~confdir ~conffile;
   ]
 
