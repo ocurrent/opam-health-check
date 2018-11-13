@@ -56,6 +56,7 @@ let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
         Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
         Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
         on_finished workdir;
+        Lwt.return_unit
       end
   | pkg::pkgs ->
       let job =
