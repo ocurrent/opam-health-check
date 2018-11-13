@@ -55,7 +55,6 @@ let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
         Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
         Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
         on_finished workdir;
-        Lwt_unix.close stderr
       end
   | pkg::pkgs ->
       let job =
@@ -86,7 +85,6 @@ let () =
   Lwt.async_exception_hook := begin fun e ->
     let msg = Printexc.to_string e in
     prerr_endline msg;
-    (* TODO: Close stderr *)
   end
 
 let get_dockerfile switch =
@@ -108,29 +106,32 @@ let acquire_queue f =
   (* TODO: Use Lwt.catch to ensure the queue can continue if anything happens *)
   Lwt.async (fun () -> !queue >|= fun () -> queue := Lwt_pool.use pool f)
 
-let get_stderr ~switch workdir =
+let with_stderr ~switch workdir f =
   Oca_lib.mkdir_p (Server_workdirs.switchilogdir ~switch workdir) >>= fun () ->
   let logfile = Server_workdirs.ilogfile ~switch workdir in
-  Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640
+  Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
+  Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
+let opam_repo_commit_hash = ref None
 let ocaml_switches = ref []
 let set_ocaml_switches workdir switches =
   let switches = List.sort Intf.Compiler.compare switches in
   Lwt_list.map_s begin fun switch ->
-    get_stderr ~switch workdir >|= fun stderr ->
     let img_name = "opam-check-all-"^Intf.Compiler.to_string switch in
-    acquire_queue (fun () -> docker_build ~stderr ~img_name (get_dockerfile switch));
-    (switch, img_name)
+    acquire_queue (fun () -> with_stderr ~switch workdir (docker_build ~img_name (get_dockerfile switch)));
+    Lwt.return (switch, img_name)
   end switches >|=
   (:=) ocaml_switches
 
 let run ~on_finished workdir =
   Lwt_list.iter_s begin fun (switch, img_name) ->
-    get_stderr ~switch workdir >>= fun stderr ->
-    Server_workdirs.init_base_job ~switch ~stderr workdir >|= fun () ->
+    Lwt_unix.sleep 1. >|= fun () -> (* TODO: Get rid of this and name the log files better (without timestamps) *)
     Lwt.async begin fun () ->
       !queue >>= fun () ->
-      get_pkgs ~stderr ~img_name >>=
-      get_jobs ~on_finished ~stderr ~img_name ~switch workdir []
+      with_stderr ~switch workdir begin fun ~stderr ->
+        Server_workdirs.init_base_job ~stderr ~switch workdir >|= fun () ->
+        get_pkgs ~stderr ~img_name >>=
+        get_jobs ~stderr ~on_finished ~img_name ~switch workdir []
+      end
     end
   end !ocaml_switches
