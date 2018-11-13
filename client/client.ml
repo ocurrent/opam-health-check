@@ -63,12 +63,16 @@ let set_ocaml_switches_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "set-ocaml-switches" in
   (term, info)
 
-let run ~confdir ~conffile =
+let run ~confdir ~conffile () =
   (* TODO: Catch the exception if the config file doesn't exist *)
   send_msg ~confdir ~conffile ["run"]
 
 let run_cmd ~confdir ~conffile =
-  let term = Cmdliner.Term.const (run ~confdir ~conffile) in
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (run ~confdir ~conffile) $
+    Cmdliner.Term.const ()
+  in
   let info = Cmdliner.Term.info "run" in
   (term, info)
 
