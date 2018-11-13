@@ -1,14 +1,14 @@
 open Lwt.Infix
 
 let pool = Lwt_pool.create 16 (fun () -> Lwt.return_unit)
+let queue = ref Lwt.return_unit
 
-let docker_build ~no_cache ~stderr ~img_name dockerfile =
-  let no_cache = if no_cache then ["--pull";"--no-cache"] else [] in
+let docker_build ~stderr ~img_name dockerfile =
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
   Lwt_unix.set_close_on_exec fd;
-  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build"]@no_cache@["-t";img_name;"-"]) in
-  Oca_lib.write_line_unix fd dockerfile >>= fun () ->
+  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build";"--pull";"-t";img_name;"-"]) in
+  Oca_lib.write_line_unix fd (Format.sprintf "%a" Dockerfile.pp dockerfile) >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
   proc
 
@@ -20,16 +20,7 @@ let rec read_lines fd =
   | Some line -> read_lines fd >|= List.cons line
   | None -> Lwt.return_nil
 
-(* NOTE: We need that so that docker won't build two exact things twice *)
-let build_task = ref Lwt.return_unit
-
-let get_pkgs ~no_cache ~stderr ~dockerfile =
-  let md5 = Digest.to_hex (Digest.string dockerfile) in
-  let img_name = "opam-check-all-" ^ md5 in
-  Lwt.catch (fun () -> !build_task) (fun _ -> Lwt.return_unit) >>= fun () ->
-  let build = docker_build ~no_cache ~stderr ~img_name dockerfile in
-  build_task := build;
-  build >>= fun () ->
+let get_pkgs ~stderr ~img_name =
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   let fd, stdout = Lwt_unix.pipe () in
   let proc = docker_run ~stderr ~stdout img_name [] in
@@ -41,7 +32,7 @@ let get_pkgs ~no_cache ~stderr ~dockerfile =
   let nelts = string_of_int (List.length pkgs) in
   Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >>= fun () ->
   proc >|= fun () ->
-  (img_name, pkgs)
+  pkgs
 
 let is_partial_failure logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
@@ -54,15 +45,6 @@ let is_partial_failure logfile =
     lookup ()
   end
 
-module Jobs = Hashtbl.Make (struct
-    type t = Intf.Compiler.t
-
-    let hash = Hashtbl.hash
-    let equal = Intf.Compiler.equal
-  end)
-
-let job_tbl = Jobs.create 32
-
 let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
   | [] ->
       Lwt_pool.use pool begin fun () ->
@@ -73,7 +55,6 @@ let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
         Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
         Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
         on_finished workdir;
-        Jobs.remove job_tbl switch;
         Lwt_unix.close stderr
       end
   | pkg::pkgs ->
@@ -108,17 +89,48 @@ let () =
     (* TODO: Close stderr *)
   end
 
-let check workdir ~no_cache ~on_finished ~dockerfile name =
-  if Jobs.mem job_tbl name then
-    failwith "A job with the same name is already running";
-  Oca_lib.mkdir_p (Server_workdirs.switchilogdir ~switch:name workdir) >>= fun () ->
-  let logfile = Server_workdirs.ilogfile ~switch:name workdir in
-  Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640 >>= fun stderr ->
-  Server_workdirs.init_base_job ~switch:name ~stderr workdir >|= fun () ->
-  Lwt.async begin fun () ->
-    Jobs.add job_tbl name ();
-    get_pkgs ~no_cache ~stderr ~dockerfile >>= fun (img_name, pkgs) ->
-    let dfile = Server_workdirs.dockerfile ~switch:name workdir in
-    Lwt_io.with_file ~flags:Unix.[O_CREAT] ~mode:Lwt_io.Output (Fpath.to_string dfile) (fun c -> Lwt_io.write c dockerfile) >>= fun () ->
-    get_jobs ~on_finished ~stderr ~img_name ~switch:name workdir [] pkgs
-  end
+let get_dockerfile switch =
+  let open Dockerfile in
+  from "ocaml/opam2:debian-unstable-opam" @@
+  run "sudo apt-get update" @@
+  workdir "opam-repository" @@
+  run "git pull origin master" @@
+  run "opam update" @@
+  run "opam admin cache" @@
+  run "echo 'wrap-build-commands: []' >> ~/.opamrc" @@
+  run "echo 'wrap-install-commands: []' >> ~/.opamrc" @@
+  run "echo 'wrap-remove-commands: []' >> ~/.opamrc" @@
+  run "opam init -yac %s ." (Intf.Compiler.to_string switch) @@
+  run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
+  run "opam install -y opam-depext" @@
+  cmd "opam list --installable --available --short --all-versions"
+
+let acquire_queue f =
+  Lwt.async (fun () -> !queue >|= fun () -> queue := Lwt_pool.use pool f)
+
+let get_stderr ~switch workdir =
+  Oca_lib.mkdir_p (Server_workdirs.switchilogdir ~switch workdir) >>= fun () ->
+  let logfile = Server_workdirs.ilogfile ~switch workdir in
+  Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC; O_EXCL] 0o640
+
+let ocaml_switches = ref []
+let set_ocaml_switches workdir switches =
+  let switches = List.sort Intf.Compiler.compare switches in
+  Lwt_list.map_s begin fun switch ->
+    get_stderr ~switch workdir >|= fun stderr ->
+    let img_name = "opam-check-all-"^Intf.Compiler.to_string switch in
+    acquire_queue (fun () -> docker_build ~stderr ~img_name (get_dockerfile switch));
+    (switch, img_name)
+  end switches >|=
+  (:=) ocaml_switches
+
+let run ~on_finished workdir =
+  Lwt_list.iter_s begin fun (switch, img_name) ->
+    get_stderr ~switch workdir >>= fun stderr ->
+    Server_workdirs.init_base_job ~switch ~stderr workdir >|= fun () ->
+    Lwt.async begin fun () ->
+      !queue >>= fun () ->
+      get_pkgs ~stderr ~img_name >>=
+      get_jobs ~on_finished ~stderr ~img_name ~switch workdir []
+    end
+  end !ocaml_switches

@@ -51,20 +51,25 @@ let send_msg ~confdir ~conffile msg =
     process_response
   end
 
-let check ~confdir ~conffile comp dockerfile =
-  (* TODO: Catch the exception if the config file doesn't exist *)
-  let dockerfile = IO.with_in dockerfile (IO.read_all ?size:None) in
-  let msg = ["check";comp;dockerfile] in
-  send_msg ~confdir ~conffile msg
+let set_ocaml_switches ~confdir ~conffile switches =
+  send_msg ~confdir ~conffile ("set-ocaml-switches"::switches)
 
-let check_cmd ~confdir ~conffile =
+let set_ocaml_switches_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (check ~confdir ~conffile) $
-    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" []) $
-    Cmdliner.Arg.(required & pos 1 (some string) None & info ~docv:"DOCKERFILE" [])
+    Cmdliner.Term.const (set_ocaml_switches ~confdir ~conffile) $
+    Cmdliner.Arg.(value & pos 0 (list string) [] & info ~docv:"SWITCHES" [])
   in
-  let info = Cmdliner.Term.info "check" in
+  let info = Cmdliner.Term.info "set-ocaml-switches" in
+  (term, info)
+
+let run ~confdir ~conffile =
+  (* TODO: Catch the exception if the config file doesn't exist *)
+  send_msg ~confdir ~conffile ["run"]
+
+let run_cmd ~confdir ~conffile =
+  let term = Cmdliner.Term.const (run ~confdir ~conffile) in
+  let info = Cmdliner.Term.info "run" in
   (term, info)
 
 let add_user ~confdir ~conffile username =
@@ -109,7 +114,7 @@ let cmds =
   [
     init_cmd ~confdir ~conffile;
     add_user_cmd ~confdir ~conffile;
-    check_cmd ~confdir ~conffile;
+    run_cmd ~confdir ~conffile;
   ]
 
 let () =

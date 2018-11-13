@@ -102,29 +102,18 @@ let at_midnight f =
   in
   loop
 
-let run_all_current_columns ~on_finished workdir =
-  get_compilers workdir >>= function
-  | [] -> Lwt.return_unit
-  | x::xs ->
-      let aux f ~no_cache switch =
-        let dockerfile = Server_workdirs.dockerfile ~switch workdir in
-        Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string dockerfile) (Lwt_io.read ?count:None) >>= fun dockerfile ->
-        f workdir ~no_cache ~on_finished ~dockerfile switch
-      in
-      aux Check.check ~no_cache:true x >>= fun () ->
-      Lwt_list.iter_s (aux Check.check ~no_cache:false) xs
-
 let start conf workdir =
   let port = Server_configfile.admin_port conf in
   let on_finished = cache_clear_and_init in
   let callback = Admin.callback ~on_finished workdir in
   cache_clear_and_init workdir;
+  get_compilers workdir >>= Check.set_ocaml_switches workdir >>= fun () ->
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->
   let task () =
     Lwt.join [
       tcp_server port callback;
-      at_midnight (fun () -> run_all_current_columns ~on_finished workdir);
+      at_midnight (fun () -> Check.run ~on_finished workdir);
     ]
   in
   (workdir, task)

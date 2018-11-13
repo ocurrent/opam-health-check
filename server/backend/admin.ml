@@ -33,29 +33,16 @@ let create_admin_key workdir =
 
 let admin_action ~on_finished workdir body =
   match String.split_on_char '\n' body with
-  | "check"::dir::dockerfile ->
-      let dir = Intf.Compiler.from_string dir in
-      let dockerfile = String.concat "\n" dockerfile in
-      Check.check workdir ~no_cache:false ~on_finished ~dockerfile dir
-  | "check-no-cache"::dir::dockerfile ->
-      let dir = Intf.Compiler.from_string dir in
-      let dockerfile = String.concat "\n" dockerfile in
-      Check.check workdir ~no_cache:true ~on_finished ~dockerfile dir
+  | "set-ocaml-switches"::dirs ->
+      let dirs = List.map Intf.Compiler.from_string dirs in
+      Check.set_ocaml_switches workdir dirs
+  | ["run"] ->
+      Check.run ~on_finished workdir
   | ["add-user";username] ->
       create_userkey workdir username
   | ["clear-cache"] ->
       on_finished workdir;
       Lwt.return_unit
-  | ["remove-column"; switch] ->
-      let switch = Intf.Compiler.from_string switch in
-      let logdir = Server_workdirs.switchlogdir ~switch workdir in
-      let fd, stdout = Lwt_unix.pipe () in
-      let proc = Oca_lib.exec ~stdin:`Close ~stdout ~stderr:stdout ["rm";"-rf";Fpath.to_string logdir] in
-      Lwt_unix.close stdout >>= fun () ->
-      Lwt_io.read (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun _ -> (* TODO: Do something with the error message *)
-      Lwt_unix.close fd >>= fun () ->
-      proc >|= fun () ->
-      on_finished workdir;
   | _ ->
       Lwt.fail_with "Action unrecognized."
 
