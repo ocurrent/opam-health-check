@@ -52,7 +52,7 @@ let exec ~stdin ~stdout ~stderr cmd =
       write_line_unix stderr_lwt ("Command '"^cmd^"' failed.") >>= fun () ->
       Lwt.fail Process_failure
 
-let protocol_version = "1"
+let protocol_version = "2"
 let default_html_port = "8080"
 let default_admin_port = "9999"
 let default_admin_name = "admin"
