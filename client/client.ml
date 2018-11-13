@@ -58,7 +58,7 @@ let set_ocaml_switches_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (set_ocaml_switches ~confdir ~conffile) $
-    Cmdliner.Arg.(value & pos 0 (list string) [] & info ~docv:"SWITCHES" [])
+    Cmdliner.Arg.(value & pos_all string [] & info ~docv:"SWITCHES" [])
   in
   let info = Cmdliner.Term.info "set-ocaml-switches" in
   (term, info)
