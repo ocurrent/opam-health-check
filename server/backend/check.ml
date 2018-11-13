@@ -95,7 +95,6 @@ let get_dockerfile switch =
   run "sudo apt-get update" @@
   workdir "opam-repository" @@
   run "git pull origin master" @@
-  run "opam update" @@
   run "opam admin cache" @@
   run "echo 'wrap-build-commands: []' >> ~/.opamrc" @@
   run "echo 'wrap-install-commands: []' >> ~/.opamrc" @@
@@ -106,6 +105,7 @@ let get_dockerfile switch =
   cmd "opam list --installable --available --short --all-versions"
 
 let acquire_queue f =
+  (* TODO: Use Lwt.catch to ensure the queue can continue if anything happens *)
   Lwt.async (fun () -> !queue >|= fun () -> queue := Lwt_pool.use pool f)
 
 let get_stderr ~switch workdir =
