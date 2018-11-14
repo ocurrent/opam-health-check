@@ -3,11 +3,12 @@ open Lwt.Infix
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 let queue = ref Lwt.return_unit
 
-let docker_build ~stderr ~img_name dockerfile =
+let docker_build ~cached ~stderr ~img_name dockerfile =
+  let cache = if cached then [] else ["--pull";"--no-cache"] in
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
   Lwt_unix.set_close_on_exec fd;
-  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build";"--pull";"-t";img_name;"-"]) in
+  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build"]@cache@["-t";img_name;"-"]) in
   Oca_lib.write_line_unix fd (Format.sprintf "%a" Dockerfile.pp dockerfile) >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
   proc
@@ -118,11 +119,12 @@ let opam_repo_commit_hash = ref None
 let ocaml_switches = ref []
 let set_ocaml_switches workdir switches =
   let switches = List.sort Intf.Compiler.compare switches in
-  Lwt_list.map_s begin fun switch ->
+  List.mapi begin fun i switch ->
     let img_name = "opam-check-all-"^Intf.Compiler.to_string switch in
-    acquire_queue (fun () -> with_stderr ~switch workdir (docker_build ~img_name (get_dockerfile switch)));
-    Lwt.return (switch, img_name)
-  end switches >|=
+    let cached = match i with 0 -> false | _ -> true in
+    acquire_queue (fun () -> with_stderr ~switch workdir (docker_build ~cached ~img_name (get_dockerfile switch)));
+    (switch, img_name)
+  end switches |>
   (:=) ocaml_switches
 
 let run ~on_finished workdir =
