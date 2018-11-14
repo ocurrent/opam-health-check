@@ -64,20 +64,20 @@ let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
           Oca_lib.write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
           let logfile = Server_workdirs.tmplogfile ~pkg ~switch workdir in
           Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
-          Lwt.finalize begin fun () ->
-            Lwt.catch begin fun () ->
-              docker_run ~stdout ~stderr:stdout img_name ["opam";"depext";"-ivy";pkg] >>= fun () ->
-              Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch workdir))
-            end begin function
-            | Oca_lib.Process_failure ->
-                is_partial_failure logfile >>= begin function
-                | true -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
-                | false -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
-                end
-            | e -> Lwt.fail e
-            end
-          end begin fun () ->
-            Lwt_unix.close stdout
+          Lwt.catch begin fun () ->
+            Lwt.finalize begin fun () ->
+              docker_run ~stdout ~stderr:stdout img_name ["opam";"depext";"-ivy";pkg]
+            end begin fun () ->
+              Lwt_unix.close stdout
+            end >>= fun () ->
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch workdir))
+          end begin function
+          | Oca_lib.Process_failure ->
+              is_partial_failure logfile >>= begin function
+              | true -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
+              | false -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
+              end
+          | e -> Lwt.fail e
           end
         end
       in
