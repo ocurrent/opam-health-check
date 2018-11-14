@@ -1,6 +1,6 @@
 open Lwt.Infix
 
-let pool = Lwt_pool.create 16 (fun () -> Lwt.return_unit)
+let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
 let queue = ref Lwt.return_unit
 
 let docker_build ~stderr ~img_name dockerfile =
