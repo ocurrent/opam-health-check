@@ -48,8 +48,8 @@ let is_partial_failure logfile =
 
 let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
   | [] ->
+      Lwt.join jobs >>= fun () ->
       Lwt_pool.use pool begin fun () ->
-        Lwt.join jobs >>= fun () ->
         let logdir = Server_workdirs.switchlogdir ~switch workdir in
         let tmplogdir = Server_workdirs.tmpswitchlogdir ~switch workdir in
         (* TODO: replace by Oca_lib.rm_rf *)
