@@ -18,8 +18,7 @@ let logdir workdir = workdir/"logs"
 let tmplogdir workdir = workdir/"tmplogs"
 
 let ilogdir workdir = workdir/"ilogs"
-let switchilogdir ~switch workdir = ilogdir workdir/Intf.Compiler.to_string switch
-let ilogfile ~switch workdir = switchilogdir ~switch workdir/Printf.sprintf "%.0f" (Unix.time ())
+let ilogfile workdir = ilogdir workdir/Printf.sprintf "%.0f" (Unix.time ())
 
 let switchlogdir ~switch workdir = logdir workdir/Intf.Compiler.to_string switch
 let gooddir ~switch workdir = switchlogdir ~switch workdir/"good"
@@ -37,7 +36,6 @@ let tmppartiallog ~pkg ~switch workdir = tmppartialdir ~switch workdir/pkg
 let tmpbadlog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
-let dockerfile ~switch workdir = switchilogdir ~switch workdir/"Dockerfile"
 let file_from_logdir ~file workdir =
   let file = Fpath.v file in
   let file = Fpath.segs file in

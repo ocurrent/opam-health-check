@@ -9,8 +9,7 @@ val logdir : t -> Fpath.t
 val tmplogdir : t -> Fpath.t
 
 val ilogdir : t -> Fpath.t
-val switchilogdir : switch:Intf.Compiler.t -> t -> Fpath.t
-val ilogfile : switch:Intf.Compiler.t -> t -> Fpath.t
+val ilogfile : t -> Fpath.t
 
 val switchlogdir : switch:Intf.Compiler.t -> t -> Fpath.t
 val gooddir : switch:Intf.Compiler.t -> t -> Fpath.t
@@ -25,7 +24,6 @@ val tmppartiallog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 val tmpbadlog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 
 val configfile : t -> Fpath.t
-val dockerfile : switch:Intf.Compiler.t -> t -> Fpath.t
 val file_from_logdir : file:string -> t -> Fpath.t
 
 val init_base : t -> unit Lwt.t

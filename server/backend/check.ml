@@ -1,7 +1,6 @@
 open Lwt.Infix
 
 let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
-let queue = ref Lwt.return_unit
 
 let docker_build ~cached ~stderr ~img_name dockerfile =
   let cache = if cached then [] else ["--pull";"--no-cache"] in
@@ -47,42 +46,27 @@ let is_partial_failure logfile =
     lookup ()
   end
 
-let rec get_jobs ~on_finished ~stderr ~img_name ~switch workdir jobs = function
-  | [] ->
-      Lwt.join jobs >>= fun () ->
-      Lwt_pool.use pool begin fun () ->
-        let logdir = Server_workdirs.switchlogdir ~switch workdir in
-        let tmplogdir = Server_workdirs.tmpswitchlogdir ~switch workdir in
-        (* TODO: replace by Oca_lib.rm_rf *)
-        Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
-        Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
-        on_finished workdir;
-        Lwt.return_unit
-      end
-  | pkg::pkgs ->
-      let job =
-        Lwt_pool.use pool begin fun () ->
-          Oca_lib.write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
-          let logfile = Server_workdirs.tmplogfile ~pkg ~switch workdir in
-          Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
-          Lwt.catch begin fun () ->
-            Lwt.finalize begin fun () ->
-              docker_run ~stdout ~stderr:stdout img_name ["opam";"depext";"-ivy";pkg]
-            end begin fun () ->
-              Lwt_unix.close stdout
-            end >>= fun () ->
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch workdir))
-          end begin function
-          | Oca_lib.Process_failure ->
-              is_partial_failure logfile >>= begin function
-              | true -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
-              | false -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
-              end
-          | e -> Lwt.fail e
-          end
+let run_job ~stderr ~img_name ~switch workdir pkg =
+  Lwt_pool.use pool begin fun () ->
+    Oca_lib.write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
+    let logfile = Server_workdirs.tmplogfile ~pkg ~switch workdir in
+    Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
+    Lwt.catch begin fun () ->
+      Lwt.finalize begin fun () ->
+        docker_run ~stdout ~stderr:stdout img_name ["opam";"depext";"-ivy";pkg]
+      end begin fun () ->
+        Lwt_unix.close stdout
+      end >>= fun () ->
+      Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch workdir))
+    end begin function
+    | Oca_lib.Process_failure ->
+        is_partial_failure logfile >>= begin function
+        | true -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
+        | false -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
         end
-      in
-      get_jobs ~on_finished ~stderr ~img_name ~switch workdir (job :: jobs) pkgs
+    | e -> Lwt.fail e
+    end
+  end
 
 let () =
   Lwt.async_exception_hook := begin fun e ->
@@ -105,13 +89,9 @@ let get_dockerfile switch =
   run "opam install -y opam-depext" @@
   cmd "opam list --installable --available --short --all-versions"
 
-let acquire_queue f =
-  (* TODO: Use Lwt.catch to ensure the queue can continue if anything happens *)
-  Lwt.async (fun () -> !queue >|= fun () -> queue := Lwt_pool.use pool f)
-
-let with_stderr ~switch workdir f =
-  Oca_lib.mkdir_p (Server_workdirs.switchilogdir ~switch workdir) >>= fun () ->
-  let logfile = Server_workdirs.ilogfile ~switch workdir in
+let with_stderr workdir f =
+  Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) >>= fun () ->
+  let logfile = Server_workdirs.ilogfile workdir in
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
   Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
@@ -121,21 +101,28 @@ let set_ocaml_switches switches =
   Lwt.return_unit
 
 let run ~on_finished workdir =
-  !ocaml_switches |>
-  List.mapi begin fun i switch ->
-    let img_name = "opam-check-all-"^Intf.Compiler.to_string switch in
-    let cached = match i with 0 -> false | _ -> true in
-    acquire_queue (fun () -> with_stderr ~switch workdir (docker_build ~cached ~img_name (get_dockerfile switch)));
-    (switch, img_name)
-  end |>
-  Lwt_list.iter_s begin fun (switch, img_name) ->
-    Lwt_unix.sleep 1. >|= fun () -> (* TODO: Get rid of this and name the log files better (without timestamps) *)
-    Lwt.async begin fun () ->
-      !queue >>= fun () ->
-      with_stderr ~switch workdir begin fun ~stderr ->
-        Server_workdirs.init_base_job ~stderr ~switch workdir >|= fun () ->
-        get_pkgs ~stderr ~img_name >>=
-        get_jobs ~stderr ~on_finished ~img_name ~switch workdir []
-      end
+  let switches = !ocaml_switches in
+  Lwt.async begin fun () ->
+    with_stderr workdir begin fun ~stderr ->
+      switches |>
+      Lwt_list.fold_left_s begin fun (jobs, i) switch ->
+        let img_name = "opam-check-all-"^Intf.Compiler.to_string switch in
+        let cached = match i with 0 -> false | _ -> true in
+        docker_build ~stderr ~cached ~img_name (get_dockerfile switch) >>= fun () ->
+        Server_workdirs.init_base_job ~stderr ~switch workdir >>= fun () ->
+        get_pkgs ~stderr ~img_name >|= fun pkgs ->
+        (List.map (run_job ~stderr ~img_name ~switch workdir) pkgs @ jobs, succ i)
+      end ([], 0) >>= fun (jobs, _) ->
+      Lwt.join jobs >>= fun () ->
+      switches |>
+      Lwt_list.iter_s begin fun switch ->
+        let logdir = Server_workdirs.switchlogdir ~switch workdir in
+        let tmplogdir = Server_workdirs.tmpswitchlogdir ~switch workdir in
+        (* TODO: replace by Oca_lib.rm_rf *)
+        Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
+        Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir)
+      end >|= fun () ->
+      on_finished workdir
     end
-  end
+  end;
+  Lwt.return_unit
