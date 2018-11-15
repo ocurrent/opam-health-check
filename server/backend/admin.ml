@@ -35,7 +35,7 @@ let admin_action ~on_finished workdir body =
   match String.split_on_char '\n' body with
   | "set-ocaml-switches"::dirs ->
       let dirs = List.map Intf.Compiler.from_string dirs in
-      Check.set_ocaml_switches workdir dirs
+      Check.set_ocaml_switches dirs
   | ["run"] ->
       Check.run ~on_finished workdir
   | ["add-user";username] ->

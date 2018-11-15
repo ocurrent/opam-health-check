@@ -115,19 +115,19 @@ let with_stderr ~switch workdir f =
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
   Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
-let opam_repo_commit_hash = ref None
 let ocaml_switches = ref []
-let set_ocaml_switches workdir switches =
-  let switches = List.sort Intf.Compiler.compare switches in
+let set_ocaml_switches switches =
+  ocaml_switches := List.sort Intf.Compiler.compare switches;
+  Lwt.return_unit
+
+let run ~on_finished workdir =
+  !ocaml_switches |>
   List.mapi begin fun i switch ->
     let img_name = "opam-check-all-"^Intf.Compiler.to_string switch in
     let cached = match i with 0 -> false | _ -> true in
     acquire_queue (fun () -> with_stderr ~switch workdir (docker_build ~cached ~img_name (get_dockerfile switch)));
     (switch, img_name)
-  end switches |>
-  (:=) ocaml_switches
-
-let run ~on_finished workdir =
+  end |>
   Lwt_list.iter_s begin fun (switch, img_name) ->
     Lwt_unix.sleep 1. >|= fun () -> (* TODO: Get rid of this and name the log files better (without timestamps) *)
     Lwt.async begin fun () ->
@@ -138,4 +138,4 @@ let run ~on_finished workdir =
         get_jobs ~stderr ~on_finished ~img_name ~switch workdir []
       end
     end
-  end !ocaml_switches
+  end

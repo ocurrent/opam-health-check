@@ -107,7 +107,7 @@ let start conf workdir =
   let on_finished = cache_clear_and_init in
   let callback = Admin.callback ~on_finished workdir in
   cache_clear_and_init workdir;
-  get_compilers workdir >>= Check.set_ocaml_switches workdir >>= fun () ->
+  get_compilers workdir >>= Check.set_ocaml_switches >>= fun () ->
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->
   let task () =
