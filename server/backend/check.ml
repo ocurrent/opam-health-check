@@ -102,6 +102,7 @@ let set_ocaml_switches switches =
 
 let run ~on_finished workdir =
   let switches = !ocaml_switches in
+  (* TODO: Add a lock here in case this function is triggered while it's already running *)
   Lwt.async begin fun () ->
     with_stderr workdir begin fun ~stderr ->
       switches |>

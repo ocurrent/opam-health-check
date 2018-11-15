@@ -88,17 +88,18 @@ let tcp_server port callback =
 let cache_clear_and_init workdir =
   Oca_server.Cache.clear_and_init cache (fun ()-> get_pkgs workdir) (fun () -> get_compilers workdir)
 
-let every_other_day f =
+let run_action_loop ~run_promise f =
   let two_days = float_of_int (48 * 60 * 60) in
   let rec loop () =
-    Lwt_unix.sleep two_days >>= f >>= loop
+    Lwt.choose [Lwt_unix.sleep two_days; run_promise] >>= f >>= loop
   in
   loop ()
 
 let start conf workdir =
   let port = Server_configfile.admin_port conf in
   let on_finished = cache_clear_and_init in
-  let callback = Admin.callback ~on_finished workdir in
+  let run_promise, run_trigger = Lwt.wait () in
+  let callback = Admin.callback ~on_finished ~run_trigger workdir in
   cache_clear_and_init workdir;
   get_compilers workdir >>= Check.set_ocaml_switches >>= fun () ->
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
@@ -106,7 +107,7 @@ let start conf workdir =
   let task () =
     Lwt.join [
       tcp_server port callback;
-      every_other_day (fun () -> Check.run ~on_finished workdir);
+      run_action_loop ~run_promise (fun () -> Check.run ~on_finished workdir);
     ]
   in
   (workdir, task)

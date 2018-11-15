@@ -31,13 +31,14 @@ let create_admin_key workdir =
   | true -> Lwt.return_unit
   | false -> create_userkey workdir username
 
-let admin_action ~on_finished workdir body =
+let admin_action ~on_finished ~run_trigger workdir body =
   match String.split_on_char '\n' body with
   | "set-ocaml-switches"::dirs ->
       let dirs = List.map Intf.Compiler.from_string dirs in
       Check.set_ocaml_switches dirs
   | ["run"] ->
-      Check.run ~on_finished workdir
+      Lwt.wakeup run_trigger ();
+      Lwt.return_unit
   | ["add-user";username] ->
       create_userkey workdir username
   | ["clear-cache"] ->
@@ -66,7 +67,7 @@ let rec decrypt key msg =
     let msg, next = String.take_drop key_size msg in
     partial_decrypt key msg ^ decrypt key next
 
-let callback ~on_finished workdir _conn _req body =
+let callback ~on_finished ~run_trigger workdir _conn _req body =
   Cohttp_lwt.Body.to_string body >>= fun body ->
   match String.Split.left ~by:"\n" body with
   | Some (pversion, body) when String.equal Oca_lib.protocol_version pversion ->
@@ -78,7 +79,7 @@ let callback ~on_finished workdir _conn _req body =
           let body = decrypt key body in
           begin match String.Split.left ~by:"\n" body with
           | Some (user', body) when String.equal user user' ->
-              admin_action ~on_finished workdir body >>= fun () ->
+              admin_action ~on_finished ~run_trigger workdir body >>= fun () ->
               Cohttp_lwt_unix.Server.respond ~status:`OK ~body:`Empty ()
           | Some _ ->
               Lwt.fail_with "Identity couldn't be ensured"
