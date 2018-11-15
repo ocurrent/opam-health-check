@@ -37,8 +37,7 @@ let admin_action ~on_finished ~run_trigger workdir body =
       let dirs = List.map Intf.Compiler.from_string dirs in
       Check.set_ocaml_switches dirs
   | ["run"] ->
-      Lwt.wakeup run_trigger ();
-      Lwt.return_unit
+      Lwt_mvar.put run_trigger ()
   | ["add-user";username] ->
       create_userkey workdir username
   | ["clear-cache"] ->

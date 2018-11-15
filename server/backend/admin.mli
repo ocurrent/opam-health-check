@@ -2,7 +2,7 @@ val create_admin_key : Server_workdirs.t -> unit Lwt.t
 
 val callback :
   on_finished:(Server_workdirs.t -> unit) ->
-  run_trigger:unit Lwt.u ->
+  run_trigger:unit Lwt_mvar.t ->
   Server_workdirs.t ->
   Cohttp_lwt_unix.Server.conn ->
   Cohttp.Request.t ->
