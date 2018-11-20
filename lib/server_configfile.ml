@@ -1,11 +1,13 @@
 type t = {
   mutable port : string option;
   mutable admin_port : string option;
+  mutable list_command : string option;
 }
 
 let create_conf () = {
   port = None;
   admin_port = None;
+  list_command = None;
 }
 
 let set_field ~field set = function
@@ -17,6 +19,8 @@ let set_config conf = function
       set_field ~field (fun () -> conf.port <- Some port) conf.port
   | "admin-port" as field, `String admin_port ->
       set_field ~field (fun () -> conf.admin_port <- Some admin_port) conf.admin_port
+  | "list-command" as field, `String list_command ->
+      set_field ~field (fun () -> conf.list_command <- Some list_command) conf.list_command
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
@@ -24,6 +28,7 @@ let yaml_of_conf conf =
   `O [
     "port", `String (Option.get_exn conf.port);
     "admin-port", `String (Option.get_exn conf.admin_port);
+    "list-command", `String (Option.get_exn conf.list_command);
   ]
 
 let set_defaults yamlfile conf =
@@ -31,6 +36,8 @@ let set_defaults yamlfile conf =
     conf.port <- Some Oca_lib.default_html_port;
   if Option.is_none conf.admin_port then
     conf.admin_port <- Some Oca_lib.default_admin_port;
+  if Option.is_none conf.list_command then
+    conf.list_command <- Some Oca_lib.default_list_command;
   let yaml = Result.get_exn (Yaml.to_string (yaml_of_conf conf)) in
   IO.with_out (Fpath.to_string yamlfile) (fun out -> output_string out yaml)
 
@@ -50,3 +57,4 @@ let from_workdir workdir =
 
 let port {port; _} = int_of_string (Option.get_exn port)
 let admin_port {admin_port; _} = int_of_string (Option.get_exn admin_port)
+let list_command {list_command; _} = Option.get_exn list_command

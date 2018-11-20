@@ -74,7 +74,7 @@ let () =
     prerr_endline msg;
   end
 
-let get_dockerfile switch =
+let get_dockerfile ~conf switch =
   let open Dockerfile in
   from "ocaml/opam2:debian-unstable-opam" @@
   run "sudo apt-get update" @@
@@ -87,7 +87,7 @@ let get_dockerfile switch =
   run "opam init -yac %s ." (Intf.Compiler.to_string switch) @@
   run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
   run "opam install -y opam-depext" @@
-  cmd "opam list --installable --available --short --all-versions"
+  cmd "%s" (Server_configfile.list_command conf)
 
 let with_stderr workdir f =
   Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) >>= fun () ->
@@ -100,7 +100,7 @@ let set_ocaml_switches switches =
   ocaml_switches := List.sort Intf.Compiler.compare switches;
   Lwt.return_unit
 
-let run ~on_finished workdir =
+let run ~on_finished ~conf workdir =
   let switches = !ocaml_switches in
   (* TODO: Add a lock here in case this function is triggered while it's already running *)
   Lwt.async begin fun () ->
@@ -109,7 +109,7 @@ let run ~on_finished workdir =
       Lwt_list.fold_left_s begin fun (jobs, i) switch ->
         let img_name = "opam-check-all-"^Intf.Compiler.to_string switch in
         let cached = match i with 0 -> false | _ -> true in
-        docker_build ~stderr ~cached ~img_name (get_dockerfile switch) >>= fun () ->
+        docker_build ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
         Server_workdirs.init_base_job ~stderr ~switch workdir >>= fun () ->
         get_pkgs ~stderr ~img_name >|= fun pkgs ->
         (List.map (run_job ~stderr ~img_name ~switch workdir) pkgs @ jobs, succ i)

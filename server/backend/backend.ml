@@ -107,7 +107,7 @@ let start conf workdir =
   let task () =
     Lwt.join [
       tcp_server port callback;
-      run_action_loop ~run_trigger (fun () -> Check.run ~on_finished workdir);
+      run_action_loop ~run_trigger (fun () -> Check.run ~on_finished ~conf workdir);
     ]
   in
   (workdir, task)
