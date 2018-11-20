@@ -20,23 +20,19 @@ let set_config conf = function
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
+let yaml_of_conf conf =
+  `O [
+    "port", `String (Option.get_exn conf.port);
+    "admin-port", `String (Option.get_exn conf.admin_port);
+  ]
+
 let set_defaults yamlfile conf =
-  let r = ref [] in
-  if Option.is_none conf.port then begin
-    r := ("port: "^Oca_lib.default_html_port) :: !r;
+  if Option.is_none conf.port then
     conf.port <- Some Oca_lib.default_html_port;
-  end;
-  if Option.is_none conf.admin_port then begin
-    r := ("admin-port: "^Oca_lib.default_admin_port) :: !r;
+  if Option.is_none conf.admin_port then
     conf.admin_port <- Some Oca_lib.default_admin_port;
-  end;
-  if not (List.is_empty !r) then begin
-    IO.with_out_a (Fpath.to_string yamlfile) begin fun out ->
-      (* NOTE: Always prepend a newline in case the file doesn't end with one *)
-      IO.write_line out "";
-      List.iter (IO.write_line out) !r;
-    end;
-  end
+  let yaml = Result.get_exn (Yaml.to_string (yaml_of_conf conf)) in
+  IO.with_out (Fpath.to_string yamlfile) (fun out -> output_string out yaml)
 
 let create yamlfile yaml =
   let conf = create_conf () in
