@@ -95,13 +95,8 @@ let with_stderr workdir f =
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
   Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
-let ocaml_switches = ref []
-let set_ocaml_switches switches =
-  ocaml_switches := List.sort Intf.Compiler.compare switches;
-  Lwt.return_unit
-
 let run ~on_finished ~conf workdir =
-  let switches = !ocaml_switches in
+  let switches = Server_configfile.ocaml_switches conf in
   (* TODO: Add a lock here in case this function is triggered while it's already running *)
   Lwt.async begin fun () ->
     with_stderr workdir begin fun ~stderr ->
