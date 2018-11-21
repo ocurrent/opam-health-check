@@ -35,16 +35,16 @@ let clear_and_init self pkgs compilers =
   self.pkgs <- pkgs ();
   Html_cache.clear self.html_tbl
 
-let get_html self query =
+let get_html ~conf self query =
   self.pkgs >>= fun pkgs ->
-  let html = Html.get_html query pkgs in
+  let html = Html.get_html ~conf query pkgs in
   Html_cache.add self.html_tbl query html;
   Lwt.return html
 
-let get_html self query =
+let get_html ~conf self query =
   match Html_cache.find_opt self.html_tbl query with
   | Some html -> Lwt.return html
-  | None -> get_html self query
+  | None -> get_html ~conf self query
 
 let get_compilers self =
   self.compilers

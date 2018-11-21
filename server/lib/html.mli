@@ -8,4 +8,4 @@ type query = {
   maintainers : string * Re.re;
 }
 
-val get_html : query -> Intf.Pkg.t list -> string
+val get_html : conf:Server_configfile.t -> query -> Intf.Pkg.t list -> string

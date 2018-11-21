@@ -20,19 +20,23 @@ let rec read_lines fd =
   | Some line -> read_lines fd >|= List.cons line
   | None -> Lwt.return_nil
 
-let get_pkgs ~stderr ~img_name =
-  Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
+let docker_run_to_str ~stderr ~img_name cmd =
   let fd, stdout = Lwt_unix.pipe () in
-  let proc = docker_run ~stderr ~stdout img_name [] in
+  let proc = docker_run ~stderr ~stdout img_name cmd in
   Lwt_unix.close stdout >>= fun () ->
   read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
   Lwt_unix.close fd >>= fun () ->
+  proc >|= fun () ->
+  pkgs
+
+let get_pkgs ~stderr ~img_name =
+  Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
+  docker_run_to_str ~stderr ~img_name [] >>= fun pkgs ->
   let rgen = Random.int_range (-1) 1 in
   let pkgs = List.filter Oca_lib.is_valid_filename pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
   let nelts = string_of_int (List.length pkgs) in
-  Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >>= fun () ->
-  proc >|= fun () ->
+  Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
   pkgs
 
 let is_partial_failure logfile =
@@ -97,6 +101,7 @@ let with_stderr workdir f =
 
 let run ~on_finished ~conf workdir =
   let switches = Server_configfile.ocaml_switches conf in
+  let new_opam_repo_commit_hash = ref None in
   (* TODO: Add a lock here in case this function is triggered while it's already running *)
   Lwt.async begin fun () ->
     with_stderr workdir begin fun ~stderr ->
@@ -105,6 +110,13 @@ let run ~on_finished ~conf workdir =
         let img_name = "opam-check-all-"^Intf.Compiler.to_string switch in
         let cached = match i with 0 -> false | _ -> true in
         docker_build ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
+        begin
+          if not cached then
+            docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >|= fun hash ->
+            new_opam_repo_commit_hash := Some hash
+          else
+            Lwt.return_unit
+        end >>= fun () ->
         Server_workdirs.init_base_job ~stderr ~switch workdir >>= fun () ->
         get_pkgs ~stderr ~img_name >|= fun pkgs ->
         (List.map (run_job ~stderr ~img_name ~switch workdir) pkgs @ jobs, succ i)
@@ -117,6 +129,11 @@ let run ~on_finished ~conf workdir =
         (* TODO: replace by Oca_lib.rm_rf *)
         Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
         Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir)
+      end >>= fun () ->
+      begin match !new_opam_repo_commit_hash with
+      | Some [hash] -> Server_configfile.set_opam_repo_commit_hash conf hash
+      | Some _ -> Server_configfile.set_opam_repo_commit_hash conf "[internal failure]"
+      | None -> Lwt.return_unit
       end >|= fun () ->
       on_finished workdir
     end

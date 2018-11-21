@@ -6,6 +6,8 @@ val port : t -> int
 val admin_port : t -> int
 val list_command : t -> string
 val ocaml_switches : t -> Intf.Compiler.t list
+val opam_repo_commit_hash : t -> string option
 
 val set_ocaml_switches : t -> Intf.Compiler.t list -> unit Lwt.t
 val set_list_command : t -> string -> unit Lwt.t
+val set_opam_repo_commit_hash : t -> string -> unit Lwt.t

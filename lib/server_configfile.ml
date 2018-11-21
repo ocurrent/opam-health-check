@@ -4,6 +4,7 @@ type t = {
   mutable admin_port : string option;
   mutable list_command : string option;
   mutable ocaml_switches : Intf.Compiler.t list option;
+  mutable opam_repo_commit_hash : string option;
 }
 
 let create_conf yamlfile = {
@@ -12,6 +13,7 @@ let create_conf yamlfile = {
   admin_port = None;
   list_command = None;
   ocaml_switches = None;
+  opam_repo_commit_hash = None;
 }
 
 let set_field ~field set = function
@@ -32,6 +34,10 @@ let set_config conf = function
   | "ocaml-switches" as field, `A switches ->
       let switches = List.map get_comp switches in
       set_field ~field (fun () -> conf.ocaml_switches <- Some switches) conf.ocaml_switches
+  | "opam-repo-commit-hash", `String "null" -> (* TODO: fix ocaml-yaml's support of null values *)
+      ()
+  | "opam-repo-commit-hash" as field, `String hash ->
+      set_field ~field (fun () -> conf.opam_repo_commit_hash <- Some hash) conf.opam_repo_commit_hash
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
@@ -40,7 +46,8 @@ let yaml_of_conf conf =
     "port", `String (Option.get_exn conf.port);
     "admin-port", `String (Option.get_exn conf.admin_port);
     "list-command", `String (Option.get_exn conf.list_command);
-    "ocaml-switches", `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) (Option.get_exn conf.ocaml_switches))
+    "ocaml-switches", `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) (Option.get_exn conf.ocaml_switches));
+    "opam-repo-commit-hash", Option.map_or ~default:(`String "null") (fun s -> `String s) conf.opam_repo_commit_hash;
   ]
 
 let set_defaults conf =
@@ -65,6 +72,11 @@ let set_list_command conf cmd =
   set_defaults conf;
   Lwt.return_unit
 
+let set_opam_repo_commit_hash conf hash =
+  conf.opam_repo_commit_hash <- Some hash;
+  set_defaults conf;
+  Lwt.return_unit
+
 let create yamlfile yaml =
   let conf = create_conf yamlfile in
   List.iter (set_config conf) yaml;
@@ -83,3 +95,4 @@ let port {port; _} = int_of_string (Option.get_exn port)
 let admin_port {admin_port; _} = int_of_string (Option.get_exn admin_port)
 let list_command {list_command; _} = Option.get_exn list_command
 let ocaml_switches {ocaml_switches; _} = Option.get_exn ocaml_switches
+let opam_repo_commit_hash {opam_repo_commit_hash; _} = opam_repo_commit_hash

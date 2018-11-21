@@ -86,13 +86,22 @@ let result_legend query =
     tr [td ~a:[a_style "background-color: grey; text-align: center;"] [pcdata "☐"]; td [pcdata "Package is not available in this environment"]];
   ]]
 
-let gen_table_form query l =
+let gen_table_form ~conf query l =
   let open Tyxml.Html in
   let aux (txt, elt) = tr [td txt; td [elt]] in
   let legend = legend [b [pcdata "Filter form:"]] in
-  form [fieldset ~legend [table [tr [td ~a:[a_style "width: 100%;"] [table (List.map aux l)]; td [result_legend query]]]]]
+  let opam_repo_uri = match Server_configfile.opam_repo_commit_hash conf with
+    | None -> b [pcdata "undefined opam-repository commit hash"]
+    | Some hash -> a ~a:[a_href ("https://github.com/ocaml/opam-repository/commit/"^hash)] [b [pcdata "🔗 opam-repository commit hash"]]
+  in
+  form [fieldset ~legend [table [tr [
+    td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
+    td [result_legend query;
+        p ~a:[a_style "text-align: right;"] [opam_repo_uri];
+       ]
+  ]]]]
 
-let get_html query pkgs =
+let get_html ~conf query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
   let pkgs, _ = List.fold_left (pkg_to_html query) ([], None) (List.rev pkgs) in
@@ -106,7 +115,8 @@ let get_html query pkgs =
   let style_row = pcdata ".results-row {border-top: 2px solid black; border-bottom: 2px solid black;}" in
   let style_row_hover = pcdata ".results-row:hover {border-top-width: 4px; border-bottom-width: 4px;}" in
   let style_pkgname = pcdata ".pkgname {white-space: nowrap;}" in
-  let head = head title [charset; style [style_table; style_col; style_case; style_pkgname; style_row; style_row_hover]] in
+  let style_a = pcdata "a {text-decoration: none;}" in
+  let head = head title [charset; style [style_table; style_col; style_case; style_pkgname; style_row; style_row_hover; style_a]] in
   let compilers_text = [pcdata "Show only [list of compilers separated by ':']:"] in
   let compilers = input ~a:[a_input_type `Text; a_name "compilers"; a_value (String.concat ":" (List.map Compiler.to_string query.compilers))] () in
   let show_available_text = [pcdata "Show only packages available in [list of compilers separated by ':']:"] in
@@ -120,7 +130,7 @@ let get_html query pkgs =
   let maintainers_text = [pcdata "Show only packages maintained by [posix regexp]:"] in
   let maintainers = input ~a:[a_input_type `Text; a_name "maintainers"; a_value (fst query.maintainers)] () in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form query [
+  let filter_form = gen_table_form ~conf query [
     (compilers_text, compilers);
     (show_available_text, show_available);
     (show_failures_only_text, show_failures_only);
