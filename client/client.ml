@@ -89,8 +89,7 @@ let run_cmd ~confdir ~conffile =
   (term, info)
 
 let add_user ~confdir ~conffile username =
-  let msg = ["add-user";username] in
-  send_msg ~confdir ~conffile msg
+  send_msg ~confdir ~conffile ["add-user";username]
 
 let add_user_cmd ~confdir ~conffile =
   let term =
@@ -122,6 +121,18 @@ let init_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "init" in
   (term, info)
 
+let clear_cache ~confdir ~conffile () =
+  send_msg ~confdir ~conffile ["clear-cache"]
+
+let clear_cache_cmd ~confdir ~conffile =
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (clear_cache ~confdir ~conffile) $
+    Cmdliner.Term.const ()
+  in
+  let info = Cmdliner.Term.info "clear-cache" in
+  (term, info)
+
 let cmds =
   let confdir = XDGBaseDir.(default.config_home) in
   let confdir = Fpath.v confdir in
@@ -133,6 +144,7 @@ let cmds =
     set_ocaml_switches_cmd ~confdir ~conffile;
     set_list_command_cmd ~confdir ~conffile;
     run_cmd ~confdir ~conffile;
+    clear_cache_cmd ~confdir ~conffile;
   ]
 
 let () =
