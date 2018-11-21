@@ -8,3 +8,4 @@ val list_command : t -> string
 val ocaml_switches : t -> Intf.Compiler.t list
 
 val set_ocaml_switches : t -> Intf.Compiler.t list -> unit Lwt.t
+val set_list_command : t -> string -> unit Lwt.t

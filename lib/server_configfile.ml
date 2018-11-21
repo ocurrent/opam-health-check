@@ -60,6 +60,11 @@ let set_ocaml_switches conf switches =
   set_defaults conf;
   Lwt.return_unit
 
+let set_list_command conf cmd =
+  conf.list_command <- Some cmd;
+  set_defaults conf;
+  Lwt.return_unit
+
 let create yamlfile yaml =
   let conf = create_conf yamlfile in
   List.iter (set_config conf) yaml;

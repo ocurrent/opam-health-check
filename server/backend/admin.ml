@@ -37,6 +37,8 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
       let switches = List.map Intf.Compiler.from_string switches in
       let switches = List.sort Intf.Compiler.compare switches in
       Server_configfile.set_ocaml_switches conf switches
+  | ["set-list-command";cmd] ->
+      Server_configfile.set_list_command conf cmd
   | ["run"] ->
       Lwt_mvar.put run_trigger ()
   | ["add-user";username] ->

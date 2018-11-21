@@ -63,6 +63,18 @@ let set_ocaml_switches_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "set-ocaml-switches" in
   (term, info)
 
+let set_list_command ~confdir ~conffile cmd =
+  send_msg ~confdir ~conffile ["set-list-command";cmd]
+
+let set_list_command_cmd ~confdir ~conffile =
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (set_list_command ~confdir ~conffile) $
+    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"CMD" [])
+  in
+  let info = Cmdliner.Term.info "set-list-command" in
+  (term, info)
+
 let run ~confdir ~conffile () =
   (* TODO: Catch the exception if the config file doesn't exist *)
   send_msg ~confdir ~conffile ["run"]
@@ -119,6 +131,7 @@ let cmds =
     init_cmd ~confdir ~conffile;
     add_user_cmd ~confdir ~conffile;
     set_ocaml_switches_cmd ~confdir ~conffile;
+    set_list_command_cmd ~confdir ~conffile;
     run_cmd ~confdir ~conffile;
   ]
 
