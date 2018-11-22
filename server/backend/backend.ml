@@ -91,7 +91,12 @@ let cache_clear_and_init workdir =
 let run_action_loop ~run_trigger f =
   let two_days = float_of_int (48 * 60 * 60) in
   let rec loop () =
-    Lwt.pick [Lwt_unix.sleep two_days; Lwt_mvar.take run_trigger] >>= f >>= loop
+    Lwt.catch begin fun () ->
+      Lwt.pick [Lwt_unix.sleep two_days; Lwt_mvar.take run_trigger] >>= f
+    end begin fun e ->
+      let msg = Printexc.to_string e in
+      Lwt_io.write_line Lwt_io.stderr ("Exception raised in action loop: "^msg)
+    end >>= loop
   in
   loop ()
 
