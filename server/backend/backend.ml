@@ -91,7 +91,7 @@ let cache_clear_and_init workdir =
 let run_action_loop ~run_trigger f =
   let two_days = float_of_int (48 * 60 * 60) in
   let rec loop () =
-    Lwt.choose [Lwt_unix.sleep two_days; Lwt_mvar.take run_trigger] >>= f >>= loop
+    Lwt.pick [Lwt_unix.sleep two_days; Lwt_mvar.take run_trigger] >>= f >>= loop
   in
   loop ()
 
