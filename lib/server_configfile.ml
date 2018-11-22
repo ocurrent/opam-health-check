@@ -1,3 +1,5 @@
+open Lwt.Infix
+
 type t = {
   yamlfile : Fpath.t;
   mutable port : string option;
@@ -31,6 +33,8 @@ let set_config conf = function
       set_field ~field (fun () -> conf.admin_port <- Some admin_port) conf.admin_port
   | "list-command" as field, `String list_command ->
       set_field ~field (fun () -> conf.list_command <- Some list_command) conf.list_command
+  | "ocaml-switches", `String "null" -> (* TODO: fix ocaml-yaml's support of null values *)
+      ()
   | "ocaml-switches" as field, `A switches ->
       let switches = List.map get_comp switches in
       set_field ~field (fun () -> conf.ocaml_switches <- Some switches) conf.ocaml_switches
@@ -42,12 +46,13 @@ let set_config conf = function
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
 let yaml_of_conf conf =
+  let null = `String "null" in (* TODO: see above *)
   `O [
     "port", `String (Option.get_exn conf.port);
     "admin-port", `String (Option.get_exn conf.admin_port);
     "list-command", `String (Option.get_exn conf.list_command);
-    "ocaml-switches", `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) (Option.get_exn conf.ocaml_switches));
-    "opam-repo-commit-hash", Option.map_or ~default:(`String "null") (fun s -> `String s) conf.opam_repo_commit_hash;
+    "ocaml-switches", Option.map_or ~default:null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
+    "opam-repo-commit-hash", Option.map_or ~default:null (fun s -> `String s) conf.opam_repo_commit_hash;
   ]
 
 let set_defaults conf =
@@ -57,8 +62,6 @@ let set_defaults conf =
     conf.admin_port <- Some Oca_lib.default_admin_port;
   if Option.is_none conf.list_command then
     conf.list_command <- Some Oca_lib.default_list_command;
-  if Option.is_none conf.ocaml_switches then
-    conf.ocaml_switches <- Some Oca_lib.default_ocaml_switches;
   let yaml = Result.get_exn (Yaml.to_string (yaml_of_conf conf)) in
   IO.with_out (Fpath.to_string conf.yamlfile) (fun out -> output_string out yaml)
 
@@ -66,6 +69,12 @@ let set_ocaml_switches conf switches =
   conf.ocaml_switches <- Some switches;
   set_defaults conf;
   Lwt.return_unit
+
+let set_default_ocaml_switches conf f =
+  if Option.is_none conf.ocaml_switches then
+    f () >>= set_ocaml_switches conf
+  else
+    Lwt.return_unit
 
 let set_list_command conf cmd =
   conf.list_command <- Some cmd;

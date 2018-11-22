@@ -21,5 +21,4 @@ val default_html_port : string
 val default_admin_port : string
 val default_admin_name : string
 val default_list_command : string
-val default_ocaml_switches : Intf.Compiler.t list
 val localhost : string

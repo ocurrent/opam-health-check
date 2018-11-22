@@ -57,5 +57,4 @@ let default_html_port = "8080"
 let default_admin_port = "9999"
 let default_admin_name = "admin"
 let default_list_command = "opam list --installable --available --short --all-versions"
-let default_ocaml_switches = []
 let localhost = "localhost"
