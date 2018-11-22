@@ -99,11 +99,15 @@ let with_stderr workdir f =
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
   Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
+let run_locked = ref false
+
 let run ~on_finished ~conf workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   let new_opam_repo_commit_hash = ref None in
-  (* TODO: Add a lock here in case this function is triggered while it's already running *)
-  Lwt.async begin fun () ->
+  if !run_locked then
+    failwith "operation locked";
+  run_locked := true;
+  Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     with_stderr workdir begin fun ~stderr ->
       switches |>
       Lwt_list.fold_left_s begin fun (jobs, i) switch ->
@@ -134,5 +138,5 @@ let run ~on_finished ~conf workdir =
       end >|= fun () ->
       on_finished workdir
     end
-  end;
+  end (fun () -> run_locked := false; Lwt.return_unit) end;
   Lwt.return_unit
