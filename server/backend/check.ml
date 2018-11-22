@@ -122,14 +122,11 @@ let run ~on_finished ~conf workdir =
         (List.map (run_job ~stderr ~img_name ~switch workdir) pkgs @ jobs, succ i)
       end ([], 0) >>= fun (jobs, _) ->
       Lwt.join jobs >>= fun () ->
-      switches |>
-      Lwt_list.iter_s begin fun switch ->
-        let logdir = Server_workdirs.switchlogdir ~switch workdir in
-        let tmplogdir = Server_workdirs.tmpswitchlogdir ~switch workdir in
-        (* TODO: replace by Oca_lib.rm_rf *)
-        Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
-        Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir)
-      end >>= fun () ->
+      let logdir = Server_workdirs.logdir workdir in
+      let tmplogdir = Server_workdirs.tmplogdir workdir in
+      (* TODO: replace by Oca_lib.rm_rf *)
+      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
+      Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
       begin match !new_opam_repo_commit_hash with
       | Some [hash] -> Server_configfile.set_opam_repo_commit_hash conf hash
       | Some _ -> Server_configfile.set_opam_repo_commit_hash conf "[internal failure]"
