@@ -75,7 +75,7 @@ let run_job ~stderr ~img_name ~switch workdir pkg =
 let () =
   Lwt.async_exception_hook := begin fun e ->
     let msg = Printexc.to_string e in
-    prerr_endline msg;
+    prerr_endline ("Async exception raised: "^msg);
   end
 
 let get_dockerfile ~conf switch =
