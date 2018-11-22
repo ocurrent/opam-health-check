@@ -100,7 +100,7 @@ let with_stderr workdir f =
   Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
 let run ~on_finished ~conf workdir =
-  let switches = Server_configfile.ocaml_switches conf in
+  let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   let new_opam_repo_commit_hash = ref None in
   (* TODO: Add a lock here in case this function is triggered while it's already running *)
   Lwt.async begin fun () ->

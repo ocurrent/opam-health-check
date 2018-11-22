@@ -103,5 +103,5 @@ let from_workdir workdir =
 let port {port; _} = int_of_string (Option.get_exn port)
 let admin_port {admin_port; _} = int_of_string (Option.get_exn admin_port)
 let list_command {list_command; _} = Option.get_exn list_command
-let ocaml_switches {ocaml_switches; _} = Option.get_exn ocaml_switches
+let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let opam_repo_commit_hash {opam_repo_commit_hash; _} = opam_repo_commit_hash
