@@ -5,6 +5,7 @@ type t = {
   mutable port : string option;
   mutable admin_port : string option;
   mutable list_command : string option;
+  mutable extra_command : string option;
   mutable ocaml_switches : Intf.Compiler.t list option;
   mutable opam_repo_commit_hash : string option;
 }
@@ -14,6 +15,7 @@ let create_conf yamlfile = {
   port = None;
   admin_port = None;
   list_command = None;
+  extra_command = None;
   ocaml_switches = None;
   opam_repo_commit_hash = None;
 }
@@ -33,6 +35,10 @@ let set_config conf = function
       set_field ~field (fun () -> conf.admin_port <- Some admin_port) conf.admin_port
   | "list-command" as field, `String list_command ->
       set_field ~field (fun () -> conf.list_command <- Some list_command) conf.list_command
+  | "extra-command", `String "null" -> (* TODO: fix ocaml-yaml's support of null values *)
+      ()
+  | "extra-command" as field, `String extra_command ->
+      set_field ~field (fun () -> conf.extra_command <- Some extra_command) conf.extra_command
   | "ocaml-switches", `String "null" -> (* TODO: fix ocaml-yaml's support of null values *)
       ()
   | "ocaml-switches" as field, `A switches ->
@@ -51,6 +57,7 @@ let yaml_of_conf conf =
     "port", `String (Option.get_exn conf.port);
     "admin-port", `String (Option.get_exn conf.admin_port);
     "list-command", `String (Option.get_exn conf.list_command);
+    "extra-command", Option.map_or ~default:null (fun s -> `String s) conf.list_command;
     "ocaml-switches", Option.map_or ~default:null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
     "opam-repo-commit-hash", Option.map_or ~default:null (fun s -> `String s) conf.opam_repo_commit_hash;
   ]
@@ -81,6 +88,11 @@ let set_list_command conf cmd =
   set_defaults conf;
   Lwt.return_unit
 
+let set_extra_command conf cmd =
+  conf.extra_command <- cmd;
+  set_defaults conf;
+  Lwt.return_unit
+
 let set_opam_repo_commit_hash conf hash =
   conf.opam_repo_commit_hash <- Some hash;
   set_defaults conf;
@@ -103,5 +115,6 @@ let from_workdir workdir =
 let port {port; _} = int_of_string (Option.get_exn port)
 let admin_port {admin_port; _} = int_of_string (Option.get_exn admin_port)
 let list_command {list_command; _} = Option.get_exn list_command
+let extra_command {extra_command; _} = extra_command
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let opam_repo_commit_hash {opam_repo_commit_hash; _} = opam_repo_commit_hash
