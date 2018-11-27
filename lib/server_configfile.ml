@@ -57,7 +57,7 @@ let yaml_of_conf conf =
     "port", `String (Option.get_exn conf.port);
     "admin-port", `String (Option.get_exn conf.admin_port);
     "list-command", `String (Option.get_exn conf.list_command);
-    "extra-command", Option.map_or ~default:null (fun s -> `String s) conf.list_command;
+    "extra-command", Option.map_or ~default:null (fun s -> `String s) conf.extra_command;
     "ocaml-switches", Option.map_or ~default:null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
     "opam-repo-commit-hash", Option.map_or ~default:null (fun s -> `String s) conf.opam_repo_commit_hash;
   ]
