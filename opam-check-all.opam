@@ -10,7 +10,7 @@ tags: ["opam" "check"]
 build: ["dune" "build" "-p" name]
 depends: [
   "dune" {build}
-  "tyxml"
+  "tyxml" {>= "4.3.0"}
   "cohttp-lwt-unix"
   "containers" {>= "2.2"}
   "opam-core"
