@@ -44,13 +44,23 @@ let exec ~stdin ~stdout ~stderr cmd =
   let stdout = proc_fd_of_unix (`FD_copy stdout) in
   let stderr_lwt = stderr in
   let stderr = proc_fd_of_unix (`FD_copy stderr) in
-  Lwt_process.exec ~stdin ~stdout ~stderr ("", Array.of_list cmd) >>= function
-  | Unix.WEXITED 0 ->
-      Lwt.return_unit
-  | _ ->
-      let cmd = String.concat " " cmd in
-      write_line_unix stderr_lwt ("Command '"^cmd^"' failed.") >>= fun () ->
-      Lwt.fail Process_failure
+  let proc =
+    Lwt_process.exec ~stdin ~stdout ~stderr ("", Array.of_list cmd) >>= function
+    | Unix.WEXITED 0 ->
+        Lwt.return_unit
+    | _ ->
+        let cmd = String.concat " " cmd in
+        write_line_unix stderr_lwt ("Command '"^cmd^"' failed.") >>= fun () ->
+        Lwt.fail Process_failure
+  in
+  (* NOTE: any processes shouldn't take more than 5 hours *)
+  let timeout =
+    let hours = 5 in
+    Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
+    let cmd = String.concat " " cmd in
+    write_line_unix stderr_lwt ("Command '"^cmd^"' timed-out ("^string_of_int hours^" hours).")
+  in
+  Lwt.pick [timeout; proc]
 
 let protocol_version = "2"
 let default_html_port = "8080"
