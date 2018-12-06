@@ -58,7 +58,8 @@ let exec ~stdin ~stdout ~stderr cmd =
     let hours = 5 in
     Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
     let cmd = String.concat " " cmd in
-    write_line_unix stderr_lwt ("Command '"^cmd^"' timed-out ("^string_of_int hours^" hours).")
+    write_line_unix stderr_lwt ("Command '"^cmd^"' timed-out ("^string_of_int hours^" hours).") >>= fun () ->
+    Lwt.fail Process_failure
   in
   Lwt.pick [timeout; proc]
 
