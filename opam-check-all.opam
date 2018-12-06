@@ -18,9 +18,8 @@ depends: [
   "cmdliner"
   "fpath"
   "re" {>= "1.7.2"}
-  "git-unix" {>= "2.0"}
   "yaml"
-  "obi"
   "ocaml-xdg-basedir"
+  "dockerfile"
 ]
 synopsis: "A toolchain to check for broken opam packages"

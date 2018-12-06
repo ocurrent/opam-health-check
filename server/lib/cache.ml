@@ -15,22 +15,24 @@ module Html_cache = Hashtbl.Make (struct
       String.equal (fst maintainers) (fst y.Html.maintainers)
   end)
 
+module Maintainers_cache = Hashtbl.Make (String)
+
 type t = {
-  mutable pkgsinfo : Obi.Index.pkg list Lwt.t;
   html_tbl : string Html_cache.t;
   mutable pkgs : Intf.Pkg.t list Lwt.t;
   mutable compilers : Intf.Compiler.t list Lwt.t;
+  mutable maintainers : string list Maintainers_cache.t Lwt.t;
 }
 
 let create () = {
-  pkgsinfo = Lwt.return_nil;
   html_tbl = Html_cache.create 32;
   pkgs = Lwt.return_nil;
   compilers = Lwt.return_nil;
+  maintainers = Lwt.return (Maintainers_cache.create 0);
 }
 
-let clear_and_init self pkgs compilers =
-  self.pkgsinfo <- Metainfo.get_pkgsinfo ();
+let clear_and_init self pkgs compilers maintainers =
+  self.maintainers <- maintainers ();
   self.compilers <- compilers ();
   self.pkgs <- pkgs ();
   Html_cache.clear self.html_tbl
@@ -49,5 +51,6 @@ let get_html ~conf self query =
 let get_compilers self =
   self.compilers
 
-let get_pkgsinfo self =
-  self.pkgsinfo
+let get_maintainers self k =
+  self.maintainers >|= fun maintainers ->
+  Option.get_or ~default:[] (Maintainers_cache.find_opt maintainers k)

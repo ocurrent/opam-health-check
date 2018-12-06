@@ -23,6 +23,12 @@ val tmpgoodlog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 val tmppartiallog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 val tmpbadlog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 
+val maintainersdir : t -> Fpath.t
+val maintainersfile : pkg:string -> t -> Fpath.t
+
+val tmpmaintainersdir : t -> Fpath.t
+val tmpmaintainersfile : pkg:string -> t -> Fpath.t
+
 val configfile : t -> Fpath.t
 val file_from_logdir : file:string -> t -> Fpath.t
 

@@ -7,6 +7,4 @@
     cohttp-lwt-unix
     containers
     re
-    git-unix
-    obi
     oca_lib))

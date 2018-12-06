@@ -5,6 +5,6 @@
     oca_lib
     cohttp-lwt-unix
     containers
-    obi
     oca_server
+    dockerfile
     nocrypto.lwt))

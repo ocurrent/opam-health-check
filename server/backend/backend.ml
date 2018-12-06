@@ -52,22 +52,18 @@ let fill_pkgs_from_dir pkg_tbl workdir comp =
   List.iter (pkg_update pkg_tbl comp Intf.State.Partial) partial_files;
   List.iter (pkg_update pkg_tbl comp Intf.State.Bad) bad_files
 
-let add_pkg obi full_name instances acc =
+let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
-  let maintainers =
-    match List.find_opt (fun pkg' -> String.equal pkg'.Obi.Index.name pkg) obi with
-    | Some obi -> obi.Obi.Index.maintainers
-    | None -> []
-  in
+  acc >>= fun acc ->
+  Oca_server.Cache.get_maintainers cache pkg >|= fun maintainers ->
   Intf.Pkg.create ~full_name ~instances ~maintainers :: acc
 
 let get_pkgs workdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
-  Oca_server.Cache.get_pkgsinfo cache >>= fun obi ->
   Oca_server.Cache.get_compilers cache >>= fun compilers ->
-  Lwt_list.iter_s (fill_pkgs_from_dir pkg_tbl workdir) compilers >|= fun () ->
-  let pkgs = Pkg_tbl.fold (add_pkg obi) pkg_tbl [] in
-  List.sort Intf.Pkg.compare pkgs
+  Lwt_list.iter_s (fill_pkgs_from_dir pkg_tbl workdir) compilers >>= fun () ->
+  Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
+  List.sort Intf.Pkg.compare
 
 let get_log workdir ~comp ~state ~pkg =
   let comp = Intf.Compiler.to_string comp in
@@ -78,6 +74,18 @@ let get_log workdir ~comp ~state ~pkg =
   let file = Server_workdirs.file_from_logdir ~file workdir in
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
 
+let get_maintainers workdir =
+  let dir = Server_workdirs.maintainersdir workdir in
+  get_files dir >>= fun files ->
+  let maintainers = Oca_server.Cache.Maintainers_cache.create 10_000 in
+  Lwt_list.iter_s begin fun pkg ->
+    let file = Server_workdirs.maintainersfile ~pkg workdir in
+    Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) >|= fun content ->
+    let content = String.split_on_char '\n' content in
+    Oca_server.Cache.Maintainers_cache.add maintainers pkg content
+  end files >|= fun () ->
+  maintainers
+
 (* TODO: Deduplicate with Server.tcp_server *)
 let tcp_server port callback =
   Cohttp_lwt_unix.Server.create
@@ -86,7 +94,11 @@ let tcp_server port callback =
     (Cohttp_lwt_unix.Server.make ~callback ())
 
 let cache_clear_and_init workdir =
-  Oca_server.Cache.clear_and_init cache (fun ()-> get_pkgs workdir) (fun () -> get_compilers workdir)
+  Oca_server.Cache.clear_and_init
+    cache
+    (fun () -> get_pkgs workdir)
+    (fun () -> get_compilers workdir)
+    (fun () -> get_maintainers workdir)
 
 let run_action_loop ~run_trigger f =
   let two_days = float_of_int (48 * 60 * 60) in
