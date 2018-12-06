@@ -14,8 +14,10 @@ let create ~workdir = Fpath.v workdir
 let keysdir workdir = workdir/"keys"
 let keyfile ~username workdir = keysdir workdir/username+"key"
 
+let tmpdir workdir = workdir/"tmp"
+
 let logdir workdir = workdir/"logs"
-let tmplogdir workdir = workdir/"tmplogs"
+let tmplogdir workdir = tmpdir workdir/"logs"
 
 let ilogdir workdir = workdir/"ilogs"
 let ilogfile workdir = ilogdir workdir/Printf.sprintf "%.0f" (Unix.time ())
@@ -39,7 +41,7 @@ let metadatadir workdir = workdir/"metadata"
 let maintainersdir workdir = metadatadir workdir/"maintainers"
 let maintainersfile ~pkg workdir = maintainersdir workdir/pkg
 
-let tmpmaintainersdir workdir = workdir/"tmpmaintainers"
+let tmpmaintainersdir workdir = tmpdir workdir/"maintainers"
 let tmpmaintainersfile ~pkg workdir = tmpmaintainersdir workdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
@@ -55,11 +57,8 @@ let init_base workdir =
   Oca_lib.mkdir_p (maintainersdir workdir)
 
 let init_base_job ~switch ~stderr workdir =
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string (tmpswitchlogdir ~switch workdir)] >>= fun () ->
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string (tmpmaintainersdir workdir)] >>= fun () ->
+  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string (tmpdir workdir)] >>= fun () ->
   Oca_lib.mkdir_p (tmpgooddir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (tmppartialdir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (tmpbaddir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (tmpmaintainersdir workdir)
-
-(* TODO: Move the tmp dirs into the same /tmp subdir *)
