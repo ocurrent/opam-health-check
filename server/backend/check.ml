@@ -80,8 +80,22 @@ let () =
 
 let get_dockerfile ~conf switch =
   let open Dockerfile in
-  from "ocaml/opam2:debian-unstable-opam" @@
+  from "ocaml/opam2:debian-unstable-opam AS base" @@
   run "sudo apt-get update" @@
+  run "sudo apt-get install -y coinor-libsymphony-dev ocaml" @@
+  workdir "/tmp" @@
+  run "curl -L https://github.com/ocaml/opam/releases/download/2.0.2/opam-full-2.0.2.tar.gz -o opam-full-2.0.2.tar.gz" @@
+  run "tar xvf opam-full-2.0.2.tar.gz" @@
+  workdir "/tmp/opam-full-2.0.2" @@
+  env ["MCCS_BACKENDS", "SYMPHONY"] @@
+  run "./configure" @@
+  run "make lib-ext" @@
+  run "make" @@
+  from "ocaml/opam2:debian-unstable-opam" @@
+  copy ~from:"base" ~src:["/tmp/opam-full-2.0.2/opam"] ~dst:"/usr/bin/opam" () @@
+  copy ~from:"base" ~src:["/tmp/opam-full-2.0.2/opam-installer"] ~dst:"/usr/bin/opam-installer" () @@
+  run "sudo apt-get update" @@
+  run "sudo apt-get install -y coinor-libsymphony-dev" @@
   workdir "opam-repository" @@
   run "git pull origin master" @@
   run "opam admin cache" @@
