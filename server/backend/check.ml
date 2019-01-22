@@ -9,7 +9,7 @@ let docker_build ~cached ~stderr ~img_name dockerfile =
   Lwt_unix.set_close_on_exec fd;
   begin
     if not cached then
-      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"system";"prune";"-af"]
+      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"system";"prune";"-af";"--volumes"]
     else
       Lwt.return_unit
   end >>= fun () ->
