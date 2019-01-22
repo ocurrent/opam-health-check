@@ -7,6 +7,12 @@ let docker_build ~cached ~stderr ~img_name dockerfile =
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
   Lwt_unix.set_close_on_exec fd;
+  begin
+    if not cached then
+      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"system";"prune";"-af"]
+    else
+      Lwt.return_unit
+  end >>= fun () ->
   let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build";"--rm";"--force-rm"]@cache@["-t";img_name;"-"]) in
   Oca_lib.write_line_unix fd (Format.sprintf "%a" Dockerfile.pp dockerfile) >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
