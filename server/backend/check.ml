@@ -35,7 +35,11 @@ let docker_run_to_str ~stderr ~img_name cmd =
   proc >|= fun () ->
   pkgs
 
-let get_pkgs ~stderr ~img_name =
+let get_img_name switch =
+  "opam-check-all-"^Intf.Compiler.to_string switch
+
+let get_pkgs ~stderr switch =
+  let img_name = get_img_name switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   docker_run_to_str ~stderr ~img_name [] >>= fun pkgs ->
   let rgen = Random.int_range (-1) 1 in
@@ -56,7 +60,8 @@ let is_partial_failure logfile =
     lookup ()
   end
 
-let run_job ~stderr ~img_name ~switch workdir pkg =
+let run_job ~stderr ~switch workdir pkg =
+  let img_name = get_img_name switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch workdir in
@@ -130,15 +135,12 @@ let rec parse_maintainers acc = function
   | [] ->
       acc
 
-let get_img_name switch =
-  "opam-check-all-"^Intf.Compiler.to_string switch
-
-let build_switch_and_run ~stderr ~cached conf workdir (jobs, pkgs_acc) switch =
+let build_switch ~stderr ~cached conf workdir switch =
   let img_name = get_img_name switch in
   docker_build ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
   Server_workdirs.init_base_job ~switch workdir >>= fun () ->
-  get_pkgs ~stderr ~img_name >|= fun pkgs ->
-  (List.map (run_job ~stderr ~img_name ~switch workdir) pkgs @ jobs, pkgs @ pkgs_acc)
+  get_pkgs ~stderr switch >|= fun pkgs ->
+  (switch, pkgs)
 
 let get_maintainers ~stderr switch workdir pkgs =
   let img_name = get_img_name switch in
@@ -186,8 +188,13 @@ let run ~on_finished ~conf workdir =
       Server_workdirs.init_base_jobs ~stderr workdir >>= fun () ->
       begin match switches with
       | switch::switches ->
-          build_switch_and_run ~stderr ~cached:false conf workdir ([], []) switch >>= fun init ->
-          Lwt_list.fold_left_s (build_switch_and_run ~stderr ~cached:true conf workdir) init switches >>= fun (jobs, pkgs) ->
+          build_switch ~stderr ~cached:false conf workdir switch >>= fun hd_pkgs ->
+          Lwt_list.map_s (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
+          let jobs, pkgs =
+            List.fold_left begin fun (jobs, pkgs_acc) (switch, pkgs) ->
+              (List.map (run_job ~stderr ~switch workdir) pkgs @ jobs, pkgs @ pkgs_acc)
+            end ([], []) (hd_pkgs :: tl_pkgs)
+          in
           Lwt.join jobs >>= fun () ->
           set_git_hash ~stderr switch conf >>= fun () ->
           get_maintainers ~stderr switch workdir pkgs
