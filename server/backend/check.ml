@@ -136,7 +136,7 @@ let get_img_name switch =
 let build_switch_and_run ~stderr ~cached conf workdir (jobs, pkgs_acc) switch =
   let img_name = get_img_name switch in
   docker_build ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
-  Server_workdirs.init_base_job ~stderr ~switch workdir >>= fun () ->
+  Server_workdirs.init_base_job ~switch workdir >>= fun () ->
   get_pkgs ~stderr ~img_name >|= fun pkgs ->
   (List.map (run_job ~stderr ~img_name ~switch workdir) pkgs @ jobs, pkgs @ pkgs_acc)
 
@@ -183,6 +183,7 @@ let run ~on_finished ~conf workdir =
   run_locked := true;
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     with_stderr workdir begin fun ~stderr ->
+      Server_workdirs.init_base_jobs ~stderr workdir >>= fun () ->
       begin match switches with
       | switch::switches ->
           build_switch_and_run ~stderr ~cached:false conf workdir ([], []) switch >>= fun init ->

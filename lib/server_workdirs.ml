@@ -56,8 +56,12 @@ let init_base workdir =
   Oca_lib.mkdir_p (ilogdir workdir) >>= fun () ->
   Oca_lib.mkdir_p (maintainersdir workdir)
 
-let init_base_job ~switch ~stderr workdir =
+let init_base_jobs ~stderr workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string (tmpdir workdir)] >>= fun () ->
+  Oca_lib.mkdir_p (tmplogdir workdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpmaintainersdir workdir)
+
+let init_base_job ~switch workdir =
   Oca_lib.mkdir_p (tmpgooddir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (tmppartialdir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (tmpbaddir ~switch workdir) >>= fun () ->

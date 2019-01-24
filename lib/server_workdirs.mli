@@ -33,8 +33,5 @@ val configfile : t -> Fpath.t
 val file_from_logdir : file:string -> t -> Fpath.t
 
 val init_base : t -> unit Lwt.t
-val init_base_job :
-  switch:Intf.Compiler.t ->
-  stderr:Lwt_unix.file_descr ->
-  t ->
-  unit Lwt.t
+val init_base_jobs : stderr:Lwt_unix.file_descr -> t -> unit Lwt.t
+val init_base_job : switch:Intf.Compiler.t -> t -> unit Lwt.t
