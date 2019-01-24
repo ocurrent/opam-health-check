@@ -13,7 +13,7 @@ let docker_build ~cached ~stderr ~img_name dockerfile =
     else
       Lwt.return_unit
   end >>= fun () ->
-  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build";"--rm";"--force-rm"]@cache@["-t";img_name;"-"]) in
+  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build"]@cache@["-t";img_name;"-"]) in
   Oca_lib.write_line_unix fd (Format.sprintf "%a" Dockerfile.pp dockerfile) >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
   proc
