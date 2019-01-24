@@ -130,59 +130,70 @@ let rec parse_maintainers acc = function
   | [] ->
       acc
 
+let get_img_name switch =
+  "opam-check-all-"^Intf.Compiler.to_string switch
+
+let build_switch_and_run ~stderr ~cached conf workdir (jobs, pkgs_acc) switch =
+  let img_name = get_img_name switch in
+  docker_build ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
+  Server_workdirs.init_base_job ~stderr ~switch workdir >>= fun () ->
+  get_pkgs ~stderr ~img_name >|= fun pkgs ->
+  (List.map (run_job ~stderr ~img_name ~switch workdir) pkgs @ jobs, pkgs @ pkgs_acc)
+
+let get_maintainers ~stderr switch workdir pkgs =
+  let img_name = get_img_name switch in
+  pkgs |>
+  List.uniq ~eq:begin fun x y ->
+    let x = Intf.Pkg.name (Intf.Pkg.create ~full_name:x ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
+    let y = Intf.Pkg.name (Intf.Pkg.create ~full_name:y ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
+    String.equal x y
+  end |>
+  Lwt_list.iter_s begin fun full_name ->
+    let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
+    docker_run_to_str ~stderr ~img_name ["opam";"show";"-f";"maintainer:";pkg] >>= fun maintainers ->
+    let maintainers = parse_maintainers "" maintainers in
+    let file = Server_workdirs.tmpmaintainersfile ~pkg workdir in
+    Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c maintainers)
+  end
+
+let set_git_hash ~stderr switch conf =
+  let img_name = get_img_name switch in
+  docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= function
+  | [hash] -> Server_configfile.set_opam_repo_commit_hash conf hash
+  | _ -> Server_configfile.set_opam_repo_commit_hash conf "[internal failure]" (* TODO: fix *)
+
+let move_tmpdirs_to_final ~stderr workdir =
+  let logdir = Server_workdirs.logdir workdir in
+  let tmplogdir = Server_workdirs.tmplogdir workdir in
+  let maintainersdir = Server_workdirs.maintainersdir workdir in
+  let tmpmaintainersdir = Server_workdirs.tmpmaintainersdir workdir in
+  (* TODO: replace by Oca_lib.rm_rf *)
+  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
+  Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
+  (* TODO: replace by Oca_lib.rm_rf *)
+  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string maintainersdir] >>= fun () ->
+  Lwt_unix.rename (Fpath.to_string tmpmaintainersdir) (Fpath.to_string maintainersdir)
+
 let run_locked = ref false
 
 let run ~on_finished ~conf workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
-  let last_img_name = ref None in
   if !run_locked then
     failwith "operation locked";
   run_locked := true;
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     with_stderr workdir begin fun ~stderr ->
-      switches |>
-      Lwt_list.fold_left_s begin fun (jobs, pkgs_acc, i) switch ->
-        let img_name = "opam-check-all-"^Intf.Compiler.to_string switch in
-        let cached = match i with 0 -> false | _ -> true in
-        docker_build ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
-        last_img_name := Some img_name;
-        Server_workdirs.init_base_job ~stderr ~switch workdir >>= fun () ->
-        get_pkgs ~stderr ~img_name >|= fun pkgs ->
-        (List.map (run_job ~stderr ~img_name ~switch workdir) pkgs @ jobs, pkgs @ pkgs_acc, succ i)
-      end ([], [], 0) >>= fun (jobs, pkgs, _) ->
-      Lwt.join jobs >>= fun () ->
-      begin match !last_img_name with
-      | Some img_name ->
-          docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= begin function
-          | [hash] -> Server_configfile.set_opam_repo_commit_hash conf hash
-          | _ -> Server_configfile.set_opam_repo_commit_hash conf "[internal failure]" (* TODO: fix *)
-          end >>= fun () ->
-          pkgs |>
-          List.uniq ~eq:begin fun x y ->
-            let x = Intf.Pkg.name (Intf.Pkg.create ~full_name:x ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
-            let y = Intf.Pkg.name (Intf.Pkg.create ~full_name:y ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
-            String.equal x y
-          end |>
-          Lwt_list.iter_s begin fun full_name ->
-            let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
-            docker_run_to_str ~stderr ~img_name ["opam";"show";"-f";"maintainer:";pkg] >>= fun maintainers ->
-            let maintainers = parse_maintainers "" maintainers in
-            let file = Server_workdirs.tmpmaintainersfile ~pkg workdir in
-            Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c maintainers)
-          end
-      | None ->
-          Server_configfile.set_opam_repo_commit_hash conf "unknown" (* TODO: fix *)
+      begin match switches with
+      | switch::switches ->
+          build_switch_and_run ~stderr ~cached:false conf workdir ([], []) switch >>= fun init ->
+          Lwt_list.fold_left_s (build_switch_and_run ~stderr ~cached:true conf workdir) init switches >>= fun (jobs, pkgs) ->
+          Lwt.join jobs >>= fun () ->
+          set_git_hash ~stderr switch conf >>= fun () ->
+          get_maintainers ~stderr switch workdir pkgs
+      | [] ->
+          Lwt.return_unit
       end >>= fun () ->
-      let logdir = Server_workdirs.logdir workdir in
-      let tmplogdir = Server_workdirs.tmplogdir workdir in
-      let maintainersdir = Server_workdirs.maintainersdir workdir in
-      let tmpmaintainersdir = Server_workdirs.tmpmaintainersdir workdir in
-      (* TODO: replace by Oca_lib.rm_rf *)
-      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
-      Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
-      (* TODO: replace by Oca_lib.rm_rf *)
-      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string maintainersdir] >>= fun () ->
-      Lwt_unix.rename (Fpath.to_string tmpmaintainersdir) (Fpath.to_string maintainersdir) >|= fun () ->
+      move_tmpdirs_to_final ~stderr workdir >|= fun () ->
       on_finished workdir
     end
   end (fun () -> run_locked := false; Lwt.return_unit) end;
