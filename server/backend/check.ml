@@ -142,20 +142,19 @@ let build_switch ~stderr ~cached conf workdir switch =
   get_pkgs ~stderr switch >|= fun pkgs ->
   (switch, pkgs)
 
+module Pkg_set = Set.Make (String)
+
 let get_maintainers ~stderr switch workdir pkgs =
   let img_name = get_img_name switch in
-  pkgs |>
-  List.uniq ~eq:begin fun x y ->
-    let x = Intf.Pkg.name (Intf.Pkg.create ~full_name:x ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
-    let y = Intf.Pkg.name (Intf.Pkg.create ~full_name:y ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
-    String.equal x y
-  end |>
-  Lwt_list.iter_s begin fun full_name ->
-    let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
-    docker_run_to_str ~stderr ~img_name ["opam";"show";"-f";"maintainer:";pkg] >>= fun maintainers ->
-    let maintainers = parse_maintainers "" maintainers in
-    let file = Server_workdirs.tmpmaintainersfile ~pkg workdir in
-    Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c maintainers)
+  Lwt.join begin
+    Pkg_set.fold begin fun pkg jobs ->
+      Lwt_pool.use pool begin fun () ->
+        docker_run_to_str ~stderr ~img_name ["opam";"show";"-f";"maintainer:";pkg] >>= fun maintainers ->
+        let maintainers = parse_maintainers "" maintainers in
+        let file = Server_workdirs.tmpmaintainersfile ~pkg workdir in
+        Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c maintainers)
+      end :: jobs
+    end pkgs []
   end
 
 let set_git_hash ~stderr switch conf =
@@ -176,6 +175,15 @@ let move_tmpdirs_to_final ~stderr workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string maintainersdir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmaintainersdir) (Fpath.to_string maintainersdir)
 
+let run_and_get_pkgs ~stderr workdir =
+  List.fold_left begin fun (jobs, pkgs_set) (switch, pkgs) ->
+    List.fold_left begin fun (jobs, pkgs_set) full_name ->
+      let job = run_job ~stderr ~switch workdir full_name in
+      let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
+      (job :: jobs, Pkg_set.add pkg pkgs_set)
+    end (jobs, pkgs_set) pkgs
+  end ([], Pkg_set.empty)
+
 let run_locked = ref false
 
 let run ~on_finished ~conf workdir =
@@ -190,11 +198,7 @@ let run ~on_finished ~conf workdir =
       | switch::switches ->
           build_switch ~stderr ~cached:false conf workdir switch >>= fun hd_pkgs ->
           Lwt_list.map_s (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
-          let jobs, pkgs =
-            List.fold_left begin fun (jobs, pkgs_acc) (switch, pkgs) ->
-              (List.map (run_job ~stderr ~switch workdir) pkgs @ jobs, pkgs @ pkgs_acc)
-            end ([], []) (hd_pkgs :: tl_pkgs)
-          in
+          let (jobs, pkgs) = run_and_get_pkgs ~stderr workdir (hd_pkgs :: tl_pkgs) in
           Lwt.join jobs >>= fun () ->
           set_git_hash ~stderr switch conf >>= fun () ->
           get_maintainers ~stderr switch workdir pkgs
