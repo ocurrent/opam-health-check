@@ -8,6 +8,7 @@ type query = {
   show_diff_only : bool;
   show_latest_only : bool;
   maintainers : string * Re.re;
+  logsearch : string * Re.re;
 }
 
 let log_url pkg instance =
@@ -42,26 +43,28 @@ let must_show_package query ~last pkg =
       ) instances
     else
       true
-  end &&
-  begin
+  end && begin
     match instances with
     | hd::tl when query.show_diff_only ->
         let state = Instance.state hd in
         List.exists (fun x -> not (State.equal state (Instance.state x))) tl
     | [] | _::_ ->
         true
-  end &&
-  begin
+  end && begin
     if query.show_latest_only then
       match last with
       | None -> true
       | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
     else
       true
-  end &&
-  begin
+  end && begin
     if not (String.is_empty (fst query.maintainers)) then
       List.exists (Re.execp (snd query.maintainers)) maintainers
+    else
+      true
+  end && begin
+    if not (String.is_empty (fst query.logsearch)) then
+      List.exists (fun inst -> Re.execp (snd query.logsearch) (Intf.Instance.content inst)) instances
     else
       true
   end
@@ -129,6 +132,8 @@ let get_html ~conf query pkgs =
   let show_latest_only = input ~a:(a_input_type `Checkbox::a_name "show-latest-only"::a_value "true"::if query.show_latest_only then [a_checked ()] else []) () in
   let maintainers_text = [txt "Show only packages maintained by [posix regexp]:"] in
   let maintainers = input ~a:[a_input_type `Text; a_name "maintainers"; a_value (fst query.maintainers)] () in
+  let logsearch_text = [txt "Show only packages where one of the logs matches [posix regexp]:"] in
+  let logsearch = input ~a:[a_input_type `Text; a_name "logsearch"; a_value (fst query.logsearch)] () in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
   let filter_form = gen_table_form ~conf query [
     (compilers_text, compilers);
@@ -137,6 +142,7 @@ let get_html ~conf query pkgs =
     (show_diff_only_text, show_diff_only);
     (show_latest_only_text, show_latest_only);
     (maintainers_text, maintainers);
+    (logsearch_text, logsearch);
     ([], submit_form);
   ] in
   let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in

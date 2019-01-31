@@ -12,5 +12,6 @@ val clear_and_init :
   unit
 
 val get_html : conf:Server_configfile.t -> t -> Html.query -> string Lwt.t
+val get_pkgs : t -> Intf.Pkg.t list Lwt.t
 val get_compilers : t -> Intf.Compiler.t list Lwt.t
 val get_maintainers : t -> string -> string list Lwt.t

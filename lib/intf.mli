@@ -20,10 +20,11 @@ end
 module Instance : sig
   type t
 
-  val create : Compiler.t -> State.t -> t
+  val create : Compiler.t -> State.t -> string -> t
 
   val compiler : t -> Compiler.t
   val state : t -> State.t
+  val content : t -> string
 end
 
 module Pkg : sig

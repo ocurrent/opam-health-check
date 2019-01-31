@@ -22,6 +22,8 @@ module Make (Backend : Backend_intf.S) = struct
     let show_latest_only = if String.is_empty show_latest_only then false else bool_of_string show_latest_only in
     let maintainers = option_to_string (Uri.get_query_param uri "maintainers") in
     let maintainers = (maintainers, Re.Posix.compile_pat ~opts:[`ICase] maintainers) in
+    let logsearch = option_to_string (Uri.get_query_param uri "logsearch") in
+    let logsearch = (logsearch, Re.Posix.compile_pat logsearch) in
     Cache.get_compilers Backend.cache >>= fun available_compilers ->
     let compilers = match compilers with
       | [] | [""] -> available_compilers
@@ -39,6 +41,7 @@ module Make (Backend : Backend_intf.S) = struct
       Html.show_diff_only;
       Html.show_latest_only;
       Html.maintainers;
+      Html.logsearch;
     }
 
   let filter_path path =

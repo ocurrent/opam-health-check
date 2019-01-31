@@ -36,21 +36,30 @@ let get_compilers workdir =
 
 module Pkg_tbl = Hashtbl.Make (String)
 
-let pkg_update pkg_tbl comp state pkg =
+let pkg_update pkg_tbl workdir comp state pkg =
+  if not (Oca_lib.is_valid_filename pkg) then
+    failwith "Wrong filename";
+  let file =
+    let comp = Intf.Compiler.to_string comp in
+    let state = Intf.State.to_string state in
+    Fpath.(to_string (v comp/state/pkg))
+  in
+  let file = Server_workdirs.file_from_logdir ~file workdir in
+  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) >|= fun content ->
   let instances =
     match Pkg_tbl.find_opt pkg_tbl pkg with
-    | Some instances -> Intf.Instance.create comp state :: instances
-    | None -> [Intf.Instance.create comp state]
+    | Some instances -> Intf.Instance.create comp state content :: instances
+    | None -> [Intf.Instance.create comp state content]
   in
   Pkg_tbl.replace pkg_tbl pkg instances
 
 let fill_pkgs_from_dir pkg_tbl workdir comp =
   get_files (Server_workdirs.gooddir ~switch:comp workdir) >>= fun good_files ->
   get_files (Server_workdirs.partialdir ~switch:comp workdir) >>= fun partial_files ->
-  get_files (Server_workdirs.baddir ~switch:comp workdir) >|= fun bad_files ->
-  List.iter (pkg_update pkg_tbl comp Intf.State.Good) good_files;
-  List.iter (pkg_update pkg_tbl comp Intf.State.Partial) partial_files;
-  List.iter (pkg_update pkg_tbl comp Intf.State.Bad) bad_files
+  get_files (Server_workdirs.baddir ~switch:comp workdir) >>= fun bad_files ->
+  Lwt_list.iter_s (pkg_update pkg_tbl workdir comp Intf.State.Good) good_files >>= fun () ->
+  Lwt_list.iter_s (pkg_update pkg_tbl workdir comp Intf.State.Partial) partial_files >>= fun () ->
+  Lwt_list.iter_s (pkg_update pkg_tbl workdir comp Intf.State.Bad) bad_files
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
@@ -65,14 +74,11 @@ let get_pkgs workdir =
   Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
   List.sort Intf.Pkg.compare
 
-let get_log workdir ~comp ~state ~pkg =
-  let comp = Intf.Compiler.to_string comp in
-  let state = Intf.State.to_string state in
-  if not (Oca_lib.is_valid_filename pkg) then
-    failwith "Wrong filename";
-  let file = Fpath.(to_string (v comp/state/pkg)) in
-  let file = Server_workdirs.file_from_logdir ~file workdir in
-  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
+let get_log _ ~comp ~state ~pkg =
+  Oca_server.Cache.get_pkgs cache >|= fun pkgs ->
+  let pkg = List.find (fun p -> String.equal pkg (Intf.Pkg.full_name p)) pkgs in
+  let instance = List.find (fun inst -> Intf.Compiler.equal comp (Intf.Instance.compiler inst) && Intf.State.equal state (Intf.Instance.state inst)) (Intf.Pkg.instances pkg) in
+  Intf.Instance.content instance
 
 let get_maintainers workdir =
   let dir = Server_workdirs.maintainersdir workdir in

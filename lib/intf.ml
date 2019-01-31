@@ -34,12 +34,14 @@ module Instance = struct
   type t = {
     compiler : Compiler.t;
     state : State.t;
+    content : string;
   }
 
-  let create compiler state = {compiler; state}
+  let create compiler state content = {compiler; state; content}
 
   let compiler x = x.compiler
   let state x = x.state
+  let content x = x.content
 end
 
 module Pkg = struct
