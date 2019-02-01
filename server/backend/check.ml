@@ -142,24 +142,24 @@ let build_switch ~stderr ~cached conf workdir switch =
 
 module Pkg_set = Set.Make (String)
 
-let get_maintainers ~pool ~stderr switch workdir pkgs =
+let get_maintainers ~pool ~jobs ~stderr switch workdir pkgs =
   let img_name = get_img_name switch in
-  Lwt.join begin
-    Pkg_set.fold begin fun pkg jobs ->
-      Lwt_pool.use pool begin fun () ->
-        docker_run_to_str ~stderr ~img_name ["opam";"show";"-f";"maintainer:";pkg] >>= fun maintainers ->
-        let maintainers = parse_maintainers "" maintainers in
-        let file = Server_workdirs.tmpmaintainersfile ~pkg workdir in
-        Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c maintainers)
-      end :: jobs
-    end pkgs []
-  end
+  Pkg_set.fold begin fun pkg jobs ->
+    Lwt_pool.use pool begin fun () ->
+      docker_run_to_str ~stderr ~img_name ["opam";"show";"-f";"maintainer:";pkg] >>= fun maintainers ->
+      let maintainers = parse_maintainers "" maintainers in
+      let file = Server_workdirs.tmpmaintainersfile ~pkg workdir in
+      Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c maintainers)
+    end :: jobs
+  end pkgs jobs
 
-let set_git_hash ~stderr switch conf =
+let set_git_hash ~pool ~stderr switch conf =
   let img_name = get_img_name switch in
-  docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= function
-  | [hash] -> Server_configfile.set_opam_repo_commit_hash conf hash
-  | _ -> Server_configfile.set_opam_repo_commit_hash conf "[internal failure]" (* TODO: fix *)
+  Lwt_pool.use pool begin fun () ->
+    docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= function
+    | [hash] -> Server_configfile.set_opam_repo_commit_hash conf hash
+    | _ -> Server_configfile.set_opam_repo_commit_hash conf "[internal failure]" (* TODO: fix *)
+  end
 
 let move_tmpdirs_to_final ~stderr workdir =
   let logdir = Server_workdirs.logdir workdir in
@@ -198,9 +198,9 @@ let run ~on_finished ~conf workdir =
           let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit) in
           Lwt_list.map_s (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
           let (jobs, pkgs) = run_and_get_pkgs ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
-          Lwt.join jobs >>= fun () ->
-          set_git_hash ~stderr switch conf >>= fun () ->
-          get_maintainers ~pool ~stderr switch workdir pkgs
+          let jobs = set_git_hash ~pool ~stderr switch conf :: jobs in
+          let jobs = get_maintainers ~pool ~jobs ~stderr switch workdir pkgs in
+          Lwt.join jobs
       | [] ->
           Lwt.return_unit
       end >>= fun () ->
