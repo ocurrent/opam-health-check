@@ -36,6 +36,8 @@ let get_compilers workdir =
 
 module Pkg_tbl = Hashtbl.Make (String)
 
+let limit_fd_pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit)
+
 let pkg_update pkg_tbl workdir comp state pkg =
   if not (Oca_lib.is_valid_filename pkg) then
     failwith "Wrong filename";
@@ -45,7 +47,9 @@ let pkg_update pkg_tbl workdir comp state pkg =
     Fpath.(to_string (v comp/state/pkg))
   in
   let file = Server_workdirs.file_from_logdir ~file workdir in
-  let content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
+  let content = Lwt_pool.use limit_fd_pool begin fun () ->
+    Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
+  end in
   let instances =
     match Pkg_tbl.find_opt pkg_tbl pkg with
     | Some instances -> Intf.Instance.create comp state content :: instances
