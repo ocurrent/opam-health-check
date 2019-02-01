@@ -37,8 +37,6 @@ let get_compilers workdir =
 module Pkg_tbl = Hashtbl.Make (String)
 
 let pkg_update ~limit_fd_pool pkg_tbl workdir comp state pkg =
-  if not (Oca_lib.is_valid_filename pkg) then
-    failwith "Wrong filename";
   let file =
     let comp = Intf.Compiler.to_string comp in
     let state = Intf.State.to_string state in
