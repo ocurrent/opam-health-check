@@ -77,7 +77,7 @@ let must_show_package query ~last pkg =
       true
   end >>&& begin fun () ->
     if not (String.is_empty (fst query.logsearch)) then
-      Lwt_list.exists_p (fun inst -> Intf.Instance.content inst >|= Re.execp (snd query.logsearch)) instances
+      Lwt_list.exists_p (fun inst -> Lwt_main.yield () >>= fun () -> Intf.Instance.content inst >|= Re.execp (snd query.logsearch)) instances
     else
       Lwt.return_true
   end
