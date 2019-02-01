@@ -1,7 +1,5 @@
 open Lwt.Infix
 
-let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit)
-
 let docker_build ~cached ~stderr ~img_name dockerfile =
   let cache = if cached then [] else ["--pull";"--no-cache"] in
   let stdin, fd = Lwt_unix.pipe () in
@@ -60,7 +58,7 @@ let is_partial_failure logfile =
     lookup ()
   end
 
-let run_job ~stderr ~switch workdir pkg =
+let run_job ~pool ~stderr ~switch workdir pkg =
   let img_name = get_img_name switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("Checking "^pkg^"...") >>= fun () ->
@@ -144,7 +142,7 @@ let build_switch ~stderr ~cached conf workdir switch =
 
 module Pkg_set = Set.Make (String)
 
-let get_maintainers ~stderr switch workdir pkgs =
+let get_maintainers ~pool ~stderr switch workdir pkgs =
   let img_name = get_img_name switch in
   Lwt.join begin
     Pkg_set.fold begin fun pkg jobs ->
@@ -175,10 +173,10 @@ let move_tmpdirs_to_final ~stderr workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string maintainersdir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmaintainersdir) (Fpath.to_string maintainersdir)
 
-let run_and_get_pkgs ~stderr workdir =
+let run_and_get_pkgs ~pool ~stderr workdir =
   List.fold_left begin fun (jobs, pkgs_set) (switch, pkgs) ->
     List.fold_left begin fun (jobs, pkgs_set) full_name ->
-      let job = run_job ~stderr ~switch workdir full_name in
+      let job = run_job ~pool ~stderr ~switch workdir full_name in
       let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
       (job :: jobs, Pkg_set.add pkg pkgs_set)
     end (jobs, pkgs_set) pkgs
@@ -197,11 +195,12 @@ let run ~on_finished ~conf workdir =
       begin match switches with
       | switch::switches ->
           build_switch ~stderr ~cached:false conf workdir switch >>= fun hd_pkgs ->
+          let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit) in
           Lwt_list.map_s (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
-          let (jobs, pkgs) = run_and_get_pkgs ~stderr workdir (hd_pkgs :: tl_pkgs) in
+          let (jobs, pkgs) = run_and_get_pkgs ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
           Lwt.join jobs >>= fun () ->
           set_git_hash ~stderr switch conf >>= fun () ->
-          get_maintainers ~stderr switch workdir pkgs
+          get_maintainers ~pool ~stderr switch workdir pkgs
       | [] ->
           Lwt.return_unit
       end >>= fun () ->
