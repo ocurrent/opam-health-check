@@ -45,7 +45,7 @@ let pkg_update pkg_tbl workdir comp state pkg =
     Fpath.(to_string (v comp/state/pkg))
   in
   let file = Server_workdirs.file_from_logdir ~file workdir in
-  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) >|= fun content ->
+  let content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
   let instances =
     match Pkg_tbl.find_opt pkg_tbl pkg with
     | Some instances -> Intf.Instance.create comp state content :: instances
@@ -56,10 +56,10 @@ let pkg_update pkg_tbl workdir comp state pkg =
 let fill_pkgs_from_dir pkg_tbl workdir comp =
   get_files (Server_workdirs.gooddir ~switch:comp workdir) >>= fun good_files ->
   get_files (Server_workdirs.partialdir ~switch:comp workdir) >>= fun partial_files ->
-  get_files (Server_workdirs.baddir ~switch:comp workdir) >>= fun bad_files ->
-  Lwt_list.iter_s (pkg_update pkg_tbl workdir comp Intf.State.Good) good_files >>= fun () ->
-  Lwt_list.iter_s (pkg_update pkg_tbl workdir comp Intf.State.Partial) partial_files >>= fun () ->
-  Lwt_list.iter_s (pkg_update pkg_tbl workdir comp Intf.State.Bad) bad_files
+  get_files (Server_workdirs.baddir ~switch:comp workdir) >|= fun bad_files ->
+  List.iter (pkg_update pkg_tbl workdir comp Intf.State.Good) good_files;
+  List.iter (pkg_update pkg_tbl workdir comp Intf.State.Partial) partial_files;
+  List.iter (pkg_update pkg_tbl workdir comp Intf.State.Bad) bad_files
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
@@ -75,7 +75,7 @@ let get_pkgs workdir =
   List.sort Intf.Pkg.compare
 
 let get_log _ ~comp ~state ~pkg =
-  Oca_server.Cache.get_pkgs cache >|= fun pkgs ->
+  Oca_server.Cache.get_pkgs cache >>= fun pkgs ->
   let pkg = List.find (fun p -> String.equal pkg (Intf.Pkg.full_name p)) pkgs in
   let instance = List.find (fun inst -> Intf.Compiler.equal comp (Intf.Instance.compiler inst) && Intf.State.equal state (Intf.Instance.state inst)) (Intf.Pkg.instances pkg) in
   Intf.Instance.content instance

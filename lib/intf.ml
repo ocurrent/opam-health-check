@@ -34,7 +34,7 @@ module Instance = struct
   type t = {
     compiler : Compiler.t;
     state : State.t;
-    content : string;
+    content : string Lwt.t;
   }
 
   let create compiler state content = {compiler; state; content}

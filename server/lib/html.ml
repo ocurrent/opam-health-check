@@ -1,3 +1,4 @@
+open Lwt.Infix
 open Intf
 
 type query = {
@@ -30,12 +31,21 @@ let instance_to_html ~pkg instances comp =
       end
   | None -> td "grey" [txt "☐"]
 
+let (>>&) x f =
+  if x then f () else Lwt.return_false
+
+let (>>&&) x f =
+  x >>= fun x ->
+  if x then f () else Lwt.return_false
+
 let must_show_package query ~last pkg =
+  Lwt_main.yield () >>= fun () ->
   let maintainers = Pkg.maintainers pkg in
   let instances = Pkg.instances pkg in
-  List.exists (fun comp -> List.exists (fun instance -> Compiler.equal comp (Instance.compiler instance)) instances) query.show_available &&
+  List.exists (fun comp -> List.exists (fun instance -> Compiler.equal comp (Instance.compiler instance)) instances) query.show_available >>& fun () ->
   let instances = List.filter (fun inst -> List.mem ~eq:Intf.Compiler.equal (Intf.Instance.compiler inst) query.compilers) instances in
   begin
+    Lwt.return @@
     if query.show_failures_only then
       List.exists (fun instance -> match Instance.state instance with
         | State.Bad | State.Partial -> true
@@ -43,40 +53,42 @@ let must_show_package query ~last pkg =
       ) instances
     else
       true
-  end && begin
+  end >>&& begin fun () ->
+    Lwt.return @@
     match instances with
     | hd::tl when query.show_diff_only ->
         let state = Instance.state hd in
         List.exists (fun x -> not (State.equal state (Instance.state x))) tl
     | [] | _::_ ->
         true
-  end && begin
+  end >>&& begin fun () ->
+    Lwt.return @@
     if query.show_latest_only then
       match last with
       | None -> true
       | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
     else
       true
-  end && begin
+  end >>&& begin fun () ->
+    Lwt.return @@
     if not (String.is_empty (fst query.maintainers)) then
       List.exists (Re.execp (snd query.maintainers)) maintainers
     else
       true
-  end && begin
+  end >>&& begin fun () ->
     if not (String.is_empty (fst query.logsearch)) then
-      List.exists (fun inst -> Re.execp (snd query.logsearch) (Intf.Instance.content inst)) instances
+      Lwt_list.exists_p (fun inst -> Intf.Instance.content inst >|= Re.execp (snd query.logsearch)) instances
     else
-      true
+      Lwt.return_true
   end
 
 let pkg_to_html query (acc, last) pkg =
   let open Tyxml.Html in
   let tr = tr ~a:[a_class ["results-row"]] in
   let td = td ~a:[a_class ["results-cell"; "pkgname"]] in
-  if must_show_package query ~last pkg then
-    ((tr (td [txt (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg (Pkg.instances pkg)) query.compilers)) :: acc, Some pkg)
-  else
-    (acc, last)
+  must_show_package query ~last pkg >|= function
+  | true -> ((tr (td [txt (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg (Pkg.instances pkg)) query.compilers)) :: acc, Some pkg)
+  | false -> (acc, last)
 
 let result_legend query =
   let open Tyxml.Html in
@@ -107,7 +119,7 @@ let gen_table_form ~conf query l =
 let get_html ~conf query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
-  let pkgs, _ = List.fold_left (pkg_to_html query) ([], None) (List.rev pkgs) in
+  Lwt_list.fold_left_s (pkg_to_html query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers in
   let title = title (txt "opam-check-all") in

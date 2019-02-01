@@ -9,4 +9,4 @@ type query = {
   logsearch : string * Re.re;
 }
 
-val get_html : conf:Server_configfile.t -> query -> Intf.Pkg.t list -> string
+val get_html : conf:Server_configfile.t -> query -> Intf.Pkg.t list -> string Lwt.t

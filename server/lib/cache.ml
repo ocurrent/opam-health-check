@@ -40,7 +40,7 @@ let clear_and_init self pkgs compilers maintainers =
 
 let get_html ~conf self query =
   self.pkgs >>= fun pkgs ->
-  let html = Html.get_html ~conf query pkgs in
+  Html.get_html ~conf query pkgs >>= fun html ->
   Html_cache.add self.html_tbl query html;
   Lwt.return html
 
