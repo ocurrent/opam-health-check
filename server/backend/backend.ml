@@ -36,9 +36,7 @@ let get_compilers workdir =
 
 module Pkg_tbl = Hashtbl.Make (String)
 
-let limit_fd_pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit)
-
-let pkg_update pkg_tbl workdir comp state pkg =
+let pkg_update ~limit_fd_pool pkg_tbl workdir comp state pkg =
   if not (Oca_lib.is_valid_filename pkg) then
     failwith "Wrong filename";
   let file =
@@ -57,13 +55,13 @@ let pkg_update pkg_tbl workdir comp state pkg =
   in
   Pkg_tbl.replace pkg_tbl pkg instances
 
-let fill_pkgs_from_dir pkg_tbl workdir comp =
+let fill_pkgs_from_dir ~limit_fd_pool pkg_tbl workdir comp =
   get_files (Server_workdirs.gooddir ~switch:comp workdir) >>= fun good_files ->
   get_files (Server_workdirs.partialdir ~switch:comp workdir) >>= fun partial_files ->
   get_files (Server_workdirs.baddir ~switch:comp workdir) >|= fun bad_files ->
-  List.iter (pkg_update pkg_tbl workdir comp Intf.State.Good) good_files;
-  List.iter (pkg_update pkg_tbl workdir comp Intf.State.Partial) partial_files;
-  List.iter (pkg_update pkg_tbl workdir comp Intf.State.Bad) bad_files
+  List.iter (pkg_update ~limit_fd_pool pkg_tbl workdir comp Intf.State.Good) good_files;
+  List.iter (pkg_update ~limit_fd_pool pkg_tbl workdir comp Intf.State.Partial) partial_files;
+  List.iter (pkg_update ~limit_fd_pool pkg_tbl workdir comp Intf.State.Bad) bad_files
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
@@ -74,7 +72,8 @@ let add_pkg full_name instances acc =
 let get_pkgs workdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
   Oca_server.Cache.get_compilers cache >>= fun compilers ->
-  Lwt_list.iter_s (fill_pkgs_from_dir pkg_tbl workdir) compilers >>= fun () ->
+  let limit_fd_pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit) in
+  Lwt_list.iter_s (fill_pkgs_from_dir ~limit_fd_pool pkg_tbl workdir) compilers >>= fun () ->
   Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
   List.sort Intf.Pkg.compare
 
