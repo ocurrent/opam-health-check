@@ -70,3 +70,16 @@ module Pkg = struct
   let maintainers x = x.maintainers
   let instances x = x.instances
 end
+
+module Pkg_diff = struct
+  type diff =
+    | NowInstallable
+    | NotAvailableAnymore
+    | StatusChanged of (State.t * State.t)
+
+  type t = {
+    full_name : string;
+    comp : Compiler.t;
+    diff : diff;
+  }
+end

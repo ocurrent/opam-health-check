@@ -109,10 +109,12 @@ let gen_table_form ~conf query l =
     | None -> b [txt "undefined opam-repository commit hash"]
     | Some hash -> a ~a:[a_href ("https://github.com/ocaml/opam-repository/commit/"^hash)] [b [txt "🔗 opam-repository commit hash"]]
   in
+  let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last check"]] in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
     td [result_legend query;
         p ~a:[a_style "text-align: right;"] [opam_repo_uri];
+        p ~a:[a_style "text-align: right;"] [opam_diff_uri];
        ]
   ]]]]
 
@@ -159,4 +161,28 @@ let get_html ~conf query pkgs =
   ] in
   let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in
   let doc = html head (body [filter_form; br (); doc]) in
+  Format.sprintf "%a\n" (pp ()) doc
+
+let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
+  let open Tyxml.Html in
+  let prefix = full_name^"."^Intf.Compiler.to_string comp in
+  let diff = match diff with
+    | Intf.Pkg_diff.StatusChanged Intf.State.(Good, Partial) -> prefix^" is now failing because one of its dependencies failed to build"
+    | Intf.Pkg_diff.StatusChanged Intf.State.(Good, Bad) -> prefix^" is now failing"
+    | Intf.Pkg_diff.StatusChanged Intf.State.(Bad, Good) -> prefix^" is not failing anymore"
+    | Intf.Pkg_diff.StatusChanged Intf.State.(Bad, Partial) -> prefix^" failed before but is now failing because one of its dependencies failed to build"
+    | Intf.Pkg_diff.StatusChanged Intf.State.(Partial, Good) -> prefix^" failed before because one of its depenedencies failed to build, but is now not failing anymore"
+    | Intf.Pkg_diff.StatusChanged Intf.State.(Partial, Bad) -> prefix^" failed before because one of its dependencies failed to build, but is now failing itself"
+    | Intf.Pkg_diff.StatusChanged Intf.State.((Good, Good) | (Partial, Partial) | (Bad, Bad)) -> assert false
+    | Intf.Pkg_diff.NowInstallable -> prefix^" is now installable"
+    | Intf.Pkg_diff.NotAvailableAnymore -> prefix^" is not available anymore"
+  in
+  li [txt diff]
+
+let get_diff diff =
+  let open Tyxml.Html in
+  let title = title (txt "opam-check-all diff") in
+  let charset = meta ~a:[a_charset "utf-8"] () in
+  let head = head title [charset] in
+  let doc = html head (body [ul (List.map generate_diff_html diff)]) in
   Format.sprintf "%a\n" (pp ()) doc

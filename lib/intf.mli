@@ -45,3 +45,16 @@ module Pkg : sig
   val maintainers : t -> string list
   val instances : t -> Instance.t list
 end
+
+module Pkg_diff : sig
+  type diff =
+    | NowInstallable
+    | NotAvailableAnymore
+    | StatusChanged of (State.t * State.t)
+
+  type t = {
+    full_name : string;
+    comp : Compiler.t;
+    diff : diff;
+  }
+end

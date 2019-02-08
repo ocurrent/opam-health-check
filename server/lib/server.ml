@@ -62,6 +62,9 @@ module Make (Backend : Backend_intf.S) = struct
         parse_raw_query uri >>= fun query ->
         Cache.get_html ~conf Backend.cache query >>= fun html ->
         serv_text ~content_type:"text/html" html
+    | ["diff"] ->
+        Cache.get_html_diff Backend.cache >>= fun html ->
+        serv_text ~content_type:"text/html" html
     | [comp; state; pkg] ->
         let comp = Intf.Compiler.from_string comp in
         let state = Intf.State.from_string state in

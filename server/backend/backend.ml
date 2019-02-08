@@ -93,6 +93,9 @@ let get_maintainers workdir =
   end files >|= fun () ->
   maintainers
 
+let get_html_diff () =
+  Oca_server.Cache.get_diff cache >|= Oca_server.Html.get_diff
+
 (* TODO: Deduplicate with Server.tcp_server *)
 let tcp_server port callback =
   Cohttp_lwt_unix.Server.create
@@ -106,6 +109,7 @@ let cache_clear_and_init workdir =
     (fun () -> get_pkgs workdir)
     (fun () -> get_compilers workdir)
     (fun () -> get_maintainers workdir)
+    get_html_diff
 
 let run_action_loop ~run_trigger f =
   let two_days = float_of_int (48 * 60 * 60) in
