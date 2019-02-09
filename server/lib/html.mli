@@ -5,9 +5,8 @@ type query = {
   show_failures_only : bool;
   show_diff_only : bool;
   show_latest_only : bool;
-  maintainers : string * Re.re;
-  logsearch : string * Re.re;
-  logsearch_comp : Intf.Compiler.t;
+  maintainers : string * Re.re option;
+  logsearch : string * (Re.re * Intf.Compiler.t) option;
 }
 
 val get_html : conf:Server_configfile.t -> query -> Intf.Pkg.t list -> string Lwt.t

@@ -8,9 +8,8 @@ type query = {
   show_failures_only : bool;
   show_diff_only : bool;
   show_latest_only : bool;
-  maintainers : string * Re.re;
-  logsearch : string * Re.re;
-  logsearch_comp : Compiler.t;
+  maintainers : string * Re.re option;
+  logsearch : string * (Re.re * Compiler.t) option;
 }
 
 let log_url pkg instance =
@@ -72,21 +71,21 @@ let must_show_package query ~last pkg =
       true
   end >>&& begin fun () ->
     Lwt.return @@
-    if not (String.is_empty (fst query.maintainers)) then
-      List.exists (Re.execp (snd query.maintainers)) maintainers
-    else
-      true
+    match snd query.maintainers with
+    | Some re -> List.exists (Re.execp re) maintainers
+    | None -> true
   end >>&& begin fun () ->
-    if not (String.is_empty (fst query.logsearch)) then
-      Lwt_main.yield () >>= fun () ->
-      Lwt_list.exists_s begin fun inst ->
-        if Intf.Compiler.equal query.logsearch_comp (Intf.Instance.compiler inst) then
-          Intf.Instance.content inst >|= Re.execp (snd query.logsearch)
-        else
-          Lwt.return_false
-      end instances
-    else
-      Lwt.return_true
+    match snd query.logsearch with
+    | Some (re, comp) ->
+        Lwt_main.yield () >>= fun () ->
+        Lwt_list.exists_s begin fun inst ->
+          if Intf.Compiler.equal comp (Intf.Instance.compiler inst) then
+            Intf.Instance.content inst >|= Re.execp re
+          else
+            Lwt.return_false
+        end instances
+    | None ->
+        Lwt.return_true
   end
 
 let pkg_to_html query (acc, last) pkg =
@@ -158,7 +157,7 @@ let get_html ~conf query pkgs =
   let opts_comp = List.map begin fun comp ->
     let comp_str = Intf.Compiler.to_string comp in
     option
-      ~a:(a_value comp_str :: if Intf.Compiler.equal query.logsearch_comp comp then [a_selected ()] else [])
+      ~a:(a_value comp_str :: match snd query.logsearch with Some (_, c) when Intf.Compiler.equal c comp -> [a_selected ()] | Some _ | None -> [])
       (txt comp_str)
   end query.available_compilers in
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
