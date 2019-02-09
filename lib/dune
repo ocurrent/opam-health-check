@@ -7,4 +7,6 @@
     opam-core
     yaml
     fpath
+    checkseum.c
+    decompress
     containers))

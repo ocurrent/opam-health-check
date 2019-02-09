@@ -1,3 +1,5 @@
+open Lwt.Infix
+
 module State = struct
   type t = Good | Partial | Bad
 
@@ -34,14 +36,15 @@ module Instance = struct
   type t = {
     compiler : Compiler.t;
     state : State.t;
-    content : string Lwt.t Lazy.t;
+    content : Compress.t Lwt.t Lazy.t;
   }
 
-  let create compiler state content = {compiler; state; content}
+  let create compiler state content =
+    {compiler; state; content = lazy (Lazy.force content >|= Compress.compress ?level:None)}
 
   let compiler x = x.compiler
   let state x = x.state
-  let content x = Lazy.force x.content
+  let content x = Lazy.force x.content >|= Compress.uncompress
 end
 
 module Pkg = struct
