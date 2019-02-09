@@ -10,6 +10,7 @@ type query = {
   show_latest_only : bool;
   maintainers : string * Re.re;
   logsearch : string * Re.re;
+  logsearch_comp : Compiler.t;
 }
 
 let log_url pkg instance =
@@ -77,7 +78,13 @@ let must_show_package query ~last pkg =
       true
   end >>&& begin fun () ->
     if not (String.is_empty (fst query.logsearch)) then
-      Lwt_list.exists_p (fun inst -> Lwt_main.yield () >>= fun () -> Intf.Instance.content inst >|= Re.execp (snd query.logsearch)) instances
+      Lwt_main.yield () >>= fun () ->
+      Lwt_list.exists_s begin fun inst ->
+        if Intf.Compiler.equal query.logsearch_comp (Intf.Instance.compiler inst) then
+          Intf.Instance.content inst >|= Re.execp (snd query.logsearch)
+        else
+          Lwt.return_false
+      end instances
     else
       Lwt.return_true
   end
@@ -103,7 +110,7 @@ let result_legend query =
 
 let gen_table_form ~conf query l =
   let open Tyxml.Html in
-  let aux (txt, elt) = tr [td txt; td [elt]] in
+  let aux (txt, elts) = tr [td txt; td elts] in
   let legend = legend [b [txt "Filter form:"]] in
   let opam_repo_uri = match Server_configfile.opam_repo_commit_hash conf with
     | None -> b [txt "undefined opam-repository commit hash"]
@@ -148,16 +155,23 @@ let get_html ~conf query pkgs =
   let maintainers = input ~a:[a_input_type `Text; a_name "maintainers"; a_value (fst query.maintainers)] () in
   let logsearch_text = [txt "Show only packages where one of the logs matches [posix regexp]:"] in
   let logsearch = input ~a:[a_input_type `Text; a_name "logsearch"; a_value (fst query.logsearch)] () in
+  let opts_comp = List.map begin fun comp ->
+    let comp_str = Intf.Compiler.to_string comp in
+    option
+      ~a:(a_value comp_str :: if Intf.Compiler.equal query.logsearch_comp comp then [a_selected ()] else [])
+      (txt comp_str)
+  end query.available_compilers in
+  let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
   let filter_form = gen_table_form ~conf query [
-    (compilers_text, compilers);
-    (show_available_text, show_available);
-    (show_failures_only_text, show_failures_only);
-    (show_diff_only_text, show_diff_only);
-    (show_latest_only_text, show_latest_only);
-    (maintainers_text, maintainers);
-    (logsearch_text, logsearch);
-    ([], submit_form);
+    (compilers_text, [compilers]);
+    (show_available_text, [show_available]);
+    (show_failures_only_text, [show_failures_only]);
+    (show_diff_only_text, [show_diff_only]);
+    (show_latest_only_text, [show_latest_only]);
+    (maintainers_text, [maintainers]);
+    (logsearch_text, [logsearch; logsearch_comp]);
+    ([], [submit_form]);
   ] in
   let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in
   let doc = html head (body [filter_form; br (); doc]) in

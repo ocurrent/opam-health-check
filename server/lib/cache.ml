@@ -5,7 +5,7 @@ open Intf
 module Html_cache = Hashtbl.Make (struct
     type t = Html.query
     let hash = Hashtbl.hash (* TODO: WRONG!! *)
-    let equal {Html.available_compilers; compilers; show_available; show_failures_only; show_diff_only; show_latest_only; maintainers; logsearch} y =
+    let equal {Html.available_compilers; compilers; show_available; show_failures_only; show_diff_only; show_latest_only; maintainers; logsearch; logsearch_comp} y =
       List.equal Compiler.equal available_compilers y.Html.available_compilers &&
       List.equal Compiler.equal compilers y.Html.compilers &&
       List.equal Compiler.equal show_available y.Html.show_available &&
@@ -13,7 +13,8 @@ module Html_cache = Hashtbl.Make (struct
       Bool.equal show_diff_only y.Html.show_diff_only &&
       Bool.equal show_latest_only y.Html.show_latest_only &&
       String.equal (fst maintainers) (fst y.Html.maintainers) &&
-      String.equal (fst logsearch) (fst y.Html.logsearch)
+      String.equal (fst logsearch) (fst y.Html.logsearch) &&
+      Compiler.equal logsearch_comp y.Html.logsearch_comp
   end)
 
 module Maintainers_cache = Hashtbl.Make (String)

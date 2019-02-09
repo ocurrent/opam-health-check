@@ -24,6 +24,8 @@ module Make (Backend : Backend_intf.S) = struct
     let maintainers = (maintainers, Re.Posix.compile_pat ~opts:[`ICase] maintainers) in
     let logsearch = option_to_string (Uri.get_query_param uri "logsearch") in
     let logsearch = (logsearch, Re.Posix.compile_pat ~opts:[`Newline] logsearch) in
+    let logsearch_comp = option_to_string (Uri.get_query_param uri "logsearch_comp") in
+    let logsearch_comp = Intf.Compiler.from_string logsearch_comp in
     Cache.get_compilers ~old:false Backend.cache >>= fun available_compilers ->
     let compilers = match compilers with
       | [] | [""] -> available_compilers
@@ -42,6 +44,7 @@ module Make (Backend : Backend_intf.S) = struct
       Html.show_latest_only;
       Html.maintainers;
       Html.logsearch;
+      Html.logsearch_comp;
     }
 
   let filter_path path =
