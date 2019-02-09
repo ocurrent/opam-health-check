@@ -8,6 +8,7 @@ val list_command : t -> string
 val extra_command : t -> string option
 val ocaml_switches : t -> Intf.Compiler.t list option
 val opam_repo_commit_hash : t -> string option
+val opam_repo_old_commit_hash : t -> string option
 
 val set_ocaml_switches : t -> Intf.Compiler.t list -> unit Lwt.t
 val set_default_ocaml_switches : t -> (unit -> Intf.Compiler.t list Lwt.t) -> unit Lwt.t

@@ -28,22 +28,22 @@ let is_directory dir file =
   else
     None
 
-let get_compilers workdir =
-  let dir = Server_workdirs.logdir workdir in
+let get_compilers ~old workdir =
+  let dir = Server_workdirs.logdir ~old workdir in
   get_files dir >|= fun files ->
   let dirs = List.filter_map (is_directory dir) files in
   List.sort Intf.Compiler.compare dirs
 
 module Pkg_tbl = Hashtbl.Make (String)
 
-let pkg_update ~limit_fd_pool pkg_tbl workdir comp state pkg =
+let pkg_update ~old pkg_tbl workdir comp state pkg =
   let file =
     let comp = Intf.Compiler.to_string comp in
     let state = Intf.State.to_string state in
     Fpath.(to_string (v comp/state/pkg))
   in
-  let file = Server_workdirs.file_from_logdir ~file workdir in
-  let content = Lwt_pool.use limit_fd_pool begin fun () ->
+  let file = Server_workdirs.file_from_logdir ~old ~file workdir in
+  let content = lazy begin
     Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
   end in
   let instances =
@@ -53,13 +53,13 @@ let pkg_update ~limit_fd_pool pkg_tbl workdir comp state pkg =
   in
   Pkg_tbl.replace pkg_tbl pkg instances
 
-let fill_pkgs_from_dir ~limit_fd_pool pkg_tbl workdir comp =
-  get_files (Server_workdirs.gooddir ~switch:comp workdir) >>= fun good_files ->
-  get_files (Server_workdirs.partialdir ~switch:comp workdir) >>= fun partial_files ->
-  get_files (Server_workdirs.baddir ~switch:comp workdir) >|= fun bad_files ->
-  List.iter (pkg_update ~limit_fd_pool pkg_tbl workdir comp Intf.State.Good) good_files;
-  List.iter (pkg_update ~limit_fd_pool pkg_tbl workdir comp Intf.State.Partial) partial_files;
-  List.iter (pkg_update ~limit_fd_pool pkg_tbl workdir comp Intf.State.Bad) bad_files
+let fill_pkgs_from_dir ~old pkg_tbl workdir comp =
+  get_files (Server_workdirs.gooddir ~old ~switch:comp workdir) >>= fun good_files ->
+  get_files (Server_workdirs.partialdir ~old ~switch:comp workdir) >>= fun partial_files ->
+  get_files (Server_workdirs.baddir ~old ~switch:comp workdir) >|= fun bad_files ->
+  List.iter (pkg_update ~old pkg_tbl workdir comp Intf.State.Good) good_files;
+  List.iter (pkg_update ~old pkg_tbl workdir comp Intf.State.Partial) partial_files;
+  List.iter (pkg_update ~old pkg_tbl workdir comp Intf.State.Bad) bad_files
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
@@ -67,11 +67,10 @@ let add_pkg full_name instances acc =
   Oca_server.Cache.get_maintainers cache pkg >|= fun maintainers ->
   Intf.Pkg.create ~full_name ~instances ~maintainers :: acc
 
-let get_pkgs workdir =
+let get_pkgs ~old workdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
-  Oca_server.Cache.get_compilers cache >>= fun compilers ->
-  let limit_fd_pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit) in
-  Lwt_list.iter_s (fill_pkgs_from_dir ~limit_fd_pool pkg_tbl workdir) compilers >>= fun () ->
+  Oca_server.Cache.get_compilers ~old cache >>= fun compilers ->
+  Lwt_list.iter_s (fill_pkgs_from_dir ~old pkg_tbl workdir) compilers >>= fun () ->
   Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
   List.sort Intf.Pkg.compare
 
@@ -106,10 +105,10 @@ let tcp_server port callback =
 let cache_clear_and_init workdir =
   Oca_server.Cache.clear_and_init
     cache
-    (fun () -> get_pkgs workdir)
-    (fun () -> get_compilers workdir)
-    (fun () -> get_maintainers workdir)
-    get_html_diff
+    ~pkgs:(fun ~old -> get_pkgs ~old workdir)
+    ~compilers:(fun ~old -> get_compilers ~old workdir)
+    ~maintainers:(fun () -> get_maintainers workdir)
+    ~html_diff:get_html_diff
 
 let run_action_loop ~run_trigger f =
   let two_days = float_of_int (48 * 60 * 60) in
@@ -129,7 +128,7 @@ let start conf workdir =
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
   cache_clear_and_init workdir;
-  Server_configfile.set_default_ocaml_switches conf (fun () -> get_compilers workdir) >>= fun () ->
+  Server_configfile.set_default_ocaml_switches conf (fun () -> get_compilers ~old:false workdir) >>= fun () ->
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->
   let task () =

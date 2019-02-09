@@ -8,6 +8,7 @@ type t = {
   mutable extra_command : string option;
   mutable ocaml_switches : Intf.Compiler.t list option;
   mutable opam_repo_commit_hash : string option;
+  mutable opam_repo_old_commit_hash : string option;
 }
 
 let create_conf yamlfile = {
@@ -18,6 +19,7 @@ let create_conf yamlfile = {
   extra_command = None;
   ocaml_switches = None;
   opam_repo_commit_hash = None;
+  opam_repo_old_commit_hash = None;
 }
 
 let set_field ~field set = function
@@ -48,6 +50,10 @@ let set_config conf = function
       ()
   | "opam-repo-commit-hash" as field, `String hash ->
       set_field ~field (fun () -> conf.opam_repo_commit_hash <- Some hash) conf.opam_repo_commit_hash
+  | "opam-repo-old-commit-hash", `String "null" -> (* TODO: fix ocaml-yaml's support of null values *)
+      ()
+  | "opam-repo-old-commit-hash" as field, `String hash ->
+      set_field ~field (fun () -> conf.opam_repo_old_commit_hash <- Some hash) conf.opam_repo_old_commit_hash
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
@@ -60,6 +66,7 @@ let yaml_of_conf conf =
     "extra-command", Option.map_or ~default:null (fun s -> `String s) conf.extra_command;
     "ocaml-switches", Option.map_or ~default:null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
     "opam-repo-commit-hash", Option.map_or ~default:null (fun s -> `String s) conf.opam_repo_commit_hash;
+    "opam-repo-old-commit-hash", Option.map_or ~default:null (fun s -> `String s) conf.opam_repo_old_commit_hash;
   ]
 
 let set_defaults conf =
@@ -94,6 +101,7 @@ let set_extra_command conf cmd =
   Lwt.return_unit
 
 let set_opam_repo_commit_hash conf hash =
+  conf.opam_repo_old_commit_hash <- conf.opam_repo_commit_hash;
   conf.opam_repo_commit_hash <- Some hash;
   set_defaults conf;
   Lwt.return_unit
@@ -118,3 +126,4 @@ let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let opam_repo_commit_hash {opam_repo_commit_hash; _} = opam_repo_commit_hash
+let opam_repo_old_commit_hash {opam_repo_old_commit_hash; _} = opam_repo_old_commit_hash

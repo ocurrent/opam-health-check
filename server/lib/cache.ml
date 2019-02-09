@@ -60,7 +60,9 @@ let generate_diff old_pkgs new_pkgs =
 type t = {
   html_tbl : string Html_cache.t;
   mutable pkgs : Intf.Pkg.t list Lwt.t;
+  mutable old_pkgs : Intf.Pkg.t list Lwt.t;
   mutable compilers : Intf.Compiler.t list Lwt.t;
+  mutable old_compilers : Intf.Compiler.t list Lwt.t;
   mutable maintainers : string list Maintainers_cache.t Lwt.t;
   mutable pkgs_diff : Pkg_diff.t list Lwt.t;
   mutable html_diff : string Lwt.t;
@@ -69,18 +71,21 @@ type t = {
 let create () = {
   html_tbl = Html_cache.create 32;
   pkgs = Lwt.return_nil;
+  old_pkgs = Lwt.return_nil;
   compilers = Lwt.return_nil;
+  old_compilers = Lwt.return_nil;
   maintainers = Lwt.return (Maintainers_cache.create 0);
   pkgs_diff = Lwt.return_nil;
   html_diff = Lwt.return "";
 }
 
-let clear_and_init self pkgs compilers maintainers html_diff =
+let clear_and_init self ~pkgs ~compilers ~maintainers ~html_diff =
   self.maintainers <- maintainers ();
-  self.compilers <- compilers ();
-  let new_pkgs = pkgs () in
-  self.pkgs_diff <- generate_diff self.pkgs new_pkgs;
-  self.pkgs <- new_pkgs;
+  self.compilers <- compilers ~old:false;
+  self.old_compilers <- compilers ~old:true;
+  self.pkgs <- pkgs ~old:false;
+  self.old_pkgs <- pkgs ~old:true;
+  self.pkgs_diff <- generate_diff self.old_pkgs self.pkgs;
   self.html_diff <- html_diff ();
   Html_cache.clear self.html_tbl
 
@@ -98,8 +103,11 @@ let get_html ~conf self query =
 let get_pkgs self =
   self.pkgs
 
-let get_compilers self =
-  self.compilers
+let get_compilers ~old self =
+  if old then
+    self.old_compilers
+  else
+    self.compilers
 
 let get_maintainers self k =
   self.maintainers >|= fun maintainers ->

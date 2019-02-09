@@ -20,7 +20,7 @@ end
 module Instance : sig
   type t
 
-  val create : Compiler.t -> State.t -> string Lwt.t -> t
+  val create : Compiler.t -> State.t -> string Lwt.t Lazy.t -> t
 
   val compiler : t -> Compiler.t
   val state : t -> State.t

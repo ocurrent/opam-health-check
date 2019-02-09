@@ -34,14 +34,14 @@ module Instance = struct
   type t = {
     compiler : Compiler.t;
     state : State.t;
-    content : string Lwt.t;
+    content : string Lwt.t Lazy.t;
   }
 
   let create compiler state content = {compiler; state; content}
 
   let compiler x = x.compiler
   let state x = x.state
-  let content x = x.content
+  let content x = Lazy.force x.content
 end
 
 module Pkg = struct

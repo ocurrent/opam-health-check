@@ -16,16 +16,16 @@ let keyfile ~username workdir = keysdir workdir/username+"key"
 
 let tmpdir workdir = workdir/"tmp"
 
-let logdir workdir = workdir/"logs"
+let logdir ~old workdir = workdir/(if old then "old-logs" else "logs")
 let tmplogdir workdir = tmpdir workdir/"logs"
 
 let ilogdir workdir = workdir/"ilogs"
 let ilogfile workdir = ilogdir workdir/Printf.sprintf "%.0f" (Unix.time ())
 
-let switchlogdir ~switch workdir = logdir workdir/Intf.Compiler.to_string switch
-let gooddir ~switch workdir = switchlogdir ~switch workdir/"good"
-let partialdir ~switch workdir = switchlogdir ~switch workdir/"partial"
-let baddir ~switch workdir = switchlogdir ~switch workdir/"bad"
+let switchlogdir ~old ~switch workdir = logdir ~old workdir/Intf.Compiler.to_string switch
+let gooddir ~old ~switch workdir = switchlogdir ~old ~switch workdir/"good"
+let partialdir ~old ~switch workdir = switchlogdir ~old ~switch workdir/"partial"
+let baddir ~old ~switch workdir = switchlogdir ~old ~switch workdir/"bad"
 
 let tmpswitchlogdir ~switch workdir = tmplogdir workdir/Intf.Compiler.to_string switch
 let tmpgooddir ~switch workdir = tmpswitchlogdir ~switch workdir/"good"
@@ -45,14 +45,15 @@ let tmpmaintainersdir workdir = tmpdir workdir/"maintainers"
 let tmpmaintainersfile ~pkg workdir = tmpmaintainersdir workdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
-let file_from_logdir ~file workdir =
+let file_from_logdir ~old ~file workdir =
   let file = Fpath.v file in
   let file = Fpath.segs file in
-  List.fold_left (/) (logdir workdir) file
+  List.fold_left (/) (logdir ~old workdir) file
 
 let init_base workdir =
   Oca_lib.mkdir_p (keysdir workdir) >>= fun () ->
-  Oca_lib.mkdir_p (logdir workdir) >>= fun () ->
+  Oca_lib.mkdir_p (logdir ~old:false workdir) >>= fun () ->
+  Oca_lib.mkdir_p (logdir ~old:true workdir) >>= fun () ->
   Oca_lib.mkdir_p (ilogdir workdir) >>= fun () ->
   Oca_lib.mkdir_p (maintainersdir workdir)
 

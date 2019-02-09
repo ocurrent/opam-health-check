@@ -24,7 +24,7 @@ module Make (Backend : Backend_intf.S) = struct
     let maintainers = (maintainers, Re.Posix.compile_pat ~opts:[`ICase] maintainers) in
     let logsearch = option_to_string (Uri.get_query_param uri "logsearch") in
     let logsearch = (logsearch, Re.Posix.compile_pat ~opts:[`Newline] logsearch) in
-    Cache.get_compilers Backend.cache >>= fun available_compilers ->
+    Cache.get_compilers ~old:false Backend.cache >>= fun available_compilers ->
     let compilers = match compilers with
       | [] | [""] -> available_compilers
       | compilers -> List.map Intf.Compiler.from_string compilers

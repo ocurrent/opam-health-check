@@ -162,12 +162,14 @@ let set_git_hash ~pool ~stderr switch conf =
   end
 
 let move_tmpdirs_to_final ~stderr workdir =
-  let logdir = Server_workdirs.logdir workdir in
+  let logdir = Server_workdirs.logdir ~old:false workdir in
+  let oldlogdir = Server_workdirs.logdir ~old:true workdir in
   let tmplogdir = Server_workdirs.tmplogdir workdir in
   let maintainersdir = Server_workdirs.maintainersdir workdir in
   let tmpmaintainersdir = Server_workdirs.tmpmaintainersdir workdir in
   (* TODO: replace by Oca_lib.rm_rf *)
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string logdir] >>= fun () ->
+  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string oldlogdir] >>= fun () ->
+  Lwt_unix.rename (Fpath.to_string logdir) (Fpath.to_string oldlogdir) >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
   (* TODO: replace by Oca_lib.rm_rf *)
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string maintainersdir] >>= fun () ->
