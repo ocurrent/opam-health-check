@@ -36,16 +36,19 @@ let get_compilers ~old workdir =
 
 module Pkg_tbl = Hashtbl.Make (String)
 
-let pkg_update ~old pkg_tbl workdir comp state pkg =
+let pkg_update ~old ~pool pkg_tbl workdir comp state pkg =
   let file =
     let comp = Intf.Compiler.to_string comp in
     let state = Intf.State.to_string state in
     Fpath.(to_string (v comp/state/pkg))
   in
   let file = Server_workdirs.file_from_logdir ~old ~file workdir in
-  let content = lazy begin
+  let get_content () = Lwt_pool.use pool begin fun () ->
     Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
   end in
+  let content =
+    if old then Intf.Log.unstored get_content else Intf.Log.raw (get_content ())
+  in
   let instances =
     match Pkg_tbl.find_opt pkg_tbl pkg with
     | Some instances -> Intf.Instance.create comp state content :: instances
@@ -53,13 +56,13 @@ let pkg_update ~old pkg_tbl workdir comp state pkg =
   in
   Pkg_tbl.replace pkg_tbl pkg instances
 
-let fill_pkgs_from_dir ~old pkg_tbl workdir comp =
+let fill_pkgs_from_dir ~old ~pool pkg_tbl workdir comp =
   get_files (Server_workdirs.gooddir ~old ~switch:comp workdir) >>= fun good_files ->
   get_files (Server_workdirs.partialdir ~old ~switch:comp workdir) >>= fun partial_files ->
   get_files (Server_workdirs.baddir ~old ~switch:comp workdir) >|= fun bad_files ->
-  List.iter (pkg_update ~old pkg_tbl workdir comp Intf.State.Good) good_files;
-  List.iter (pkg_update ~old pkg_tbl workdir comp Intf.State.Partial) partial_files;
-  List.iter (pkg_update ~old pkg_tbl workdir comp Intf.State.Bad) bad_files
+  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Good) good_files;
+  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Partial) partial_files;
+  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Bad) bad_files
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
@@ -70,7 +73,8 @@ let add_pkg full_name instances acc =
 let get_pkgs ~old workdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
   Oca_server.Cache.get_compilers ~old cache >>= fun compilers ->
-  Lwt_list.iter_s (fill_pkgs_from_dir ~old pkg_tbl workdir) compilers >>= fun () ->
+  let pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit) in
+  Lwt_list.iter_s (fill_pkgs_from_dir ~old ~pool pkg_tbl workdir) compilers >>= fun () ->
   Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
   List.sort Intf.Pkg.compare
 

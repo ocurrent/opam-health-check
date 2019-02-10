@@ -30,18 +30,31 @@ module Compiler = struct
   let compare (Comp x) (Comp y) = OpamVersionCompare.compare x y
 end
 
+module Log = struct
+  type t =
+    | Raw of string Lwt.t
+    | Unstored of (unit -> string Lwt.t)
+
+  let raw s = Raw s
+  let unstored f = Unstored f
+
+  let to_string = function
+    | Raw s -> s
+    | Unstored f -> f ()
+end
+
 module Instance = struct
   type t = {
     compiler : Compiler.t;
     state : State.t;
-    content : string Lwt.t Lazy.t;
+    content : Log.t;
   }
 
   let create compiler state content = {compiler; state; content}
 
   let compiler x = x.compiler
   let state x = x.state
-  let content x = Lazy.force x.content
+  let content x = Log.to_string x.content
 end
 
 module Pkg = struct

@@ -17,10 +17,17 @@ module Compiler : sig
   val compare : t -> t -> int
 end
 
+module Log : sig
+  type t
+
+  val raw : string Lwt.t -> t
+  val unstored : (unit -> string Lwt.t) -> t
+end
+
 module Instance : sig
   type t
 
-  val create : Compiler.t -> State.t -> string Lwt.t Lazy.t -> t
+  val create : Compiler.t -> State.t -> Log.t -> t
 
   val compiler : t -> Compiler.t
   val state : t -> State.t
