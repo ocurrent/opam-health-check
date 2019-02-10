@@ -39,7 +39,6 @@ let (>>&&) x f =
   if x then f () else Lwt.return_false
 
 let must_show_package query ~last pkg =
-  Lwt_main.yield () >>= fun () ->
   let maintainers = Pkg.maintainers pkg in
   let instances = Pkg.instances pkg in
   List.exists (fun comp -> List.exists (fun instance -> Compiler.equal comp (Instance.compiler instance)) instances) query.show_available >>& fun () ->
