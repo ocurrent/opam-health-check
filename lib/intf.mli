@@ -21,6 +21,7 @@ module Log : sig
   type t
 
   val raw : string Lwt.t -> t
+  val compressed : string Lwt.t -> t
   val unstored : (unit -> string Lwt.t) -> t
 end
 

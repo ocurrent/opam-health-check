@@ -1,3 +1,5 @@
+open Lwt.Infix
+
 module State = struct
   type t = Good | Partial | Bad
 
@@ -33,13 +35,24 @@ end
 module Log = struct
   type t =
     | Raw of string Lwt.t
+    | Compressed of bytes Lwt.t
     | Unstored of (unit -> string Lwt.t)
 
+  let compressed_buffer_len = ref 0
+
   let raw s = Raw s
+  let compressed s =
+    let s =
+      s >|= fun s ->
+      compressed_buffer_len := max !compressed_buffer_len (String.length s);
+      LZ4.Bytes.compress (Bytes.unsafe_of_string s)
+    in
+    Compressed s
   let unstored f = Unstored f
 
   let to_string = function
     | Raw s -> s
+    | Compressed s -> s >|= fun s -> Bytes.unsafe_to_string (LZ4.Bytes.decompress ~length:!compressed_buffer_len s)
     | Unstored f -> f ()
 end
 
