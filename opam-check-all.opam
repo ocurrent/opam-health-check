@@ -21,5 +21,6 @@ depends: [
   "yaml"
   "ocaml-xdg-basedir"
   "dockerfile"
+  "lz4"
 ]
 synopsis: "A toolchain to check for broken opam packages"

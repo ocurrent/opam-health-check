@@ -7,4 +7,5 @@
     opam-core
     yaml
     fpath
+    lz4
     containers))

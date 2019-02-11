@@ -47,7 +47,7 @@ let pkg_update ~old ~pool pkg_tbl workdir comp state pkg =
     Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
   end in
   let content =
-    if old then Intf.Log.unstored get_content else Intf.Log.raw (get_content ())
+    if old then Intf.Log.unstored get_content else Intf.Log.compressed (get_content ())
   in
   let instances =
     match Pkg_tbl.find_opt pkg_tbl pkg with
