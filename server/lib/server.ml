@@ -25,9 +25,11 @@ module Make (Backend : Backend_intf.S) = struct
     let show_diff_only = if String.is_empty show_diff_only then false else bool_of_string show_diff_only in
     let show_latest_only = option_to_string (Uri.get_query_param uri "show-latest-only") in
     let show_latest_only = if String.is_empty show_latest_only then false else bool_of_string show_latest_only in
-    let maintainers = Uri.get_query_param uri "maintainers" in
+    let maintainers = option_to_string (Uri.get_query_param uri "maintainers") in
+    let maintainers = if String.is_empty maintainers then None else Some maintainers in
     let maintainers = (option_to_string maintainers, Option.map (Re.Posix.compile_pat ~opts:[`ICase]) maintainers) in
-    let logsearch = Uri.get_query_param uri "logsearch" in
+    let logsearch = option_to_string (Uri.get_query_param uri "logsearch") in
+    let logsearch = if String.is_empty logsearch then None else Some logsearch in
     let logsearch' =
       Option.map2 begin fun re comp ->
         (Re.Posix.compile_pat ~opts:[`Newline] re, Intf.Compiler.from_string comp)
