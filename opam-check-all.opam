@@ -7,7 +7,7 @@ homepage: "https://github.com/kit-ty-kate/opam-check-all"
 dev-repo: "git://github.com/kit-ty-kate/opam-check-all.git"
 bug-reports: "https://github.com/kit-ty-kate/opam-check-all/issues"
 tags: ["opam" "check"]
-build: ["dune" "build" "-p" name]
+build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
   "dune" {build}
   "tyxml" {>= "4.3.0"}
