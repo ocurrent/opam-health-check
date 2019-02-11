@@ -127,10 +127,12 @@ let comp_checkboxes ~name checked query =
   let open Tyxml.Html in
   List.concat begin
     List.map begin fun comp ->
-      [txt (" "^Compiler.to_string comp^": ");
+      let comp_str = Compiler.to_string comp in
+      [txt (" "^comp_str^": ");
        input
          ~a:(a_input_type `Checkbox ::
              a_name name ::
+             a_value comp_str ::
              if List.mem ~eq:Compiler.equal comp checked then [a_checked ()] else [])
          ()]
     end query.available_compilers
