@@ -123,6 +123,19 @@ let gen_table_form ~conf query l =
        ]
   ]]]]
 
+let comp_checkboxes ~name checked query =
+  let open Tyxml.Html in
+  List.concat begin
+    List.map begin fun comp ->
+      [txt (" "^Compiler.to_string comp^": ");
+       input
+         ~a:(a_input_type `Checkbox ::
+             a_name name ::
+             if List.mem ~eq:Compiler.equal comp checked then [a_checked ()] else [])
+         ()]
+    end query.available_compilers
+  end
+
 let get_html ~conf query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
@@ -139,10 +152,10 @@ let get_html ~conf query pkgs =
   let style_pkgname = txt ".pkgname {white-space: nowrap;}" in
   let style_a = txt "a {text-decoration: none;}" in
   let head = head title [charset; style [style_table; style_col; style_case; style_pkgname; style_row; style_row_hover; style_a]] in
-  let compilers_text = [txt "Show only [list of compilers separated by ':']:"] in
-  let compilers = input ~a:[a_input_type `Text; a_name "compilers"; a_value (String.concat ":" (List.map Compiler.to_string query.compilers))] () in
-  let show_available_text = [txt "Show only packages available in [list of compilers separated by ':']:"] in
-  let show_available = input ~a:[a_input_type `Text; a_name "show-available"; a_value (String.concat ":" (List.map Compiler.to_string query.show_available))] () in
+  let compilers_text = [txt "Show only:"] in
+  let compilers = comp_checkboxes ~name:"comp" query.compilers query in
+  let show_available_text = [txt "Show only packages available in:"] in
+  let show_available = comp_checkboxes ~name:"available" query.show_available query in
   let show_failures_only_text = [txt "Show failures only:"] in
   let show_failures_only = input ~a:(a_input_type `Checkbox::a_name "show-failures-only"::a_value "true"::if query.show_failures_only then [a_checked ()] else []) () in
   let show_diff_only_text = [txt "Only show packages that have different build status between each compilers:"] in
@@ -162,8 +175,8 @@ let get_html ~conf query pkgs =
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
   let filter_form = gen_table_form ~conf query [
-    (compilers_text, [compilers]);
-    (show_available_text, [show_available]);
+    (compilers_text, compilers);
+    (show_available_text, show_available);
     (show_failures_only_text, [show_failures_only]);
     (show_diff_only_text, [show_diff_only]);
     (show_latest_only_text, [show_latest_only]);

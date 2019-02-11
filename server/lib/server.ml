@@ -9,11 +9,16 @@ module Make (Backend : Backend_intf.S) = struct
     | None -> ""
     | Some s -> s
 
+  let get_query_param_list uri name =
+    Uri.query uri |>
+    List.fold_left begin fun acc (k, v) ->
+      if String.equal k name then v @ acc else acc
+    end [] |>
+    List.rev
+
   let parse_raw_query uri =
-    let compilers = option_to_string (Uri.get_query_param uri "compilers") in
-    let compilers = String.split_on_char ':' compilers in
-    let show_available = option_to_string (Uri.get_query_param uri "show-available") in
-    let show_available = String.split_on_char ':' show_available in
+    let compilers = get_query_param_list uri "comp" in
+    let show_available = get_query_param_list uri "available" in
     let show_failures_only = option_to_string (Uri.get_query_param uri "show-failures-only") in
     let show_failures_only = if String.is_empty show_failures_only then false else bool_of_string show_failures_only in
     let show_diff_only = option_to_string (Uri.get_query_param uri "show-diff-only") in
@@ -31,11 +36,11 @@ module Make (Backend : Backend_intf.S) = struct
     let logsearch = (option_to_string logsearch, logsearch') in
     Cache.get_compilers ~old:false Backend.cache >>= fun available_compilers ->
     let compilers = match compilers with
-      | [] | [""] -> available_compilers
+      | [] -> available_compilers
       | compilers -> List.map Intf.Compiler.from_string compilers
     in
     let show_available = match show_available with
-      | [] | [""] -> compilers
+      | [] -> compilers
       | show_available -> List.map Intf.Compiler.from_string show_available
     in
     Lwt.return {
