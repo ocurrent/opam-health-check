@@ -192,19 +192,24 @@ let get_html ~conf query pkgs =
 
 let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   let open Tyxml.Html in
-  let prefix = full_name^"."^Intf.Compiler.to_string comp in
+  let prefix = [b [txt full_name]; txt " on "; b [txt (Intf.Compiler.to_string comp)]] in
   let diff = match diff with
-    | Intf.Pkg_diff.StatusChanged Intf.State.(Good, Partial) -> prefix^" is now failing because one of its dependencies failed to build"
-    | Intf.Pkg_diff.StatusChanged Intf.State.(Good, Bad) -> prefix^" is now failing"
-    | Intf.Pkg_diff.StatusChanged Intf.State.(Bad, Good) -> prefix^" is not failing anymore"
-    | Intf.Pkg_diff.StatusChanged Intf.State.(Bad, Partial) -> prefix^" failed before but is now failing because one of its dependencies failed to build"
-    | Intf.Pkg_diff.StatusChanged Intf.State.(Partial, Good) -> prefix^" failed before because one of its depenedencies failed to build, but is now not failing anymore"
-    | Intf.Pkg_diff.StatusChanged Intf.State.(Partial, Bad) -> prefix^" failed before because one of its dependencies failed to build, but is now failing itself"
-    | Intf.Pkg_diff.StatusChanged Intf.State.((Good, Good) | (Partial, Partial) | (Bad, Bad)) -> assert false
-    | Intf.Pkg_diff.NowInstallable -> prefix^" is now installable"
-    | Intf.Pkg_diff.NotAvailableAnymore -> prefix^" is not available anymore"
+    | Intf.Pkg_diff.StatusChanged (old_status, new_status) ->
+        let good = div ~a:[a_style "color: green;"] [txt "passing"] in
+        let bad = div ~a:[a_style "color: red;"] [txt "failing"] in
+        let partial = div ~a:[a_style "color: orange;"] [txt "partially failing"] in
+        let print_status = function
+          | Intf.State.Good -> good
+          | Intf.State.Partial -> partial
+          | Intf.State.Bad -> bad
+        in
+        let old_status = print_status old_status in
+        let new_status = print_status new_status in
+        [txt " had its build status changed: "; old_status; txt " to "; new_status]
+    | Intf.Pkg_diff.NowInstallable -> [txt " is now installable"]
+    | Intf.Pkg_diff.NotAvailableAnymore -> [txt " is not available anymore"]
   in
-  li [txt diff]
+  li (prefix @ diff)
 
 let get_diff diff =
   let open Tyxml.Html in
