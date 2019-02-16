@@ -106,13 +106,17 @@ let result_legend query =
     tr [td ~a:[a_style "background-color: grey; text-align: center;"] [txt "☐"]; td [txt "Package is not available in this environment"]];
   ]]
 
+let get_opam_repository_commit_url ~hash ~content =
+  let open Tyxml.Html in
+  a ~a:[a_href ("https://github.com/ocaml/opam-repository/commit/"^hash)] content
+
 let gen_table_form ~conf query l =
   let open Tyxml.Html in
   let aux (txt, elts) = tr [td txt; td elts] in
   let legend = legend [b [txt "Filter form:"]] in
   let opam_repo_uri = match Server_configfile.opam_repo_commit_hash conf with
     | None -> b [txt "undefined opam-repository commit hash"]
-    | Some hash -> a ~a:[a_href ("https://github.com/ocaml/opam-repository/commit/"^hash)] [b [txt "🔗 opam-repository commit hash"]]
+    | Some hash -> get_opam_repository_commit_url ~hash ~content:[b [txt "🔗 opam-repository commit hash"]]
   in
   let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last check"]] in
   form [fieldset ~legend [table [tr [
@@ -211,10 +215,23 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   in
   li (prefix @ diff)
 
-let get_diff diff =
+let get_diff ~conf diff =
   let open Tyxml.Html in
   let title = title (txt "opam-check-all diff") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
-  let doc = html head (body [ul (List.map generate_diff_html diff)]) in
+  let old_hash =
+    let hash = Server_configfile.opam_repo_old_commit_hash conf in
+    let hash = Option.get_exn hash in
+    get_opam_repository_commit_url ~hash ~content:[b [txt hash]]
+  in
+  let new_hash =
+    let hash = Server_configfile.opam_repo_commit_hash conf in
+    let hash = Option.get_exn hash in
+    get_opam_repository_commit_url ~hash ~content:[b [txt hash]]
+  in
+  let doc = html head (body [
+    h2 [txt "Differences between "; old_hash; txt " and "; new_hash];
+    ul (List.map generate_diff_html diff);
+  ]) in
   Format.sprintf "%a\n" (pp ()) doc
