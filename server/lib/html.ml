@@ -199,9 +199,9 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   let prefix = [b [txt full_name]; txt " on "; b [txt (Intf.Compiler.to_string comp)]] in
   let diff = match diff with
     | Intf.Pkg_diff.StatusChanged (old_status, new_status) ->
-        let good = div ~a:[a_style "color: green;"] [txt "passing"] in
-        let bad = div ~a:[a_style "color: red;"] [txt "failing"] in
-        let partial = div ~a:[a_style "color: orange;"] [txt "partially failing"] in
+        let good = span ~a:[a_style "color: green;"] [txt "passing"] in
+        let bad = span ~a:[a_style "color: red;"] [txt "failing"] in
+        let partial = span ~a:[a_style "color: orange;"] [txt "partially failing"] in
         let print_status = function
           | Intf.State.Good -> good
           | Intf.State.Partial -> partial
