@@ -23,7 +23,7 @@ type merge =
   | Old
   | New
 
-module Pkg_htbl = Hashtbl.Make (struct
+module Pkg_htbl = CCHashtbl.Make (struct
     type t = string * Compiler.t
     let hash = Hashtbl.hash (* TODO: Improve *)
     let equal (full_name, comp) y =
@@ -56,7 +56,9 @@ let generate_diff old_pkgs new_pkgs =
   in
   List.iter (aux Old) old_pkgs;
   List.iter (aux New) new_pkgs;
-  List.rev (Seq.fold_left (add_diff pkg_htbl) [] (Pkg_htbl.to_seq_keys pkg_htbl))
+  List.sort_uniq ~cmp:(fun (x, _) (y, _) -> String.compare x y) (Pkg_htbl.keys_list pkg_htbl) |>
+  List.fold_left (add_diff pkg_htbl) [] |>
+  List.rev
 
 type t = {
   html_tbl : string Html_cache.t;
