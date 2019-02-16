@@ -96,8 +96,8 @@ let get_maintainers workdir =
   end files >|= fun () ->
   maintainers
 
-let get_html_diff () =
-  Oca_server.Cache.get_diff cache >|= Oca_server.Html.get_diff
+let get_html_diff ~conf =
+  Oca_server.Cache.get_diff cache >|= Oca_server.Html.get_diff ~conf
 
 (* TODO: Deduplicate with Server.tcp_server *)
 let tcp_server port callback =
@@ -106,13 +106,13 @@ let tcp_server port callback =
     ~mode:(`TCP (`Port port))
     (Cohttp_lwt_unix.Server.make ~callback ())
 
-let cache_clear_and_init workdir =
+let cache_clear_and_init conf workdir =
   Oca_server.Cache.clear_and_init
     cache
     ~pkgs:(fun ~old -> get_pkgs ~old workdir)
     ~compilers:(fun ~old -> get_compilers ~old workdir)
     ~maintainers:(fun () -> get_maintainers workdir)
-    ~html_diff:get_html_diff
+    ~html_diff:(fun () -> get_html_diff ~conf)
 
 let run_action_loop ~run_trigger f =
   let two_days = float_of_int (48 * 60 * 60) in
@@ -128,10 +128,10 @@ let run_action_loop ~run_trigger f =
 
 let start conf workdir =
   let port = Server_configfile.admin_port conf in
-  let on_finished = cache_clear_and_init in
+  let on_finished = cache_clear_and_init conf in
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
-  cache_clear_and_init workdir;
+  cache_clear_and_init conf workdir;
   Server_configfile.set_default_ocaml_switches conf (fun () -> get_compilers ~old:false workdir) >>= fun () ->
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->
