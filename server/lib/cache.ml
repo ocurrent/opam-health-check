@@ -56,7 +56,7 @@ let generate_diff old_pkgs new_pkgs =
   in
   List.iter (aux Old) old_pkgs;
   List.iter (aux New) new_pkgs;
-  List.sort_uniq ~cmp:(fun (x, _) (y, _) -> String.compare x y) (Pkg_htbl.keys_list pkg_htbl) |>
+  List.sort_uniq ~cmp:Ord.(pair string Intf.Compiler.compare) (Pkg_htbl.keys_list pkg_htbl) |>
   List.fold_left (add_diff pkg_htbl) [] |>
   List.rev
 
