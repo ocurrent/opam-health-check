@@ -5,7 +5,7 @@ module type S = sig
 
   val cache : Cache.t
 
-  val get_log : t -> comp:Intf.Compiler.t -> state:Intf.State.t -> pkg:string -> string Lwt.t
+  val get_log : t -> old:bool -> comp:Intf.Compiler.t -> state:Intf.State.t -> pkg:string -> string Lwt.t
   val get_compilers : old:bool -> t -> Intf.Compiler.t list Lwt.t
   val get_pkgs : old:bool -> t -> Intf.Pkg.t list Lwt.t
 

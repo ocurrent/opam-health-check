@@ -103,8 +103,11 @@ let get_html ~conf self query =
   | Some html -> Lwt.return html
   | None -> get_html ~conf self query
 
-let get_pkgs self =
-  self.pkgs
+let get_pkgs ~old self =
+  if old then
+    self.old_pkgs
+  else
+    self.pkgs
 
 let get_compilers ~old self =
   if old then

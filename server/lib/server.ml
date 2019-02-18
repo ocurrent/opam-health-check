@@ -69,6 +69,12 @@ module Make (Backend : Backend_intf.S) = struct
 
   let callback ~conf backend _conn req _body =
     let uri = Cohttp.Request.uri req in
+    let get_log ~old ~comp ~state ~pkg =
+      let comp = Intf.Compiler.from_string comp in
+      let state = Intf.State.from_string state in
+      Backend.get_log backend ~old ~comp ~state ~pkg >>= fun log ->
+      serv_text ~content_type:"text/plain; charset=utf-8" log
+    in
     match path_from_uri uri with
     | [] ->
         parse_raw_query uri >>= fun query ->
@@ -77,11 +83,10 @@ module Make (Backend : Backend_intf.S) = struct
     | ["diff"] ->
         Cache.get_html_diff Backend.cache >>= fun html ->
         serv_text ~content_type:"text/html" html
+    | ["old"; comp; state; pkg] ->
+        get_log ~old:true ~comp ~state ~pkg
     | [comp; state; pkg] ->
-        let comp = Intf.Compiler.from_string comp in
-        let state = Intf.State.from_string state in
-        Backend.get_log backend ~comp ~state ~pkg >>= fun log ->
-        serv_text ~content_type:"text/plain; charset=utf-8" log
+        get_log ~old:false ~comp ~state ~pkg
     | _ ->
         failwith "path non recognized: 404"
 

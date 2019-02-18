@@ -78,8 +78,8 @@ let get_pkgs ~old workdir =
   Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
   List.sort Intf.Pkg.compare
 
-let get_log _ ~comp ~state ~pkg =
-  Oca_server.Cache.get_pkgs cache >>= fun pkgs ->
+let get_log _ ~old ~comp ~state ~pkg =
+  Oca_server.Cache.get_pkgs ~old cache >>= fun pkgs ->
   let pkg = List.find (fun p -> String.equal pkg (Intf.Pkg.full_name p)) pkgs in
   let instance = List.find (fun inst -> Intf.Compiler.equal comp (Intf.Instance.compiler inst) && Intf.State.equal state (Intf.Instance.state inst)) (Intf.Pkg.instances pkg) in
   Intf.Instance.content instance
