@@ -1,7 +1,7 @@
 type profile = {
   keyfile : Fpath.t;
   mutable hostname : string option;
-  mutable port : string option;
+  mutable port : int option;
   mutable username : string option;
 }
 
@@ -55,8 +55,8 @@ let set_field ~field set = function
 let parse_profile_fields p = function
   | "hostname" as field, `String hostname ->
       set_field ~field (fun () -> p.hostname <- Some hostname) p.hostname
-  | "port" as field, `String port ->
-      set_field ~field (fun () -> p.port <- Some port) p.port
+  | "port" as field, `Float port ->
+      set_field ~field (fun () -> p.port <- Some (int_of_float port)) p.port
   | "username" as field, `String username ->
       set_field ~field (fun () -> p.username <- Some username) p.username
   | field, _ ->
@@ -97,6 +97,6 @@ let profile ~profilename conf =
   Map.find profilename conf
 
 let hostname {hostname; _} = Option.get_exn hostname
-let port {port; _} = int_of_string (Option.get_exn port)
+let port {port; _} = Option.get_exn port
 let username {username; _} = Option.get_exn username
 let keyfile {keyfile; _} = keyfile
