@@ -12,6 +12,8 @@ type query = {
   logsearch : string * (Re.re * Compiler.t) option;
 }
 
+let github_url = "https://github.com/ocaml/opam-repository"
+
 let log_url pkg instance =
   let comp = Instance.compiler instance in
   let comp = Compiler.to_string comp in
@@ -108,7 +110,7 @@ let result_legend query =
 
 let get_opam_repository_commit_url ~hash ~content =
   let open Tyxml.Html in
-  a ~a:[a_href ("https://github.com/ocaml/opam-repository/commit/"^hash)] content
+  a ~a:[a_href (github_url^"/commit/"^hash)] content
 
 let gen_table_form ~conf query l =
   let open Tyxml.Html in
@@ -220,15 +222,17 @@ let get_diff ~conf diff =
   let title = title (txt "opam-check-all diff") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
-  let get_hash hash =
-    let hash = Option.get_exn hash in
+  let get_hash_elm hash =
     let hash = String.take 7 hash in
     get_opam_repository_commit_url ~hash ~content:[b [txt hash]]
   in
-  let old_hash = get_hash (Server_configfile.opam_repo_old_commit_hash conf) in
-  let new_hash = get_hash (Server_configfile.opam_repo_commit_hash conf) in
+  let old_hash = Option.get_exn (Server_configfile.opam_repo_old_commit_hash conf) in
+  let old_hash_elm = get_hash_elm old_hash in
+  let new_hash = Option.get_exn (Server_configfile.opam_repo_commit_hash conf) in
+  let new_hash_elm = get_hash_elm new_hash in
+  let git_diff = a ~a:[a_href (github_url^"/compare/"^old_hash^"..."^new_hash)] [txt "git diff"] in
   let doc = html head (body [
-    h2 [txt "Differences between "; old_hash; txt " and "; new_hash];
+    h2 [txt "Differences between "; old_hash_elm; txt " and "; new_hash_elm; txt " ("; git_diff; txt ")"];
     ul (List.map generate_diff_html diff);
   ]) in
   Format.sprintf "%a\n" (pp ()) doc
