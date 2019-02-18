@@ -2,8 +2,8 @@ open Lwt.Infix
 
 type t = {
   yamlfile : Fpath.t;
-  mutable port : string option;
-  mutable admin_port : string option;
+  mutable port : int option;
+  mutable admin_port : int option;
   mutable list_command : string option;
   mutable extra_command : string option;
   mutable ocaml_switches : Intf.Compiler.t list option;
@@ -31,49 +31,42 @@ let get_comp = function
   | _ -> failwith "string expected"
 
 let set_config conf = function
-  | "port" as field, `String port ->
-      set_field ~field (fun () -> conf.port <- Some port) conf.port
-  | "admin-port" as field, `String admin_port ->
-      set_field ~field (fun () -> conf.admin_port <- Some admin_port) conf.admin_port
+  | _, `Null ->
+      ()
+  | "port" as field, `Float port ->
+      set_field ~field (fun () -> conf.port <- Some (int_of_float port)) conf.port
+  | "admin-port" as field, `Float admin_port ->
+      set_field ~field (fun () -> conf.admin_port <- Some (int_of_float admin_port)) conf.admin_port
   | "list-command" as field, `String list_command ->
       set_field ~field (fun () -> conf.list_command <- Some list_command) conf.list_command
-  | "extra-command", `String "null" -> (* TODO: fix ocaml-yaml's support of null values *)
-      ()
   | "extra-command" as field, `String extra_command ->
       set_field ~field (fun () -> conf.extra_command <- Some extra_command) conf.extra_command
-  | "ocaml-switches", `String "null" -> (* TODO: fix ocaml-yaml's support of null values *)
-      ()
   | "ocaml-switches" as field, `A switches ->
       let switches = List.map get_comp switches in
       set_field ~field (fun () -> conf.ocaml_switches <- Some switches) conf.ocaml_switches
-  | "opam-repo-commit-hash", `String "null" -> (* TODO: fix ocaml-yaml's support of null values *)
-      ()
   | "opam-repo-commit-hash" as field, `String hash ->
       set_field ~field (fun () -> conf.opam_repo_commit_hash <- Some hash) conf.opam_repo_commit_hash
-  | "opam-repo-old-commit-hash", `String "null" -> (* TODO: fix ocaml-yaml's support of null values *)
-      ()
   | "opam-repo-old-commit-hash" as field, `String hash ->
       set_field ~field (fun () -> conf.opam_repo_old_commit_hash <- Some hash) conf.opam_repo_old_commit_hash
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
 let yaml_of_conf conf =
-  let null = `String "null" in (* TODO: see above *)
   `O [
-    "port", `String (Option.get_exn conf.port);
-    "admin-port", `String (Option.get_exn conf.admin_port);
+    "port", `String (string_of_int (Option.get_exn conf.port));
+    "admin-port", `String (string_of_int (Option.get_exn conf.admin_port));
     "list-command", `String (Option.get_exn conf.list_command);
-    "extra-command", Option.map_or ~default:null (fun s -> `String s) conf.extra_command;
-    "ocaml-switches", Option.map_or ~default:null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
-    "opam-repo-commit-hash", Option.map_or ~default:null (fun s -> `String s) conf.opam_repo_commit_hash;
-    "opam-repo-old-commit-hash", Option.map_or ~default:null (fun s -> `String s) conf.opam_repo_old_commit_hash;
+    "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
+    "ocaml-switches", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
+    "opam-repo-commit-hash", Option.map_or ~default:`Null (fun s -> `String s) conf.opam_repo_commit_hash;
+    "opam-repo-old-commit-hash", Option.map_or ~default:`Null (fun s -> `String s) conf.opam_repo_old_commit_hash;
   ]
 
 let set_defaults conf =
   if Option.is_none conf.port then
-    conf.port <- Some Oca_lib.default_html_port;
+    conf.port <- Some (int_of_string Oca_lib.default_html_port);
   if Option.is_none conf.admin_port then
-    conf.admin_port <- Some Oca_lib.default_admin_port;
+    conf.admin_port <- Some (int_of_string Oca_lib.default_admin_port);
   if Option.is_none conf.list_command then
     conf.list_command <- Some Oca_lib.default_list_command;
   let yaml = Result.get_exn (Yaml.to_string (yaml_of_conf conf)) in
@@ -120,8 +113,8 @@ let from_workdir workdir =
   | `String "" | `Null -> create yamlfile []
   | _ -> failwith "Config parser: unrecognized config file"
 
-let port {port; _} = int_of_string (Option.get_exn port)
-let admin_port {admin_port; _} = int_of_string (Option.get_exn admin_port)
+let port {port; _} = Option.get_exn port
+let admin_port {admin_port; _} = Option.get_exn admin_port
 let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
