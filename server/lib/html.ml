@@ -220,16 +220,13 @@ let get_diff ~conf diff =
   let title = title (txt "opam-check-all diff") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
-  let old_hash =
-    let hash = Server_configfile.opam_repo_old_commit_hash conf in
+  let get_hash hash =
     let hash = Option.get_exn hash in
+    let hash = String.take 7 hash in
     get_opam_repository_commit_url ~hash ~content:[b [txt hash]]
   in
-  let new_hash =
-    let hash = Server_configfile.opam_repo_commit_hash conf in
-    let hash = Option.get_exn hash in
-    get_opam_repository_commit_url ~hash ~content:[b [txt hash]]
-  in
+  let old_hash = get_hash (Server_configfile.opam_repo_old_commit_hash conf) in
+  let new_hash = get_hash (Server_configfile.opam_repo_commit_hash conf) in
   let doc = html head (body [
     h2 [txt "Differences between "; old_hash; txt " and "; new_hash];
     ul (List.map generate_diff_html diff);
