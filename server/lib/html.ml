@@ -210,14 +210,13 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
           | Intf.State.Partial -> partial
           | Intf.State.Bad -> bad
         in
-        let old_status_elm = print_status old_status in
-        let new_status_elm = print_status new_status in
         let old_status_str = Intf.State.to_string old_status in
-        let old_log = a ~a:[a_href ("/old/"^comp_str^"/"^old_status_str^"/"^full_name)] [txt "previous log"] in
+        let old_status = print_status old_status in
+        let old_status = a ~a:[a_href ("/old/"^comp_str^"/"^old_status_str^"/"^full_name)] [old_status] in
         let new_status_str = Intf.State.to_string new_status in
-        let new_log = a ~a:[a_href ("/"^comp_str^"/"^new_status_str^"/"^full_name)] [txt "latest log"] in
-        [txt " had its build status changed: "; old_status_elm; txt " to "; new_status_elm;
-         txt " (details: "; old_log; txt " vs. "; new_log; txt ")"]
+        let new_status = print_status new_status in
+        let new_status = a ~a:[a_href ("/"^comp_str^"/"^new_status_str^"/"^full_name)] [new_status] in
+        [txt " had its build status changed: "; old_status; txt " to "; new_status]
     | Intf.Pkg_diff.NowInstallable -> [txt " is now installable"]
     | Intf.Pkg_diff.NotAvailableAnymore -> [txt " is not available anymore"]
   in
