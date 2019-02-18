@@ -200,25 +200,31 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   let open Tyxml.Html in
   let comp_str = Intf.Compiler.to_string comp in
   let prefix = [b [txt full_name]; txt " on "; b [txt comp_str]] in
+  let good = span ~a:[a_style "color: green;"] [txt "passing"] in
+  let bad = span ~a:[a_style "color: red;"] [txt "failing"] in
+  let partial = span ~a:[a_style "color: orange;"] [txt "partially failing"] in
+  let print_status = function
+    | Intf.State.Good -> good
+    | Intf.State.Partial -> partial
+    | Intf.State.Bad -> bad
+  in
+  let get_status_elm ~old status =
+    let status_str = Intf.State.to_string status in
+    let status = print_status status in
+    let root = if old then "/old/" else "/" in
+    a ~a:[a_href (root^comp_str^"/"^status_str^"/"^full_name)] [status]
+  in
   let diff = match diff with
     | Intf.Pkg_diff.StatusChanged (old_status, new_status) ->
-        let good = span ~a:[a_style "color: green;"] [txt "passing"] in
-        let bad = span ~a:[a_style "color: red;"] [txt "failing"] in
-        let partial = span ~a:[a_style "color: orange;"] [txt "partially failing"] in
-        let print_status = function
-          | Intf.State.Good -> good
-          | Intf.State.Partial -> partial
-          | Intf.State.Bad -> bad
-        in
-        let old_status_str = Intf.State.to_string old_status in
-        let old_status = print_status old_status in
-        let old_status = a ~a:[a_href ("/old/"^comp_str^"/"^old_status_str^"/"^full_name)] [old_status] in
-        let new_status_str = Intf.State.to_string new_status in
-        let new_status = print_status new_status in
-        let new_status = a ~a:[a_href ("/"^comp_str^"/"^new_status_str^"/"^full_name)] [new_status] in
+        let old_status = get_status_elm ~old:true old_status in
+        let new_status = get_status_elm ~old:false new_status in
         [txt " had its build status changed: "; old_status; txt " to "; new_status]
-    | Intf.Pkg_diff.NowInstallable -> [txt " is now installable"]
-    | Intf.Pkg_diff.NotAvailableAnymore -> [txt " is not available anymore"]
+    | Intf.Pkg_diff.NowInstallable new_status ->
+        let new_status = get_status_elm ~old:false new_status in
+        [txt " is now installable. Current state is: "; new_status]
+    | Intf.Pkg_diff.NotAvailableAnymore old_status ->
+        let old_status = get_status_elm ~old:true old_status in
+        [txt " is not available anymore. Previous state was: "; old_status]
   in
   li (prefix @ diff)
 

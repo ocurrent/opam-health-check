@@ -96,8 +96,8 @@ end
 
 module Pkg_diff = struct
   type diff =
-    | NowInstallable
-    | NotAvailableAnymore
+    | NowInstallable of State.t
+    | NotAvailableAnymore of State.t
     | StatusChanged of (State.t * State.t)
 
   type t = {

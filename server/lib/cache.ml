@@ -33,8 +33,8 @@ module Pkg_htbl = CCHashtbl.Make (struct
 
 let add_diff htbl acc ((full_name, comp) as pkg) =
   match Pkg_htbl.find_all htbl pkg with
-  | [(Old, _)] -> {Intf.Pkg_diff.full_name; comp; diff = Intf.Pkg_diff.NotAvailableAnymore} :: acc
-  | [(New, _)] -> {Intf.Pkg_diff.full_name; comp; diff = Intf.Pkg_diff.NowInstallable} :: acc
+  | [(Old, state)] -> {Intf.Pkg_diff.full_name; comp; diff = Intf.Pkg_diff.NotAvailableAnymore state} :: acc
+  | [(New, state)] -> {Intf.Pkg_diff.full_name; comp; diff = Intf.Pkg_diff.NowInstallable state} :: acc
   | [(New, new_state); (Old, old_state)] ->
       if Intf.State.equal new_state old_state then
         acc
