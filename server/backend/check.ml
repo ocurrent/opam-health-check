@@ -34,7 +34,17 @@ let docker_run_to_str ~stderr ~img_name cmd =
   pkgs
 
 let get_img_name switch =
-  "opam-check-all-"^Intf.Compiler.to_string switch
+  let switch = Intf.Compiler.to_string switch in
+  let switch =
+    let rec normalize_docker_tag_name = function
+      | ('a'..'z' | 'A'..'Z' | '0'..'9' | '-' | '.') as c::cs -> c::normalize_docker_tag_name cs
+      | '_'::'_'::_ -> assert false
+      | _::cs -> '_'::'_'::normalize_docker_tag_name cs
+      | [] -> []
+    in
+    String.of_list (normalize_docker_tag_name (String.to_list switch))
+  in
+  "opam-check-all-"^switch
 
 let get_pkgs ~stderr switch =
   let img_name = get_img_name switch in
