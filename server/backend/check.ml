@@ -111,7 +111,9 @@ let get_dockerfile ~conf switch =
   run "echo 'wrap-build-commands: []' >> ~/.opamrc" @@
   run "echo 'wrap-install-commands: []' >> ~/.opamrc" @@
   run "echo 'wrap-remove-commands: []' >> ~/.opamrc" @@
-  run "opam init -yac %s ." (Intf.Compiler.to_string switch) @@
+  run "opam init -ya --bare ." @@
+  run "opam repository add beta git://github.com/ocaml/ocaml-beta-repository.git" @@
+  run "opam switch create --repositories=default,beta %s" (Intf.Compiler.to_string switch) @@
   run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
   run "opam install -y opam-depext" @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
