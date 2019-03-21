@@ -32,9 +32,9 @@ let process_response (res, body) =
       print_endline "A problem occured";
       raise Exit
 
-let send_msg ~confdir ~conffile msg =
+let send_msg ~profilename ~confdir ~conffile msg =
   let conf = Configfile.from_file ~confdir conffile in
-  let conf = Configfile.profile ~profilename:None conf in
+  let conf = Configfile.profile ~profilename conf in
   let hostname = Configfile.hostname conf in
   let port = Configfile.port conf in
   let username = Configfile.username conf in
@@ -51,50 +51,54 @@ let send_msg ~confdir ~conffile msg =
     process_response
   end
 
-let set_ocaml_switches ~confdir ~conffile switches =
-  send_msg ~confdir ~conffile ("set-ocaml-switches"::switches)
+let set_ocaml_switches ~confdir ~conffile profilename switches =
+  send_msg ~profilename ~confdir ~conffile ("set-ocaml-switches"::switches)
 
 let set_ocaml_switches_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (set_ocaml_switches ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
     Cmdliner.Arg.(value & pos_all string [] & info ~docv:"SWITCHES" [])
   in
   let info = Cmdliner.Term.info "set-ocaml-switches" in
   (term, info)
 
-let set_list_command ~confdir ~conffile cmd =
-  send_msg ~confdir ~conffile ["set-list-command";cmd]
+let set_list_command ~confdir ~conffile profilename cmd =
+  send_msg ~profilename ~confdir ~conffile ["set-list-command";cmd]
 
 let set_list_command_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (set_list_command ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
     Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"CMD" [])
   in
   let info = Cmdliner.Term.info "set-list-command" in
   (term, info)
 
-let run ~confdir ~conffile () =
+let run ~confdir ~conffile profilename () =
   (* TODO: Catch the exception if the config file doesn't exist *)
-  send_msg ~confdir ~conffile ["run"]
+  send_msg ~profilename ~confdir ~conffile ["run"]
 
 let run_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (run ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
     Cmdliner.Term.const ()
   in
   let info = Cmdliner.Term.info "run" in
   (term, info)
 
-let add_user ~confdir ~conffile username =
-  send_msg ~confdir ~conffile ["add-user";username]
+let add_user ~confdir ~conffile profilename username =
+  send_msg ~profilename ~confdir ~conffile ["add-user";username]
 
 let add_user_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (add_user ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
     Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"USERNAME" [])
   in
   let info = Cmdliner.Term.info "add-user" in
@@ -121,13 +125,14 @@ let init_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "init" in
   (term, info)
 
-let clear_cache ~confdir ~conffile () =
-  send_msg ~confdir ~conffile ["clear-cache"]
+let clear_cache ~confdir ~conffile profilename () =
+  send_msg ~profilename ~confdir ~conffile ["clear-cache"]
 
 let clear_cache_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (clear_cache ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
     Cmdliner.Term.const ()
   in
   let info = Cmdliner.Term.info "clear-cache" in
@@ -139,7 +144,7 @@ let cmds =
   let confdir = Fpath.add_seg confdir "opam-check-all" in
   let conffile = Fpath.add_seg confdir "config.yaml" in
   [
-    init_cmd ~confdir ~conffile;
+    init_cmd ~confdir ~conffile; (* TODO: Handle profilename on init *)
     add_user_cmd ~confdir ~conffile;
     set_ocaml_switches_cmd ~confdir ~conffile;
     set_list_command_cmd ~confdir ~conffile;

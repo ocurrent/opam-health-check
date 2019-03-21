@@ -13,7 +13,7 @@ val init_with_values :
 val init : confdir:Fpath.t -> Fpath.t -> unit
 val from_file : confdir:Fpath.t -> Fpath.t -> t
 
-val profile : profilename:string option -> t -> profile
+val profile : profilename:string -> t -> profile
 val hostname : profile -> string
 val port : profile -> int
 val username : profile -> string

@@ -93,7 +93,6 @@ let from_file ~confdir yamlfile =
   | _ -> failwith "Cannot parse the config file"
 
 let profile ~profilename conf =
-  let profilename = Option.get_or ~default:"default" profilename in
   Map.find profilename conf
 
 let hostname {hostname; _} = Option.get_exn hostname
