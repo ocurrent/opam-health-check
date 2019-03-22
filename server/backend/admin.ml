@@ -33,6 +33,8 @@ let create_admin_key workdir =
 
 let admin_action ~on_finished ~conf ~run_trigger workdir body =
   match String.split_on_char '\n' body with
+  | ["set-auto-run-interval"; i] ->
+      Server_configfile.set_auto_run_interval conf (int_of_string i)
   | "set-ocaml-switches"::switches ->
       let switches = List.map Intf.Compiler.from_string switches in
       let switches = List.sort Intf.Compiler.compare switches in

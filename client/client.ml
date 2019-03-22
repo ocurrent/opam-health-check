@@ -51,6 +51,19 @@ let send_msg ~profilename ~confdir ~conffile msg =
     process_response
   end
 
+let set_auto_run_interval ~confdir ~conffile profilename i =
+  send_msg ~profilename ~confdir ~conffile ["set-auto-run-interval"; i]
+
+let set_auto_run_interval_cmd ~confdir ~conffile =
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (set_auto_run_interval ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"HOURS" [])
+  in
+  let info = Cmdliner.Term.info "set-auto-run-interval" in
+  (term, info)
+
 let set_ocaml_switches ~confdir ~conffile profilename switches =
   send_msg ~profilename ~confdir ~conffile ("set-ocaml-switches"::switches)
 

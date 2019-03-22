@@ -114,12 +114,17 @@ let cache_clear_and_init conf workdir =
     ~maintainers:(fun () -> get_maintainers workdir)
     ~html_diff:(fun () -> get_html_diff ~conf)
 
-let run_action_loop ~run_trigger f =
-  let two_days = float_of_int (48 * 60 * 60) in
+let run_action_loop ~conf ~run_trigger f =
   let rec loop () =
     Lwt.catch begin fun () ->
-      (* TODO: Add a way to disable regular runs *)
-      let regular_run = Lwt_unix.sleep two_days >|= fun () -> false in
+      let regular_run =
+        let run_interval = Server_configfile.auto_run_interval conf * 60 * 60 in
+        (* TODO: Handle when run_interval = 0 *)
+        if run_interval > 0 then
+          Lwt_unix.sleep (float_of_int run_interval) >|= fun () -> false
+        else
+          fst (Lwt.wait ())
+      in
       let manual_run = Lwt_mvar.take run_trigger in
       Lwt.pick [regular_run; manual_run] >>= fun is_retry -> f ~is_retry
     end begin fun e ->
@@ -141,7 +146,7 @@ let start conf workdir =
   let task () =
     Lwt.join [
       tcp_server port callback;
-      run_action_loop ~run_trigger (fun ~is_retry -> Check.run ~on_finished ~is_retry ~conf workdir);
+      run_action_loop ~conf ~run_trigger (fun ~is_retry -> Check.run ~on_finished ~is_retry ~conf workdir);
     ]
   in
   (workdir, task)
