@@ -40,7 +40,9 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
   | ["set-list-command";cmd] ->
       Server_configfile.set_list_command conf cmd
   | ["run"] ->
-      Lwt_mvar.put run_trigger ()
+      Lwt_mvar.put run_trigger false
+  | ["retry"] ->
+      Lwt_mvar.put run_trigger true
   | ["add-user";username] ->
       create_userkey workdir username
   | ["clear-cache"] ->

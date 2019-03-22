@@ -118,7 +118,10 @@ let run_action_loop ~run_trigger f =
   let two_days = float_of_int (48 * 60 * 60) in
   let rec loop () =
     Lwt.catch begin fun () ->
-      Lwt.pick [Lwt_unix.sleep two_days; Lwt_mvar.take run_trigger] >>= f
+      (* TODO: Add a way to disable regular runs *)
+      let regular_run = Lwt_unix.sleep two_days >|= fun () -> false in
+      let manual_run = Lwt_mvar.take run_trigger in
+      Lwt.pick [regular_run; manual_run] >>= fun is_retry -> f ~is_retry
     end begin fun e ->
       let msg = Printexc.to_string e in
       Lwt_io.write_line Lwt_io.stderr ("Exception raised in action loop: "^msg)
@@ -138,7 +141,7 @@ let start conf workdir =
   let task () =
     Lwt.join [
       tcp_server port callback;
-      run_action_loop ~run_trigger (fun () -> Check.run ~on_finished ~conf workdir);
+      run_action_loop ~run_trigger (fun ~is_retry -> Check.run ~on_finished ~is_retry ~conf workdir);
     ]
   in
   (workdir, task)

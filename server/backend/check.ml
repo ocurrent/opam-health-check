@@ -207,7 +207,7 @@ let run_and_get_pkgs ~pool ~stderr workdir pkgs =
 
 let run_locked = ref false
 
-let run ~on_finished ~conf workdir =
+let run ~on_finished ~is_retry ~conf workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   if !run_locked then
     failwith "operation locked";
@@ -218,7 +218,7 @@ let run ~on_finished ~conf workdir =
       Server_workdirs.init_base_jobs ~stderr workdir >>= fun () ->
       begin match switches with
       | switch::switches ->
-          build_switch ~stderr ~cached:false conf workdir switch >>= fun hd_pkgs ->
+          build_switch ~stderr ~cached:is_retry conf workdir switch >>= fun hd_pkgs ->
           let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit) in
           Lwt_list.map_s (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
           let (_, jobs, pkgs) = run_and_get_pkgs ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
