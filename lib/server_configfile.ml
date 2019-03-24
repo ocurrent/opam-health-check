@@ -2,6 +2,7 @@ open Lwt.Infix
 
 type t = {
   yamlfile : Fpath.t;
+  mutable name : string option;
   mutable port : int option;
   mutable admin_port : int option;
   mutable auto_run_interval : int option;
@@ -14,6 +15,7 @@ type t = {
 
 let create_conf yamlfile = {
   yamlfile;
+  name = None;
   port = None;
   admin_port = None;
   auto_run_interval = None;
@@ -32,9 +34,16 @@ let get_comp = function
   | `String s -> Intf.Compiler.from_string s
   | _ -> failwith "string expected"
 
+let check_is_docker_compatible name =
+  if not (String.for_all Oca_lib.char_is_docker_compatible name) then
+    failwith "name field has to contain only alphanumerical characters and '.'"
+
 let set_config conf = function
   | _, `Null ->
       ()
+  | "name" as field, `String name ->
+      check_is_docker_compatible name;
+      set_field ~field (fun () -> conf.name <- Some name) conf.name
   | "port" as field, `Float port ->
       set_field ~field (fun () -> conf.port <- Some (int_of_float port)) conf.port
   | "admin-port" as field, `Float admin_port ->
@@ -57,6 +66,7 @@ let set_config conf = function
 
 let yaml_of_conf conf =
   `O [
+    "name", `String (Option.get_exn conf.name);
     "port", `String (string_of_int (Option.get_exn conf.port));
     "admin-port", `String (string_of_int (Option.get_exn conf.admin_port));
     "auto-run-interval", `String (string_of_int (Option.get_exn conf.auto_run_interval));
@@ -68,6 +78,8 @@ let yaml_of_conf conf =
   ]
 
 let set_defaults conf =
+  if Option.is_none conf.name then
+    conf.name <- Some Oca_lib.default_server_name;
   if Option.is_none conf.port then
     conf.port <- Some (int_of_string Oca_lib.default_html_port);
   if Option.is_none conf.admin_port then
@@ -125,6 +137,7 @@ let from_workdir workdir =
   | `String "" | `Null -> create yamlfile []
   | _ -> failwith "Config parser: unrecognized config file"
 
+let name {name; _} = Option.get_exn name
 let port {port; _} = Option.get_exn port
 let admin_port {admin_port; _} = Option.get_exn admin_port
 let auto_run_interval {auto_run_interval; _} = Option.get_exn auto_run_interval

@@ -33,7 +33,7 @@ let docker_run_to_str ~stderr ~img_name cmd =
   proc >|= fun () ->
   pkgs
 
-let get_img_name switch =
+let get_img_name ~conf switch =
   let switch = Intf.Compiler.to_string switch in
   let switch =
     let rec normalize_docker_tag_name = function
@@ -44,10 +44,11 @@ let get_img_name switch =
     in
     String.of_list (normalize_docker_tag_name (String.to_list switch))
   in
-  "opam-check-all-"^switch
+  let server_name = Server_configfile.name conf in
+  "opam-check-all-"^server_name^"-"^switch
 
-let get_pkgs ~stderr switch =
-  let img_name = get_img_name switch in
+let get_pkgs ~conf ~stderr switch =
+  let img_name = get_img_name ~conf switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   docker_run_to_str ~stderr ~img_name [] >>= fun pkgs ->
   let rgen = Random.int_range (-1) 1 in
@@ -68,8 +69,8 @@ let is_partial_failure logfile =
     lookup ()
   end
 
-let run_job ~pool ~stderr ~switch ~num workdir pkg =
-  let img_name = get_img_name switch in
+let run_job ~conf ~pool ~stderr ~switch ~num workdir pkg =
+  let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Compiler.to_string switch^"...") >>= fun () ->
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch workdir in
@@ -151,16 +152,16 @@ let rec parse_maintainers acc = function
       acc
 
 let build_switch ~stderr ~cached conf workdir switch =
-  let img_name = get_img_name switch in
+  let img_name = get_img_name ~conf switch in
   docker_build ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
   Server_workdirs.init_base_job ~switch workdir >>= fun () ->
-  get_pkgs ~stderr switch >|= fun pkgs ->
+  get_pkgs ~conf ~stderr switch >|= fun pkgs ->
   (switch, pkgs)
 
 module Pkg_set = Set.Make (String)
 
-let get_maintainers ~pool ~jobs ~stderr switch workdir pkgs =
-  let img_name = get_img_name switch in
+let get_maintainers ~conf ~pool ~jobs ~stderr switch workdir pkgs =
+  let img_name = get_img_name ~conf switch in
   Pkg_set.fold begin fun pkg jobs ->
     Lwt_pool.use pool begin fun () ->
       Oca_lib.write_line_unix stderr ("Getting the list of maintainers for "^pkg^"...") >>= fun () ->
@@ -172,7 +173,7 @@ let get_maintainers ~pool ~jobs ~stderr switch workdir pkgs =
   end pkgs jobs
 
 let set_git_hash ~pool ~stderr switch conf =
-  let img_name = get_img_name switch in
+  let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr "Getting current git hash..." >>= fun () ->
     docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= function
@@ -199,12 +200,12 @@ let move_tmpdirs_to_final ~stderr workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string maintainersdir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmaintainersdir) (Fpath.to_string maintainersdir)
 
-let run_and_get_pkgs ~pool ~stderr workdir pkgs =
+let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
   let len_suffix = "/"^string_of_int (List.fold_left (fun n (_, pkgs) -> n + List.length pkgs) 0 pkgs) in
   List.fold_left begin fun (i, jobs, pkgs_set) (switch, pkgs) ->
     List.fold_left begin fun (i, jobs, pkgs_set) full_name ->
       let num = string_of_int i^len_suffix in
-      let job = run_job ~pool ~stderr ~switch ~num workdir full_name in
+      let job = run_job ~conf ~pool ~stderr ~switch ~num workdir full_name in
       let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
       (succ i, job :: jobs, Pkg_set.add pkg pkgs_set)
     end (succ i, jobs, pkgs_set) pkgs
@@ -226,9 +227,9 @@ let run ~on_finished ~is_retry ~conf workdir =
           build_switch ~stderr ~cached:is_retry conf workdir switch >>= fun hd_pkgs ->
           let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit) in
           Lwt_list.map_s (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
-          let (_, jobs, pkgs) = run_and_get_pkgs ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
+          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
           let jobs = set_git_hash ~pool ~stderr switch conf :: jobs in
-          let jobs = get_maintainers ~pool ~jobs ~stderr switch workdir pkgs in
+          let jobs = get_maintainers ~conf ~pool ~jobs ~stderr switch workdir pkgs in
           Lwt.join jobs
       | [] ->
           Lwt.return_unit

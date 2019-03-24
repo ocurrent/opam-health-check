@@ -7,6 +7,11 @@ let is_valid_filename file =
     not (Fpath.is_seg file)
   end
 
+let char_is_docker_compatible = function
+  | 'a'..'z' | 'A'..'Z' | '0'..'9' -> true
+  (* TODO: Add more *)
+  | _ -> false
+
 let mkdir_p dir =
   let rec aux base = function
     | [] ->
@@ -67,6 +72,7 @@ let exec ~stdin ~stdout ~stderr cmd =
   Lwt.pick [timeout; proc]
 
 let protocol_version = "2"
+let default_server_name = "default" (* TODO: Just make it random instead?! *)
 let default_html_port = "8080"
 let default_admin_port = "9999"
 let default_admin_name = "admin"

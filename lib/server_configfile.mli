@@ -2,6 +2,7 @@ type t
 
 val from_workdir : Server_workdirs.t -> t
 
+val name : t -> string
 val port : t -> int
 val admin_port : t -> int
 val auto_run_interval : t -> int
