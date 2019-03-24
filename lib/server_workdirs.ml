@@ -40,8 +40,8 @@ let tmplogfile ~pkg ~switch workdir = tmpswitchlogdir ~switch workdir/pkg
 let tmpgoodlog ~pkg ~switch workdir = tmpgooddir ~switch workdir/pkg
 let tmppartiallog ~pkg ~switch workdir = tmppartialdir ~switch workdir/pkg
 let tmpbadlog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
-let tmpnotavailablelog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
-let tmpinternalfailurelog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
+let tmpnotavailablelog ~pkg ~switch workdir = tmpnotavailabledir ~switch workdir/pkg
+let tmpinternalfailurelog ~pkg ~switch workdir = tmpinternalfailuredir ~switch workdir/pkg
 
 let metadatadir workdir = workdir/"metadata"
 let maintainersdir workdir = metadatadir workdir/"maintainers"
