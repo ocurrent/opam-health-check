@@ -26,16 +26,22 @@ let switchlogdir ~old ~switch workdir = logdir ~old workdir/Intf.Compiler.to_str
 let gooddir ~old ~switch workdir = switchlogdir ~old ~switch workdir/"good"
 let partialdir ~old ~switch workdir = switchlogdir ~old ~switch workdir/"partial"
 let baddir ~old ~switch workdir = switchlogdir ~old ~switch workdir/"bad"
+let notavailabledir ~old ~switch workdir = switchlogdir ~old ~switch workdir/"not-available"
+let internalfailuredir ~old ~switch workdir = switchlogdir ~old ~switch workdir/"internal-failure"
 
 let tmpswitchlogdir ~switch workdir = tmplogdir workdir/Intf.Compiler.to_string switch
 let tmpgooddir ~switch workdir = tmpswitchlogdir ~switch workdir/"good"
 let tmppartialdir ~switch workdir = tmpswitchlogdir ~switch workdir/"partial"
 let tmpbaddir ~switch workdir = tmpswitchlogdir ~switch workdir/"bad"
+let tmpnotavailabledir ~switch workdir = tmpswitchlogdir ~switch workdir/"not-available"
+let tmpinternalfailuredir ~switch workdir = tmpswitchlogdir ~switch workdir/"internal-failure"
 let tmplogfile ~pkg ~switch workdir = tmpswitchlogdir ~switch workdir/pkg
 
 let tmpgoodlog ~pkg ~switch workdir = tmpgooddir ~switch workdir/pkg
 let tmppartiallog ~pkg ~switch workdir = tmppartialdir ~switch workdir/pkg
 let tmpbadlog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
+let tmpnotavailablelog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
+let tmpinternalfailurelog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
 
 let metadatadir workdir = workdir/"metadata"
 let maintainersdir workdir = metadatadir workdir/"maintainers"
@@ -65,4 +71,6 @@ let init_base_jobs ~stderr workdir =
 let init_base_job ~switch workdir =
   Oca_lib.mkdir_p (tmpgooddir ~switch workdir) >>= fun () ->
   Oca_lib.mkdir_p (tmppartialdir ~switch workdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpbaddir ~switch workdir)
+  Oca_lib.mkdir_p (tmpbaddir ~switch workdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpnotavailabledir ~switch workdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpinternalfailuredir ~switch workdir)

@@ -15,6 +15,8 @@ val switchlogdir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
 val gooddir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
 val partialdir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
 val baddir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
+val notavailabledir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
+val internalfailuredir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
 
 val tmpswitchlogdir : switch:Intf.Compiler.t -> t -> Fpath.t
 val tmplogfile : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
@@ -22,6 +24,8 @@ val tmplogfile : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 val tmpgoodlog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 val tmppartiallog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 val tmpbadlog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
+val tmpnotavailablelog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
+val tmpinternalfailurelog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 
 val maintainersdir : t -> Fpath.t
 val maintainersfile : pkg:string -> t -> Fpath.t

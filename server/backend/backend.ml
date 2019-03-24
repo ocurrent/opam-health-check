@@ -59,10 +59,14 @@ let pkg_update ~old ~pool pkg_tbl workdir comp state pkg =
 let fill_pkgs_from_dir ~old ~pool pkg_tbl workdir comp =
   get_files (Server_workdirs.gooddir ~old ~switch:comp workdir) >>= fun good_files ->
   get_files (Server_workdirs.partialdir ~old ~switch:comp workdir) >>= fun partial_files ->
-  get_files (Server_workdirs.baddir ~old ~switch:comp workdir) >|= fun bad_files ->
+  get_files (Server_workdirs.baddir ~old ~switch:comp workdir) >>= fun bad_files ->
+  get_files (Server_workdirs.notavailabledir ~old ~switch:comp workdir) >>= fun notavailable_files ->
+  get_files (Server_workdirs.internalfailuredir ~old ~switch:comp workdir) >|= fun internalfailure_files ->
   List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Good) good_files;
   List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Partial) partial_files;
-  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Bad) bad_files
+  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Bad) bad_files;
+  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.NotAvailable) notavailable_files;
+  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.InternalFailure) internalfailure_files
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)

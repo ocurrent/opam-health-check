@@ -82,12 +82,17 @@ let run_job ~pool ~stderr ~switch ~num workdir pkg =
       end >>= fun () ->
       Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch workdir))
     end begin function
-    | Oca_lib.Process_failure ->
+    | Oca_lib.Process_failure 31 ->
         is_partial_failure logfile >>= begin function
         | true -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
         | false -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
         end
-    | e -> Lwt.fail e
+    | Oca_lib.Process_failure 20 ->
+        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch workdir))
+    | Oca_lib.Process_failure _ | Oca_lib.Internal_failure ->
+        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch workdir))
+    | e ->
+        Lwt.fail e
     end
   end
 

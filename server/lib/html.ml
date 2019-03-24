@@ -30,8 +30,10 @@ let instance_to_html ~pkg instances comp =
       | State.Good -> td "green" [a ~a:[a_href (log_url pkg instance)] [txt "☑"]]
       | State.Partial -> td "orange" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
       | State.Bad -> td "red" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
+      | State.NotAvailable -> td "grey" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
+      | State.InternalFailure -> td "white" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
       end
-  | None -> td "grey" [txt "☐"]
+  | None -> assert false
 
 let (>>&) x f =
   if x then f () else Lwt.return_false
@@ -50,7 +52,7 @@ let must_show_package query ~last pkg =
     if query.show_failures_only then
       List.exists (fun instance -> match Instance.state instance with
         | State.Bad | State.Partial -> true
-        | State.Good -> false
+        | State.Good | State.NotAvailable | State.InternalFailure -> false
       ) instances
     else
       true
@@ -105,7 +107,8 @@ let result_legend query =
     tr [td ~a:[a_style "background-color: green; text-align: center;"] [txt "☑"]; td [txt "Package successfully built"]];
     tr [td ~a:[a_style "background-color: orange; text-align: center;"] [txt "☒"]; td [txt "One of the dependencies failed to build"]];
     tr [td ~a:[a_style "background-color: red; text-align: center;"] [txt "☒"]; td [txt "Package failed to build"]];
-    tr [td ~a:[a_style "background-color: grey; text-align: center;"] [txt "☐"]; td [txt "Package is not available in this environment"]];
+    tr [td ~a:[a_style "background-color: grey; text-align: center;"] [txt "☒"]; td [txt "Package is not available in this environment"]];
+    tr [td ~a:[a_style "background-color: white; text-align: center;"] [txt "☒"]; td [txt "Internal failure"]];
   ]]
 
 let get_opam_repository_commit_url ~hash ~content =
@@ -203,10 +206,14 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   let good = span ~a:[a_style "color: green;"] [txt "passing"] in
   let bad = span ~a:[a_style "color: red;"] [txt "failing"] in
   let partial = span ~a:[a_style "color: orange;"] [txt "partially failing"] in
+  let not_available = span ~a:[a_style "color: orange;"] [txt "not available"] in
+  let internal_failure = span ~a:[a_style "border: 2px solid black;"] [txt "internal failure"] in
   let print_status = function
     | Intf.State.Good -> good
     | Intf.State.Partial -> partial
     | Intf.State.Bad -> bad
+    | Intf.State.NotAvailable -> not_available
+    | Intf.State.InternalFailure -> internal_failure
   in
   let get_status_elm ~old status =
     let status_str = Intf.State.to_string status in

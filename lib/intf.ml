@@ -1,22 +1,26 @@
 open Lwt.Infix
 
 module State = struct
-  type t = Good | Partial | Bad
+  type t = Good | Partial | Bad | NotAvailable | InternalFailure
 
   let equal x y = match x, y with
-    | Good, Good | Partial, Partial | Bad, Bad -> true
-    | Good, _ | Partial, _ | Bad, _ -> false
+    | Good, Good | Partial, Partial | Bad, Bad | NotAvailable, NotAvailable | InternalFailure, InternalFailure -> true
+    | Good, _ | Partial, _ | Bad, _ | NotAvailable, _ | InternalFailure, _ -> false
 
   let from_string = function
     | "good" -> Good
     | "partial" -> Partial
     | "bad" -> Bad
+    | "not-available" -> NotAvailable
+    | "internal-failure" -> InternalFailure
     | _ -> failwith "not a state"
 
   let to_string = function
     | Good -> "good"
     | Partial -> "partial"
     | Bad -> "bad"
+    | NotAvailable -> "not-available"
+    | InternalFailure -> "internal-failure"
 end
 
 module Compiler = struct

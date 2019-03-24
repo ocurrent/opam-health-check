@@ -4,7 +4,9 @@ val mkdir_p : Fpath.t -> unit Lwt.t
 
 val write_line_unix : Lwt_unix.file_descr -> string -> unit Lwt.t
 
-exception Process_failure
+exception Process_failure of int
+exception Internal_failure
+
 val exec :
   stdin:[< `Close
         | `Dev_null

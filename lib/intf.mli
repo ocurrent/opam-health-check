@@ -1,5 +1,5 @@
 module State : sig
-  type t = Good | Partial | Bad
+  type t = Good | Partial | Bad | NotAvailable | InternalFailure
 
   val equal : t -> t -> bool
 
