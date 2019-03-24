@@ -110,7 +110,7 @@ let retry ~confdir ~conffile profilename () =
 let retry_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (run ~confdir ~conffile) $
+    Cmdliner.Term.const (retry ~confdir ~conffile) $
     Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
     Cmdliner.Term.const ()
   in
