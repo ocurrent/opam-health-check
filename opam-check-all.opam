@@ -18,7 +18,7 @@ depends: [
   "cmdliner"
   "fpath"
   "re" {>= "1.7.2"}
-  "yaml" {>= "1.0.0"}
+  "yaml" {>= "2.0.0"}
   "ocaml-xdg-basedir"
   "dockerfile"
   "lz4"

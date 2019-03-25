@@ -67,9 +67,9 @@ let set_config conf = function
 let yaml_of_conf conf =
   `O [
     "name", `String (Option.get_exn conf.name);
-    "port", `String (string_of_int (Option.get_exn conf.port));
-    "admin-port", `String (string_of_int (Option.get_exn conf.admin_port));
-    "auto-run-interval", `String (string_of_int (Option.get_exn conf.auto_run_interval));
+    "port", `Float (float_of_int (Option.get_exn conf.port));
+    "admin-port", `Float (float_of_int (Option.get_exn conf.admin_port));
+    "auto-run-interval", `Float (float_of_int (Option.get_exn conf.auto_run_interval));
     "list-command", `String (Option.get_exn conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
     "ocaml-switches", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
