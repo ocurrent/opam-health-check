@@ -204,11 +204,12 @@ let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
   let len_suffix = "/"^string_of_int (List.fold_left (fun n (_, pkgs) -> n + List.length pkgs) 0 pkgs) in
   List.fold_left begin fun (i, jobs, pkgs_set) (switch, pkgs) ->
     List.fold_left begin fun (i, jobs, pkgs_set) full_name ->
+      let i = succ i in
       let num = string_of_int i^len_suffix in
       let job = run_job ~conf ~pool ~stderr ~switch ~num workdir full_name in
       let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
-      (succ i, job :: jobs, Pkg_set.add pkg pkgs_set)
-    end (succ i, jobs, pkgs_set) pkgs
+      (i, job :: jobs, Pkg_set.add pkg pkgs_set)
+    end (i, jobs, pkgs_set) pkgs
   end (0, [], Pkg_set.empty) pkgs
 
 let run_locked = ref false
