@@ -108,7 +108,7 @@ let result_legend query =
     tr [td ~a:[a_style "background-color: orange; text-align: center;"] [txt "☒"]; td [txt "One of the dependencies failed to build"]];
     tr [td ~a:[a_style "background-color: red; text-align: center;"] [txt "☒"]; td [txt "Package failed to build"]];
     tr [td ~a:[a_style "background-color: grey; text-align: center;"] [txt "☒"]; td [txt "Package is not available in this environment"]];
-    tr [td ~a:[a_style "background-color: white; text-align: center;"] [txt "☒"]; td [txt "Internal failure"]];
+    tr [td ~a:[a_style "background-color: white; border: 2px solid black; text-align: center;"] [txt "☒"]; td [txt "Internal failure"]];
   ]]
 
 let get_opam_repository_commit_url ~hash ~content =
