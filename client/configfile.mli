@@ -3,6 +3,7 @@ type profile
 
 val init_with_values :
   confdir:Fpath.t ->
+  profilename:string ->
   hostname:string ->
   port:int ->
   username:string ->

@@ -134,11 +134,12 @@ let init ~confdir ~conffile = function
   | Some local_workdir ->
       let local_workdir = Server_workdirs.create ~workdir:local_workdir in
       let server_conf = Server_configfile.from_workdir local_workdir in
+      let profilename = Server_configfile.name server_conf in
       let hostname = Oca_lib.localhost in
       let port = Server_configfile.admin_port server_conf in
       let username = Oca_lib.default_admin_name in
       let keyfile = Server_workdirs.keyfile ~username local_workdir in
-      Configfile.init_with_values ~confdir ~hostname ~port ~username ~keyfile conffile
+      Configfile.init_with_values ~confdir ~profilename ~hostname ~port ~username ~keyfile conffile
   | None ->
       Configfile.init ~confdir conffile
 

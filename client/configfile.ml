@@ -28,25 +28,29 @@ let copy_file ~src ~dst =
     output_string out content;
   end
 
-let init_with_values ~confdir ~hostname ~port ~username ~keyfile yamlfile =
+let yaml_of_conf ~profilename ~hostname ~port ~username =
+  "\n"^
+  profilename^":\n"^
+  "  hostname: "^hostname^"\n"^
+  "  port: "^port^"\n"^
+  "  username: "^username^"\n"
+
+let init_with_values ~confdir ~profilename ~hostname ~port ~username ~keyfile yamlfile =
   let port = string_of_int port in
   Lwt_main.run (Oca_lib.mkdir_p confdir);
-  copy_file ~src:keyfile ~dst:(Fpath.add_seg confdir "default.key");
-  IO.with_out ~flags:[Open_creat; Open_excl] (Fpath.to_string yamlfile) begin fun out ->
-    IO.write_line out "default:";
-    IO.write_line out ("  hostname: "^hostname);
-    IO.write_line out ("  port: "^port);
-    IO.write_line out ("  username: "^username);
-  end
+  copy_file ~src:keyfile ~dst:(Fpath.add_seg confdir (profilename^".key"));
+  let new_profile_str = yaml_of_conf ~profilename ~hostname ~port ~username in
+  IO.with_out_a (Fpath.to_string yamlfile) (fun out -> output_string out new_profile_str)
 
 let init ~confdir yamlfile =
+  let profilename = get_input ~name:"Profile name" ~default:Oca_lib.default_server_name in
   let hostname = get_input ~name:"Server hostname" ~default:Oca_lib.localhost in
   let port = get_input ~name:"Server port" ~default:Oca_lib.default_admin_port in
   let username = get_input ~name:"Username" ~default:Oca_lib.default_admin_name in
   let keyfile = get_input ~name:"User key" ~default:"" in
   let keyfile = Fpath.v keyfile in
   let port = int_of_string port in
-  init_with_values ~confdir ~hostname ~port ~username ~keyfile yamlfile
+  init_with_values ~confdir ~profilename ~hostname ~port ~username ~keyfile yamlfile
 
 let set_field ~field set = function
   | Some _ -> failwith (Printf.sprintf "Config parser: '%s' is defined twice" field)
