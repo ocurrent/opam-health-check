@@ -4,3 +4,5 @@ val run :
   conf:Server_configfile.t ->
   Server_workdirs.t ->
   unit Lwt.t
+
+val is_running : unit -> bool

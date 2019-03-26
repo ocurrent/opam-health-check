@@ -213,6 +213,8 @@ let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
 
 let run_locked = ref false
 
+let is_running () = !run_locked
+
 let run ~on_finished ~is_retry ~conf workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   if !run_locked then

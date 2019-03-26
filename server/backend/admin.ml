@@ -31,27 +31,66 @@ let create_admin_key workdir =
   | true -> Lwt.return_unit
   | false -> create_userkey workdir username
 
+let get_log workdir =
+  let ilogdir = Server_workdirs.ilogdir workdir in
+  Oca_lib.get_files ilogdir >>= fun logs ->
+  let logs = List.sort String.compare logs in
+  let logfile = Option.get_exn (List.last_opt logs) in
+  Lwt_unix.openfile logfile Unix.[O_RDONLY] 0o644 >>= fun fd ->
+  let off = ref 0 in
+  let rec loop () =
+    let is_running = Check.is_running () in
+    Lwt_unix.lseek fd 0 Unix.SEEK_END >>= fun new_off ->
+    if new_off < 0 then
+      assert false
+    else if !off < new_off then begin
+      Lwt_unix.lseek fd !off Unix.SEEK_SET >>= fun _ ->
+      let len = new_off - !off in
+      let buf = Bytes.create len in
+      Lwt_unix.read fd buf 0 len >>= fun _ ->
+      off := new_off;
+      Lwt.return (Some (Bytes.to_string buf))
+    end else if is_running then begin
+      off := new_off;
+      Lwt_unix.sleep 1. >>= fun () ->
+      loop ()
+    end else
+      Lwt.return_none
+  in
+  Lwt.return loop
+
 let admin_action ~on_finished ~conf ~run_trigger workdir body =
-  match String.split_on_char '\n' body with
+  begin match String.split_on_char '\n' body with
   | ["set-auto-run-interval"; i] ->
-      Server_configfile.set_auto_run_interval conf (int_of_string i)
+      Server_configfile.set_auto_run_interval conf (int_of_string i) >|= fun () ->
+      (fun () -> Lwt.return_none)
   | "set-ocaml-switches"::switches ->
       let switches = List.map Intf.Compiler.from_string switches in
       let switches = List.sort Intf.Compiler.compare switches in
-      Server_configfile.set_ocaml_switches conf switches
+      Server_configfile.set_ocaml_switches conf switches >|= fun () ->
+      (fun () -> Lwt.return_none)
   | ["set-list-command";cmd] ->
-      Server_configfile.set_list_command conf cmd
+      Server_configfile.set_list_command conf cmd >|= fun () ->
+      (fun () -> Lwt.return_none)
   | ["run"] ->
-      Lwt_mvar.put run_trigger false
+      Lwt_mvar.put run_trigger false >|= fun () ->
+      (fun () -> Lwt.return_none)
   | ["retry"] ->
-      Lwt_mvar.put run_trigger true
+      Lwt_mvar.put run_trigger true >|= fun () ->
+      (fun () -> Lwt.return_none)
   | ["add-user";username] ->
-      create_userkey workdir username
+      create_userkey workdir username >|= fun () ->
+      (fun () -> Lwt.return_none)
   | ["clear-cache"] ->
       on_finished workdir;
-      Lwt.return_unit
+      Lwt.return (fun () -> Lwt.return_none)
+  | ["log"] ->
+      get_log workdir
   | _ ->
       Lwt.fail_with "Action unrecognized."
+  end >>= fun resp ->
+  let stream = Lwt_stream.from resp in
+  Cohttp_lwt_unix.Server.respond ~status:`OK ~body:(`Stream stream) ()
 
 let is_bzero = function
   | '\000' -> true
@@ -85,8 +124,7 @@ let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
           let body = decrypt key body in
           begin match String.Split.left ~by:"\n" body with
           | Some (user', body) when String.equal user user' ->
-              admin_action ~on_finished ~conf ~run_trigger workdir body >>= fun () ->
-              Cohttp_lwt_unix.Server.respond ~status:`OK ~body:`Empty ()
+              admin_action ~on_finished ~conf ~run_trigger workdir body
           | Some _ ->
               Lwt.fail_with "Identity couldn't be ensured"
           | None ->

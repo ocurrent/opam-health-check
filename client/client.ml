@@ -164,6 +164,19 @@ let clear_cache_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "clear-cache" in
   (term, info)
 
+let log ~confdir ~conffile profilename () =
+  send_msg ~profilename ~confdir ~conffile ["log"]
+
+let log_cmd ~confdir ~conffile =
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (log ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Term.const ()
+  in
+  let info = Cmdliner.Term.info "log" in
+  (term, info)
+
 let cmds =
   let confdir = XDGBaseDir.(default.config_home) in
   let confdir = Fpath.v confdir in
@@ -177,6 +190,7 @@ let cmds =
     run_cmd ~confdir ~conffile;
     retry_cmd ~confdir ~conffile;
     clear_cache_cmd ~confdir ~conffile;
+    log_cmd ~confdir ~conffile;
   ]
 
 let () =

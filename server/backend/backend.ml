@@ -4,24 +4,6 @@ type t = Server_workdirs.t
 
 let cache = Oca_server.Cache.create ()
 
-let get_files dirname =
-  Lwt_unix.opendir (Fpath.to_string dirname) >>= fun dir ->
-  let rec aux files =
-    Lwt.catch begin fun () ->
-      Lwt_unix.readdir dir >>= fun file ->
-      if Fpath.is_rel_seg file then
-        aux files
-      else
-        aux (file :: files)
-    end begin function
-    | End_of_file -> Lwt.return files
-    | exn -> Lwt.fail exn
-    end
-  in
-  aux [] >>= fun files ->
-  Lwt_unix.closedir dir >|= fun () ->
-  files
-
 let is_directory dir file =
   if Sys.is_directory (Fpath.to_string (Fpath.add_seg dir file)) then
     Some (Intf.Compiler.from_string file)
@@ -30,7 +12,7 @@ let is_directory dir file =
 
 let get_compilers ~old workdir =
   let dir = Server_workdirs.logdir ~old workdir in
-  get_files dir >|= fun files ->
+  Oca_lib.get_files dir >|= fun files ->
   let dirs = List.filter_map (is_directory dir) files in
   List.sort Intf.Compiler.compare dirs
 
@@ -57,11 +39,11 @@ let pkg_update ~old ~pool pkg_tbl workdir comp state pkg =
   Pkg_tbl.replace pkg_tbl pkg instances
 
 let fill_pkgs_from_dir ~old ~pool pkg_tbl workdir comp =
-  get_files (Server_workdirs.gooddir ~old ~switch:comp workdir) >>= fun good_files ->
-  get_files (Server_workdirs.partialdir ~old ~switch:comp workdir) >>= fun partial_files ->
-  get_files (Server_workdirs.baddir ~old ~switch:comp workdir) >>= fun bad_files ->
-  get_files (Server_workdirs.notavailabledir ~old ~switch:comp workdir) >>= fun notavailable_files ->
-  get_files (Server_workdirs.internalfailuredir ~old ~switch:comp workdir) >|= fun internalfailure_files ->
+  Oca_lib.get_files (Server_workdirs.gooddir ~old ~switch:comp workdir) >>= fun good_files ->
+  Oca_lib.get_files (Server_workdirs.partialdir ~old ~switch:comp workdir) >>= fun partial_files ->
+  Oca_lib.get_files (Server_workdirs.baddir ~old ~switch:comp workdir) >>= fun bad_files ->
+  Oca_lib.get_files (Server_workdirs.notavailabledir ~old ~switch:comp workdir) >>= fun notavailable_files ->
+  Oca_lib.get_files (Server_workdirs.internalfailuredir ~old ~switch:comp workdir) >|= fun internalfailure_files ->
   List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Good) good_files;
   List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Partial) partial_files;
   List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Bad) bad_files;
@@ -90,7 +72,7 @@ let get_log _ ~old ~comp ~state ~pkg =
 
 let get_maintainers workdir =
   let dir = Server_workdirs.maintainersdir workdir in
-  get_files dir >>= fun files ->
+  Oca_lib.get_files dir >>= fun files ->
   let maintainers = Oca_server.Cache.Maintainers_cache.create 10_000 in
   Lwt_list.iter_s begin fun pkg ->
     let file = Server_workdirs.maintainersfile ~pkg workdir in

@@ -1,6 +1,7 @@
 val is_valid_filename : string -> bool
 val char_is_docker_compatible : char -> bool
 
+val get_files : Fpath.t -> string list Lwt.t
 val mkdir_p : Fpath.t -> unit Lwt.t
 
 val write_line_unix : Lwt_unix.file_descr -> string -> unit Lwt.t
