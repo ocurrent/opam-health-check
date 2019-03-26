@@ -33,7 +33,7 @@ let instance_to_html ~pkg instances comp =
       | State.NotAvailable -> td "grey" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
       | State.InternalFailure -> td "white" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
       end
-  | None -> assert false
+  | None -> td "grey" [txt "☐"] (* NOTE: Should not happen in the new versions but can happen with old data or custom runs *)
 
 let (>>&) x f =
   if x then f () else Lwt.return_false
