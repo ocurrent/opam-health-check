@@ -18,7 +18,7 @@ let rec encrypt_msg ~key msg =
 
 let print_body body =
   let stream = Cohttp_lwt.Body.to_stream body in
-  Lwt_stream.iter print_string stream >|= fun () ->
+  Lwt_stream.iter (fun s -> print_string s; flush stdout) stream >|= fun () ->
   print_newline ()
 
 let process_response (res, body) =
