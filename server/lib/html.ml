@@ -14,6 +14,12 @@ type query = {
 
 let github_url = "https://github.com/ocaml/opam-repository"
 
+module CUD_pallette = struct
+  let red = "#ff2800"
+  let orange = "#ff9900"
+  let green = "#cbf266"
+end
+
 let log_url pkg instance =
   let comp = Instance.compiler instance in
   let comp = Compiler.to_string comp in
@@ -27,9 +33,9 @@ let instance_to_html ~pkg instances comp =
   match List.find_opt (fun i -> Compiler.equal (Instance.compiler i) comp) instances with
   | Some instance ->
       begin match Instance.state instance with
-      | State.Good -> td "green" [a ~a:[a_href (log_url pkg instance)] [txt "☑"]]
-      | State.Partial -> td "orange" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
-      | State.Bad -> td "red" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
+      | State.Good -> td CUD_pallette.green [a ~a:[a_href (log_url pkg instance)] [txt "☑"]]
+      | State.Partial -> td CUD_pallette.orange [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
+      | State.Bad -> td CUD_pallette.red [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
       | State.NotAvailable -> td "grey" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
       | State.InternalFailure -> td "white" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
       end
@@ -104,9 +110,9 @@ let result_legend query =
   let legend = legend [b [txt "Legend:"]] in
   fieldset ~legend [table ~a:[a_style "white-space: nowrap;"] [
     tr [td [txt "Available compilers:"]; td [txt (String.concat ", " (List.map Compiler.to_string query.available_compilers))]];
-    tr [td ~a:[a_style "background-color: green; text-align: center;"] [txt "☑"]; td [txt "Package successfully built"]];
-    tr [td ~a:[a_style "background-color: orange; text-align: center;"] [txt "☒"]; td [txt "One of the dependencies failed to build"]];
-    tr [td ~a:[a_style "background-color: red; text-align: center;"] [txt "☒"]; td [txt "Package failed to build"]];
+    tr [td ~a:[a_style ("background-color: "^CUD_pallette.green^"; text-align: center;")] [txt "☑"]; td [txt "Package successfully built"]];
+    tr [td ~a:[a_style ("background-color: "^CUD_pallette.orange^"; text-align: center;")] [txt "☒"]; td [txt "One of the dependencies failed to build"]];
+    tr [td ~a:[a_style ("background-color: "^CUD_pallette.red^"; text-align: center;")] [txt "☒"]; td [txt "Package failed to build"]];
     tr [td ~a:[a_style "background-color: grey; text-align: center;"] [txt "☒"]; td [txt "Package is not available in this environment"]];
     tr [td ~a:[a_style "background-color: white; border: 2px solid black; text-align: center;"] [txt "☒"]; td [txt "Internal failure"]];
   ]]
@@ -203,10 +209,10 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   let open Tyxml.Html in
   let comp_str = Intf.Compiler.to_string comp in
   let prefix = [b [txt full_name]; txt " on "; b [txt comp_str]] in
-  let good = span ~a:[a_style "color: green;"] [txt "passing"] in
-  let bad = span ~a:[a_style "color: red;"] [txt "failing"] in
-  let partial = span ~a:[a_style "color: orange;"] [txt "partially failing"] in
-  let not_available = span ~a:[a_style "color: orange;"] [txt "not available"] in
+  let good = span ~a:[a_style ("color: "^CUD_pallette.green^";")] [txt "passing"] in
+  let bad = span ~a:[a_style ("color: "^CUD_pallette.red^";")] [txt "failing"] in
+  let partial = span ~a:[a_style ("color: "^CUD_pallette.orange^";")] [txt "partially failing"] in
+  let not_available = span ~a:[a_style "color: grey;"] [txt "not available"] in
   let internal_failure = span ~a:[a_style "border: 2px solid black;"] [txt "internal failure"] in
   let print_status = function
     | Intf.State.Good -> good
