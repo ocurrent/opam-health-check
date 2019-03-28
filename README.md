@@ -22,14 +22,6 @@ $ opam-health-check --from-local-workdir /tmp/opam-health-check
 or used any custom path given to the server.
 
 Now you can send any command to the server using the `opam-health-check` command.
-
-For example to launch a task:
-```
-$ opam-health-check check <name of the compiler> <a dockerfile>
-```
-
-For an example of a compatible Dockerfile see the `dockerfiles` directory.
-
 All subcommands are listed with `opam-health-check --help`
 
 ### How to use opam-health-check remotely:
