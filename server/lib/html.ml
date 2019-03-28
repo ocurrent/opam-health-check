@@ -14,10 +14,11 @@ type query = {
 
 let github_url = "https://github.com/ocaml/opam-repository"
 
+(* TODO: temporarely back to shitty colors, fix this *)
 module CUD_pallette = struct
-  let red = "#ff2800"
-  let orange = "#ff9900"
-  let green = "#cbf266"
+  let red = "red"
+  let orange = "orange"
+  let green = "green"
 end
 
 let log_url pkg instance =
@@ -29,17 +30,17 @@ let log_url pkg instance =
 
 let instance_to_html ~pkg instances comp =
   let open Tyxml.Html in
-  let td c = td ~a:[a_class ["result-col"; "results-cell"]; a_style ("background-color: "^c^";")] in
+  let td c = td ~a:[a_class ["result-col"; "results-cell"; c]] in
   match List.find_opt (fun i -> Compiler.equal (Instance.compiler i) comp) instances with
   | Some instance ->
       begin match Instance.state instance with
-      | State.Good -> td CUD_pallette.green [a ~a:[a_href (log_url pkg instance)] [txt "☑"]]
-      | State.Partial -> td CUD_pallette.orange [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
-      | State.Bad -> td CUD_pallette.red [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
-      | State.NotAvailable -> td "grey" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
-      | State.InternalFailure -> td "white" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
+      | State.Good -> td "cell-good" [a ~a:[a_href (log_url pkg instance)] [txt "☑"]]
+      | State.Partial -> td "cell-partial" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
+      | State.Bad -> td "cell-bad" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
+      | State.NotAvailable -> td "cell-not-available" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
+      | State.InternalFailure -> td "cell-internal-failure" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
       end
-  | None -> td "grey" [txt "☐"] (* NOTE: Should not happen in the new versions but can happen with old data or custom runs *)
+  | None -> td "cell-not-available" [txt "☐"] (* NOTE: Should not happen in the new versions but can happen with old data or custom runs *)
 
 let (>>&) x f =
   if x then f () else Lwt.return_false
@@ -110,11 +111,11 @@ let result_legend query =
   let legend = legend [b [txt "Legend:"]] in
   fieldset ~legend [table ~a:[a_style "white-space: nowrap;"] [
     tr [td [txt "Available compilers:"]; td [txt (String.concat ", " (List.map Compiler.to_string query.available_compilers))]];
-    tr [td ~a:[a_style ("background-color: "^CUD_pallette.green^"; text-align: center;")] [txt "☑"]; td [txt "Package successfully built"]];
-    tr [td ~a:[a_style ("background-color: "^CUD_pallette.orange^"; text-align: center;")] [txt "☒"]; td [txt "One of the dependencies failed to build"]];
-    tr [td ~a:[a_style ("background-color: "^CUD_pallette.red^"; text-align: center;")] [txt "☒"]; td [txt "Package failed to build"]];
-    tr [td ~a:[a_style "background-color: grey; text-align: center;"] [txt "☒"]; td [txt "Package is not available in this environment"]];
-    tr [td ~a:[a_style "background-color: white; border: 2px solid black; text-align: center;"] [txt "☒"]; td [txt "Internal failure"]];
+    tr [td ~a:[a_class ["cell-good"]] [txt "☑"]; td [txt "Package successfully built"]];
+    tr [td ~a:[a_class ["cell-partial"]] [txt "☒"]; td [txt "One of the dependencies failed to build"]];
+    tr [td ~a:[a_class ["cell-bad"]] [txt "☒"]; td [txt "Package failed to build"]];
+    tr [td ~a:[a_class ["cell-not-available"]] [txt "☒"]; td [txt "Package is not available in this environment"]];
+    tr [td ~a:[a_class ["cell-internal-failure"]; a_style "border: 2px solid black;"] [txt "☒"]; td [txt "Internal failure"]];
   ]]
 
 let get_opam_repository_commit_url ~hash ~content =
@@ -168,7 +169,13 @@ let get_html ~conf query pkgs =
   let style_row_hover = txt ".results-row:hover {border-top-width: 4px; border-bottom-width: 4px;}" in
   let style_pkgname = txt ".pkgname {white-space: nowrap;}" in
   let style_a = txt "a {text-decoration: none;}" in
-  let head = head title [charset; style [style_table; style_col; style_case; style_pkgname; style_row; style_row_hover; style_a]] in
+  let style_cell_good = txt (".cell-good {background-color: "^CUD_pallette.red^"; text-align: center;}") in
+  let style_cell_partial = txt (".cell-partial {background-color: "^CUD_pallette.orange^"; text-align: center;}") in
+  let style_cell_bad = txt (".cell-bad {background-color: "^CUD_pallette.green^"; text-align: center;}") in
+  let style_cell_not_available = txt (".cell-not-available {background-color: grey; text-align: center;}") in
+  let style_cell_internal_failure = txt (".cell-internal-failure {background-color: white; text-align: center;}") in
+  let head = head title [charset; style [style_table; style_col; style_case; style_pkgname; style_row; style_row_hover; style_a;
+                                         style_cell_good; style_cell_partial; style_cell_bad; style_cell_not_available; style_cell_internal_failure]] in
   let compilers_text = [txt "Show only:"] in
   let compilers = comp_checkboxes ~name:"comp" query.compilers query in
   let show_available_text = [txt "Show only packages available in:"] in
