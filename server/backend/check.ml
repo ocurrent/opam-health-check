@@ -212,6 +212,19 @@ let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
     end (i, jobs, pkgs_set) pkgs
   end (0, [], Pkg_set.empty) pkgs
 
+let trigger_slack_webhooks ~stderr conf =
+  Server_configfile.slack_webhooks conf |>
+  Lwt_list.iter_p begin fun webhook ->
+    Cohttp_lwt_unix.Client.post
+      ~headers:(Cohttp.Header.of_list ["Content-type", "application/json"])
+      ~body:(`String {|{"text":"The latest check is done. Check out http://check.ocamllabs.io/diff to discover which packages are now broken or fixed"}|}) (* TODO: Get the url parameterized *)
+      webhook
+    >>= fun (resp, _body) ->
+    match Cohttp.Response.status resp with
+    | `OK -> Lwt.return_unit
+    | _ -> Oca_lib.write_line_unix stderr ("Something when wrong with slack webhook "^Uri.to_string webhook)
+  end
+
 let run_locked = ref false
 
 let is_running () = !run_locked
@@ -240,6 +253,7 @@ let run ~on_finished ~is_retry ~conf workdir =
       Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
       move_tmpdirs_to_final ~stderr workdir >>= fun () ->
       on_finished workdir;
+      trigger_slack_webhooks ~stderr conf >>= fun () ->
       let end_time = Unix.time () in
       Oca_lib.write_line_unix stderr ("Done. Operation took: "^string_of_float (end_time -. start_time)^" seconds")
     end

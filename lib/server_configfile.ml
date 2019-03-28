@@ -11,6 +11,7 @@ type t = {
   mutable ocaml_switches : Intf.Compiler.t list option;
   mutable opam_repo_commit_hash : string option;
   mutable opam_repo_old_commit_hash : string option;
+  mutable slack_webhooks : Uri.t list option;
 }
 
 let create_conf yamlfile = {
@@ -24,6 +25,7 @@ let create_conf yamlfile = {
   ocaml_switches = None;
   opam_repo_commit_hash = None;
   opam_repo_old_commit_hash = None;
+  slack_webhooks = None;
 }
 
 let set_field ~field set = function
@@ -32,6 +34,10 @@ let set_field ~field set = function
 
 let get_comp = function
   | `String s -> Intf.Compiler.from_string s
+  | _ -> failwith "string expected"
+
+let get_uri = function
+  | `String s -> Uri.of_string s
   | _ -> failwith "string expected"
 
 let check_is_docker_compatible name =
@@ -61,6 +67,9 @@ let set_config conf = function
       set_field ~field (fun () -> conf.opam_repo_commit_hash <- Some hash) conf.opam_repo_commit_hash
   | "opam-repo-old-commit-hash" as field, `String hash ->
       set_field ~field (fun () -> conf.opam_repo_old_commit_hash <- Some hash) conf.opam_repo_old_commit_hash
+  | "slack-webhooks" as field, `A webhooks ->
+      let webhooks = List.map get_uri webhooks in
+      set_field ~field (fun () -> conf.slack_webhooks <- Some webhooks) conf.slack_webhooks
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
@@ -75,6 +84,7 @@ let yaml_of_conf conf =
     "ocaml-switches", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
     "opam-repo-commit-hash", Option.map_or ~default:`Null (fun s -> `String s) conf.opam_repo_commit_hash;
     "opam-repo-old-commit-hash", Option.map_or ~default:`Null (fun s -> `String s) conf.opam_repo_old_commit_hash;
+    "slack-webhooks", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Uri.to_string s)) l)) conf.slack_webhooks;
   ]
 
 let set_defaults conf =
@@ -88,6 +98,8 @@ let set_defaults conf =
     conf.auto_run_interval <- Some Oca_lib.default_auto_run_interval;
   if Option.is_none conf.list_command then
     conf.list_command <- Some Oca_lib.default_list_command;
+  if Option.is_none conf.slack_webhooks then
+    conf.slack_webhooks <- Some [];
   let yaml = Result.get_exn (Yaml.to_string (yaml_of_conf conf)) in
   IO.with_out (Fpath.to_string conf.yamlfile) (fun out -> output_string out yaml)
 
@@ -123,6 +135,11 @@ let set_opam_repo_commit_hash conf hash =
   set_defaults conf;
   Lwt.return_unit
 
+let set_slack_webhooks conf webhooks =
+  conf.slack_webhooks <- Some webhooks;
+  set_defaults conf;
+  Lwt.return_unit
+
 let create yamlfile yaml =
   let conf = create_conf yamlfile in
   List.iter (set_config conf) yaml;
@@ -146,3 +163,4 @@ let extra_command {extra_command; _} = extra_command
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let opam_repo_commit_hash {opam_repo_commit_hash; _} = opam_repo_commit_hash
 let opam_repo_old_commit_hash {opam_repo_old_commit_hash; _} = opam_repo_old_commit_hash
+let slack_webhooks {slack_webhooks; _} = Option.get_exn slack_webhooks

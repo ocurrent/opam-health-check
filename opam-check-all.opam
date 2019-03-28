@@ -22,5 +22,6 @@ depends: [
   "ocaml-xdg-basedir"
   "dockerfile"
   "lz4"
+  "tls" # activate conduit with TLS for slack webhooks
 ]
 synopsis: "A toolchain to check for broken opam packages"

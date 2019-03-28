@@ -77,6 +77,19 @@ let set_ocaml_switches_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "set-ocaml-switches" in
   (term, info)
 
+let set_slack_webhooks ~confdir ~conffile profilename webhooks =
+  send_msg ~profilename ~confdir ~conffile ("set-slack-webhooks"::webhooks)
+
+let set_slack_webhooks_cmd ~confdir ~conffile =
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (set_slack_webhooks ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(value & pos_all string [] & info ~docv:"WEBHOOKS" [])
+  in
+  let info = Cmdliner.Term.info "set-slack-webhooks" in
+  (term, info)
+
 let set_list_command ~confdir ~conffile profilename cmd =
   send_msg ~profilename ~confdir ~conffile ["set-list-command";cmd]
 
@@ -187,6 +200,7 @@ let cmds =
     init_cmd ~confdir ~conffile; (* TODO: Handle profilename on init *)
     add_user_cmd ~confdir ~conffile;
     set_ocaml_switches_cmd ~confdir ~conffile;
+    set_slack_webhooks_cmd ~confdir ~conffile;
     set_list_command_cmd ~confdir ~conffile;
     run_cmd ~confdir ~conffile;
     retry_cmd ~confdir ~conffile;
