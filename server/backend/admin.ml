@@ -70,6 +70,10 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
       let switches = List.sort Intf.Compiler.compare switches in
       Server_configfile.set_ocaml_switches conf switches >|= fun () ->
       (fun () -> Lwt.return_none)
+  | "set-slack-webhooks"::webhooks ->
+      let webhooks = List.map Uri.of_string webhooks in
+      Server_configfile.set_slack_webhooks conf webhooks >|= fun () ->
+      (fun () -> Lwt.return_none)
   | ["set-list-command";cmd] ->
       Server_configfile.set_list_command conf cmd >|= fun () ->
       (fun () -> Lwt.return_none)
