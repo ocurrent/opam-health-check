@@ -137,7 +137,7 @@ let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
   | Some (pversion, _) ->
       Cohttp_lwt_unix.Server.respond_string
         ~status:`Upgrade_required
-        ~body:("This server requires opam-check-all protocol version \
+        ~body:("This server requires opam-health-check protocol version \
                 '"^Oca_lib.protocol_version^"' but got '"^pversion^"'. \
                 Please upgrade your client.")
         ()

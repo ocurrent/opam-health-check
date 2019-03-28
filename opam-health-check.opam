@@ -3,9 +3,9 @@ version: "0.1~"
 license: "MIT"
 maintainer: "Kate <kit.ty.kate@disroot.org>"
 authors: "Kate <kit.ty.kate@disroot.org>"
-homepage: "https://github.com/kit-ty-kate/opam-check-all"
-dev-repo: "git://github.com/kit-ty-kate/opam-check-all.git"
-bug-reports: "https://github.com/kit-ty-kate/opam-check-all/issues"
+homepage: "https://github.com/kit-ty-kate/opam-health-check"
+dev-repo: "git://github.com/kit-ty-kate/opam-health-check.git"
+bug-reports: "https://github.com/kit-ty-kate/opam-health-check/issues"
 tags: ["opam" "check"]
 build: ["dune" "build" "-p" name "-j" jobs]
 depends: [

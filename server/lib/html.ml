@@ -167,7 +167,7 @@ let get_html ~conf query pkgs =
   Lwt_list.fold_left_s (pkg_to_html query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers in
-  let title = title (txt "opam-check-all") in
+  let title = title (txt "opam-health-check") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let style_table = txt ".results {border: 2px solid black; border-collapse: collapse; min-width: 100%;}" in
   let style_col = txt (".result-col {text-align: center; width: "^col_width^"%;}") in
@@ -257,7 +257,7 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
 
 let get_diff ~conf diff =
   let open Tyxml.Html in
-  let title = title (txt "opam-check-all diff") in
+  let title = title (txt "opam-health-check diff") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
   let get_hash_elm hash =

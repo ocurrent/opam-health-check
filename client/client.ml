@@ -194,7 +194,7 @@ let log_cmd ~confdir ~conffile =
 let cmds =
   let confdir = XDGBaseDir.(default.config_home) in
   let confdir = Fpath.v confdir in
-  let confdir = Fpath.add_seg confdir "opam-check-all" in
+  let confdir = Fpath.add_seg confdir "opam-health-check" in
   let conffile = Fpath.add_seg confdir "config.yaml" in
   [
     init_cmd ~confdir ~conffile; (* TODO: Handle profilename on init *)

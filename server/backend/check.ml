@@ -45,7 +45,7 @@ let get_img_name ~conf switch =
     String.of_list (normalize_docker_tag_name (String.to_list switch))
   in
   let server_name = Server_configfile.name conf in
-  "opam-check-all-"^server_name^"-"^switch
+  "opam-health-check-"^server_name^"-"^switch
 
 let get_pkgs ~conf ~stderr switch =
   let img_name = get_img_name ~conf switch in
