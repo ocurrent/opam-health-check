@@ -14,11 +14,18 @@ type query = {
 
 let github_url = "https://github.com/ocaml/opam-repository"
 
-(* TODO: temporarely back to shitty colors, fix this *)
+(* NOTE: Attempt at finding the right set of colors unambiguous to both colorblinds and non-colorblinds.
+   Base work:
+   * http://jfly.iam.u-tokyo.ac.jp/color/
+   * http://jfly.iam.u-tokyo.ac.jp/colorset/CUD_color_set_ver3_vs_ver2.jpg
+   Tool used to tweek the colors:
+   * https://addons.mozilla.org/en-US/firefox/addon/let-s-get-color-blind/
+*)
 module CUD_pallette = struct
-  let red = "red"
-  let orange = "orange"
-  let green = "green"
+  let red = "#ff2800"
+  let orange = "#ffdc32"
+  let green = "#64e178"
+  let grey = "#929292"
 end
 
 let log_url pkg instance =
@@ -172,7 +179,7 @@ let get_html ~conf query pkgs =
   let style_cell_good = txt (".cell-good {background-color: "^CUD_pallette.red^"; text-align: center;}") in
   let style_cell_partial = txt (".cell-partial {background-color: "^CUD_pallette.orange^"; text-align: center;}") in
   let style_cell_bad = txt (".cell-bad {background-color: "^CUD_pallette.green^"; text-align: center;}") in
-  let style_cell_not_available = txt (".cell-not-available {background-color: grey; text-align: center;}") in
+  let style_cell_not_available = txt (".cell-not-available {background-color: "^CUD_pallette.grey^"; text-align: center;}") in
   let style_cell_internal_failure = txt (".cell-internal-failure {background-color: white; text-align: center;}") in
   let head = head title [charset; style [style_table; style_col; style_case; style_pkgname; style_row; style_row_hover; style_a;
                                          style_cell_good; style_cell_partial; style_cell_bad; style_cell_not_available; style_cell_internal_failure]] in
@@ -219,7 +226,7 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   let good = span ~a:[a_style ("color: "^CUD_pallette.green^";")] [txt "passing"] in
   let bad = span ~a:[a_style ("color: "^CUD_pallette.red^";")] [txt "failing"] in
   let partial = span ~a:[a_style ("color: "^CUD_pallette.orange^";")] [txt "partially failing"] in
-  let not_available = span ~a:[a_style "color: grey;"] [txt "not available"] in
+  let not_available = span ~a:[a_style ("color: "^CUD_pallette.grey^";")] [txt "not available"] in
   let internal_failure = span ~a:[a_style "border: 2px solid black;"] [txt "internal failure"] in
   let print_status = function
     | Intf.State.Good -> good
