@@ -105,29 +105,23 @@ let () =
 
 let get_dockerfile ~conf switch =
   let open Dockerfile in
-  from "ocaml/opam2:debian-unstable-opam AS base" @@
-  run "sudo apt-get update" @@
-  run "sudo apt-get install -y coinor-libsymphony-dev ocaml" @@
+  from "ocaml/opam2:debian-unstable AS base" @@
   workdir "/tmp" @@
-  run "curl -L https://github.com/ocaml/opam/releases/download/2.0.2/opam-full-2.0.2.tar.gz -o opam-full-2.0.2.tar.gz" @@
-  run "tar xvf opam-full-2.0.2.tar.gz" @@
-  workdir "/tmp/opam-full-2.0.2" @@
-  env ["MCCS_BACKENDS", "SYMPHONY"] @@
+  run "git clone git://github.com/kit-ty-kate/opam.git" @@
+  workdir "/tmp/opam" @@
+  run "git checkout opam-health-check" @@
+  run "opam depext -yui z3" @@
   run "./configure" @@
   run "make lib-ext" @@
   run "make" @@
   from "ocaml/opam2:debian-unstable-opam" @@
-  copy ~from:"base" ~src:["/tmp/opam-full-2.0.2/opam"] ~dst:"/usr/bin/opam" () @@
-  copy ~from:"base" ~src:["/tmp/opam-full-2.0.2/opam-installer"] ~dst:"/usr/bin/opam-installer" () @@
+  copy ~from:"base" ~src:["/tmp/opam/opam"] ~dst:"/usr/bin/opam" () @@
+  copy ~from:"base" ~src:["/tmp/opam/opam-installer"] ~dst:"/usr/bin/opam-installer" () @@
   run "sudo apt-get update" @@
-  run "sudo apt-get install -y coinor-libsymphony-dev" @@
   workdir "opam-repository" @@
   run "git pull origin master" @@
   run "opam admin cache" @@
-  run "echo 'wrap-build-commands: []' >> ~/.opamrc" @@
-  run "echo 'wrap-install-commands: []' >> ~/.opamrc" @@
-  run "echo 'wrap-remove-commands: []' >> ~/.opamrc" @@
-  run "opam init -ya --bare ." @@
+  run "opam init -ya --bare --disable-sandboxing ." @@
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Compiler.to_string switch) @@
   run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
