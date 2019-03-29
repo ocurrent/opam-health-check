@@ -106,14 +106,17 @@ let () =
 let get_dockerfile ~conf switch =
   let open Dockerfile in
   from "ocaml/opam2:debian-unstable AS base" @@
+  workdir "opam-repository" @@
+  run "git pull origin master" @@
+  run "opam update" @@
+  run "opam depext -yui z3" @@
   workdir "/tmp" @@
   run "git clone git://github.com/kit-ty-kate/opam.git" @@
   workdir "/tmp/opam" @@
   run "git checkout opam-health-check" @@
-  run "opam depext -yui z3" @@
-  run "./configure" @@
-  run "make lib-ext" @@
-  run "make" @@
+  run "eval $(opam config env) && ./configure" @@
+  run "eval $(opam config env) && make lib-ext" @@
+  run "eval $(opam config env) && make" @@
   from "ocaml/opam2:debian-unstable-opam" @@
   copy ~from:"base" ~src:["/tmp/opam/opam"] ~dst:"/usr/bin/opam" () @@
   copy ~from:"base" ~src:["/tmp/opam/opam-installer"] ~dst:"/usr/bin/opam-installer" () @@
