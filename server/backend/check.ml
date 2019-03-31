@@ -1,17 +1,22 @@
 open Lwt.Infix
 
-let docker_build ~cached ~stderr ~img_name dockerfile =
+let get_prefix conf =
+  let server_name = Server_configfile.name conf in
+  "opam-health-check-"^server_name
+
+let docker_build ~conf ~cached ~stderr ~img_name dockerfile =
   let cache = if cached then [] else ["--pull";"--no-cache"] in
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
   Lwt_unix.set_close_on_exec fd;
+  let label = get_prefix conf in
   begin
     if not cached then
-      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"system";"prune";"-af";"--volumes"]
+      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"system";"prune";"-af";"--volumes";("--filter=label="^label)]
     else
       Lwt.return_unit
   end >>= fun () ->
-  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build"]@cache@["-t";img_name;"-"]) in
+  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build"]@cache@["--label";label;"-t";img_name;"-"]) in
   Oca_lib.write_line_unix fd (Format.sprintf "%a" Dockerfile.pp dockerfile) >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
   proc
@@ -44,8 +49,7 @@ let get_img_name ~conf switch =
     in
     String.of_list (normalize_docker_tag_name (String.to_list switch))
   in
-  let server_name = Server_configfile.name conf in
-  "opam-health-check-"^server_name^"-"^switch
+  get_prefix conf^"-"^switch
 
 let get_pkgs ~conf ~stderr switch =
   let img_name = get_img_name ~conf switch in
@@ -150,7 +154,7 @@ let rec parse_maintainers acc = function
 
 let build_switch ~stderr ~cached conf workdir switch =
   let img_name = get_img_name ~conf switch in
-  docker_build ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
+  docker_build ~conf ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
   Server_workdirs.init_base_job ~switch workdir >>= fun () ->
   get_pkgs ~conf ~stderr switch >|= fun pkgs ->
   (switch, pkgs)
