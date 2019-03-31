@@ -169,11 +169,11 @@ let get_html ~conf query pkgs =
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers in
   let title = title (txt "opam-health-check") in
   let charset = meta ~a:[a_charset "utf-8"] () in
-  let style_table = txt ".results {border: 2px solid black; border-collapse: collapse; min-width: 100%;}" in
+  let style_table = txt "#results {border: 2px solid black; border-collapse: collapse; min-width: 100%;}" in
+  let style_thead = txt "#results thead tr {border-bottom: 2px solid black;}" in
   let style_col = txt (".result-col {text-align: center; width: "^col_width^"%;}") in
   let style_case = txt ".results-cell {border-left: 2px solid black;}" in
-  let style_row = txt ".results-row {border-top: 2px solid black; border-bottom: 2px solid black;}" in
-  let style_row_hover = txt ".results-row:hover {border-top-width: 4px; border-bottom-width: 4px;}" in
+  let style_row = txt ".results-row {border-bottom: 2px solid black;}" in
   let style_pkgname = txt ".pkgname {white-space: nowrap;}" in
   let style_a = txt "a {text-decoration: none;}" in
   let style_cell_good = txt (".cell-good {background-color: "^CUD_pallette.green^"; text-align: center;}") in
@@ -181,8 +181,26 @@ let get_html ~conf query pkgs =
   let style_cell_bad = txt (".cell-bad {background-color: "^CUD_pallette.red^"; text-align: center;}") in
   let style_cell_not_available = txt (".cell-not-available {background-color: "^CUD_pallette.grey^"; text-align: center;}") in
   let style_cell_internal_failure = txt (".cell-internal-failure {background-color: white; text-align: center;}") in
-  let head = head title [charset; style [style_table; style_col; style_case; style_pkgname; style_row; style_row_hover; style_a;
-                                         style_cell_good; style_cell_partial; style_cell_bad; style_cell_not_available; style_cell_internal_failure]] in
+  let javascript = Unsafe.data {|
+    let x = document.getElementById("results").rows;
+
+    for(i = 1; i < x.length; ++i) {
+      let c = i;
+      x[c].onmouseenter = function() {
+        x[c-1].style.borderBottomStyle = "dashed";
+        x[c].style.borderBottomStyle = "dashed";
+      };
+      x[c].onmouseleave = function() {
+        x[c-1].style.borderBottomStyle = "solid";
+        x[c].style.borderBottomStyle = "solid";
+      };
+    }
+  |} in
+  let head = head title [
+    charset;
+    style [style_table; style_thead; style_col; style_case; style_pkgname; style_row; style_a;
+           style_cell_good; style_cell_partial; style_cell_bad; style_cell_not_available; style_cell_internal_failure];
+  ] in
   let compilers_text = [txt "Show only:"] in
   let compilers = comp_checkboxes ~name:"comp" query.compilers query in
   let show_available_text = [txt "Show only packages available in:"] in
@@ -215,8 +233,8 @@ let get_html ~conf query pkgs =
     (logsearch_text, [logsearch; logsearch_comp]);
     ([], [submit_form]);
   ] in
-  let doc = table ~a:[a_class ["results"]] ~thead:(thead [tr dirs]) pkgs in
-  let doc = html head (body [filter_form; br (); doc]) in
+  let doc = table ~a:[a_id "results"] ~thead:(thead [tr dirs]) pkgs in
+  let doc = html head (body [filter_form; br (); doc; script javascript]) in
   Format.sprintf "%a\n" (pp ()) doc
 
 let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
