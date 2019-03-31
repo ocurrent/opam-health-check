@@ -6,3 +6,4 @@ val run :
   unit Lwt.t
 
 val is_running : unit -> bool
+val wait_current_run_to_finish : unit -> unit Lwt.t

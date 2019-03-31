@@ -105,9 +105,9 @@ let run_action_loop ~conf ~run_trigger f =
     Lwt.catch begin fun () ->
       let regular_run =
         let run_interval = Server_configfile.auto_run_interval conf * 60 * 60 in
-        (* TODO: Handle when run_interval = 0 *)
-        if run_interval > 0 then
-          Lwt_unix.sleep (float_of_int run_interval) >|= fun () -> false
+        if run_interval >= 0 then
+          Lwt_unix.sleep (float_of_int run_interval) >>= fun () ->
+          Check.wait_current_run_to_finish () >|= fun () -> false
         else
           fst (Lwt.wait ())
       in

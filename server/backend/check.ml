@@ -230,6 +230,15 @@ let run_locked = ref false
 
 let is_running () = !run_locked
 
+let wait_current_run_to_finish =
+  let rec loop () =
+    if is_running () then
+      Lwt_unix.sleep 1. >>= loop
+    else
+      Lwt.return_unit
+  in
+  loop
+
 let run ~on_finished ~is_retry ~conf workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   if !run_locked then
