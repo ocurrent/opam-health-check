@@ -51,10 +51,11 @@ let fill_pkgs_from_dir ~old ~pool pkg_tbl workdir comp =
   List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.InternalFailure) internalfailure_files
 
 let add_pkg full_name instances acc =
-  let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[]) in (* TODO: Remove this horror *)
+  let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
   acc >>= fun acc ->
-  Oca_server.Cache.get_maintainers cache pkg >|= fun maintainers ->
-  Intf.Pkg.create ~full_name ~instances ~maintainers :: acc
+  Oca_server.Cache.get_maintainers cache pkg >>= fun maintainers ->
+  Oca_server.Cache.get_revdeps cache full_name >|= fun revdeps ->
+  Intf.Pkg.create ~full_name ~instances ~maintainers ~revdeps :: acc
 
 let get_pkgs ~old workdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
@@ -82,6 +83,18 @@ let get_maintainers workdir =
   end files >|= fun () ->
   maintainers
 
+let get_revdeps workdir =
+  let dir = Server_workdirs.revdepsdir workdir in
+  Oca_lib.get_files dir >>= fun files ->
+  let revdeps = Oca_server.Cache.Revdeps_cache.create 10_000 in
+  Lwt_list.iter_s begin fun pkg ->
+    let file = Server_workdirs.revdepsfile ~pkg workdir in
+    Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) >|= fun content ->
+    let content = int_of_string content in
+    Oca_server.Cache.Revdeps_cache.add revdeps pkg content
+  end files >|= fun () ->
+  revdeps
+
 let get_html_diff ~conf =
   Oca_server.Cache.get_diff cache >|= Oca_server.Html.get_diff ~conf
 
@@ -98,6 +111,7 @@ let cache_clear_and_init conf workdir =
     ~pkgs:(fun ~old -> get_pkgs ~old workdir)
     ~compilers:(fun ~old -> get_compilers ~old workdir)
     ~maintainers:(fun () -> get_maintainers workdir)
+    ~revdeps:(fun () -> get_revdeps workdir)
     ~html_diff:(fun () -> get_html_diff ~conf)
 
 let run_action_loop ~conf ~run_trigger f =

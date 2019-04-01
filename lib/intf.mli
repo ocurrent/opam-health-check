@@ -41,6 +41,7 @@ module Pkg : sig
     full_name:string ->
     instances:Instance.t list ->
     maintainers:string list ->
+    revdeps:int ->
     t
 
   val equal : t -> t -> bool
@@ -51,6 +52,7 @@ module Pkg : sig
   val version : t -> string
   val maintainers : t -> string list
   val instances : t -> Instance.t list
+  val revdeps : t -> int
 end
 
 module Pkg_diff : sig

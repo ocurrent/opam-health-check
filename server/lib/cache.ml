@@ -18,6 +18,7 @@ module Html_cache = Hashtbl.Make (struct
   end)
 
 module Maintainers_cache = Hashtbl.Make (String)
+module Revdeps_cache = Hashtbl.Make (String)
 
 type merge =
   | Old
@@ -68,6 +69,7 @@ type t = {
   mutable compilers : Intf.Compiler.t list Lwt.t;
   mutable old_compilers : Intf.Compiler.t list Lwt.t;
   mutable maintainers : string list Maintainers_cache.t Lwt.t;
+  mutable revdeps : int Revdeps_cache.t Lwt.t;
   mutable pkgs_diff : Pkg_diff.t list Lwt.t;
   mutable html_diff : string Lwt.t;
 }
@@ -79,12 +81,14 @@ let create () = {
   compilers = Lwt.return_nil;
   old_compilers = Lwt.return_nil;
   maintainers = Lwt.return (Maintainers_cache.create 0);
+  revdeps = Lwt.return (Revdeps_cache.create 0);
   pkgs_diff = Lwt.return_nil;
   html_diff = Lwt.return "";
 }
 
-let clear_and_init self ~pkgs ~compilers ~maintainers ~html_diff =
+let clear_and_init self ~pkgs ~compilers ~maintainers ~revdeps ~html_diff =
   self.maintainers <- maintainers ();
+  self.revdeps <- revdeps ();
   self.compilers <- compilers ~old:false;
   self.old_compilers <- compilers ~old:true;
   self.pkgs <- pkgs ~old:false;
@@ -119,6 +123,10 @@ let get_compilers ~old self =
 let get_maintainers self k =
   self.maintainers >|= fun maintainers ->
   Option.get_or ~default:[] (Maintainers_cache.find_opt maintainers k)
+
+let get_revdeps self k =
+  self.revdeps >|= fun revdeps ->
+  Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k)
 
 let get_diff self =
   self.pkgs_diff

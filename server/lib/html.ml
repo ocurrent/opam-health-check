@@ -108,9 +108,10 @@ let must_show_package query ~last pkg =
 let pkg_to_html query (acc, last) pkg =
   let open Tyxml.Html in
   let tr = tr ~a:[a_class ["results-row"]] in
-  let td = td ~a:[a_class ["results-cell"; "pkgname"]] in
+  let td ?(a=[]) = td ~a:(a_class ["results-cell"; "pkgname"]::a) in
+  let revdeps = td ~a:[a_style "text-align: center;"] [txt (string_of_int (Pkg.revdeps pkg))] in
   must_show_package query ~last pkg >|= function
-  | true -> ((tr (td [txt (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg (Pkg.instances pkg)) query.compilers)) :: acc, Some pkg)
+  | true -> ((tr (td [txt (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg (Pkg.instances pkg)) query.compilers@ [revdeps])) :: acc, Some pkg)
   | false -> (acc, last)
 
 let result_legend query =
@@ -166,7 +167,7 @@ let get_html ~conf query pkgs =
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
   Lwt_list.fold_left_s (pkg_to_html query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
-  let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers in
+  let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers @ [th [txt "number of revdeps"]] in
   let title = title (txt "opam-health-check") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let style_table = txt "#results {border: 2px solid black; border-collapse: collapse; min-width: 100%;}" in
