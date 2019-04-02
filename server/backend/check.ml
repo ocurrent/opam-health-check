@@ -234,6 +234,7 @@ let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
 let trigger_slack_webhooks ~stderr conf =
   Server_configfile.slack_webhooks conf |>
   Lwt_list.iter_p begin fun webhook ->
+    Oca_lib.write_line_unix stderr ("Triggering Slack webhook "^Uri.to_string webhook) >>= fun () ->
     Cohttp_lwt_unix.Client.post
       ~headers:(Cohttp.Header.of_list ["Content-type", "application/json"])
       ~body:(`String {|{"text":"The latest check is done. Check out http://check.ocamllabs.io/diff to discover which packages are now broken or fixed"}|}) (* TODO: Get the url parameterized *)
