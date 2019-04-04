@@ -274,7 +274,7 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   in
   li (prefix @ diff)
 
-let get_diff ~conf diff =
+let get_diff ~conf (important, medium, low) =
   let open Tyxml.Html in
   let title = title (txt "opam-health-check diff") in
   let charset = meta ~a:[a_charset "utf-8"] () in
@@ -290,6 +290,14 @@ let get_diff ~conf diff =
   let git_diff = a ~a:[a_href (github_url^"/compare/"^old_hash^"..."^new_hash)] [txt "git diff"] in
   let doc = html head (body [
     h2 [txt "Differences between "; old_hash_elm; txt " and "; new_hash_elm; txt " ("; git_diff; txt ")"];
-    ul (List.map generate_diff_html diff);
+    br ();
+    h3 [txt "Changes to take care of:"];
+    ul (List.map generate_diff_html important);
+    br ();
+    h3 [txt "Changes to notice:"];
+    ul (List.map generate_diff_html medium);
+    br ();
+    h3 [txt "Changes to be happy about:"];
+    ul (List.map generate_diff_html low);
   ]) in
   Format.sprintf "%a\n" (pp ()) doc

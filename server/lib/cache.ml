@@ -32,17 +32,44 @@ module Pkg_htbl = CCHashtbl.Make (struct
       Intf.Compiler.equal comp (snd y)
   end)
 
+let detect_section old_state new_state =
+  let open Intf.State in
+  let open Intf.Pkg_diff in
+  match old_state, new_state with
+  | Bad, Bad | Partial, Partial | Good, Good
+  | NotAvailable, NotAvailable | InternalFailure, InternalFailure ->
+      assert false
+  | Bad, Partial -> Important
+  | Bad, (Good | NotAvailable) -> Low
+  | Bad, InternalFailure -> Medium
+  | Partial, (Bad | NotAvailable) -> Important
+  | Partial, Good -> Low
+  | Partial, InternalFailure -> Medium
+  | Good, (Bad | Partial | NotAvailable | InternalFailure) -> Important
+  | NotAvailable, (Bad | Partial | InternalFailure) -> Important
+  | NotAvailable, Good -> Low
+  | InternalFailure, (Bad | Partial) -> Important
+  | InternalFailure, (Good | NotAvailable) -> Low
+
 let add_diff htbl acc ((full_name, comp) as pkg) =
   match Pkg_htbl.find_all htbl pkg with
   | [((Old | New), Intf.State.NotAvailable)] -> acc
-  | [(Old, state)] -> {Intf.Pkg_diff.full_name; comp; diff = Intf.Pkg_diff.NotAvailableAnymore state} :: acc
-  | [(New, state)] -> {Intf.Pkg_diff.full_name; comp; diff = Intf.Pkg_diff.NowInstallable state} :: acc
+  | [(Old, state)] ->
+      let section = detect_section state Intf.State.NotAvailable in
+      Intf.Pkg_diff.(section, {full_name; comp; diff = NotAvailableAnymore state}) :: acc
+  | [(New, state)] ->
+      let section = detect_section Intf.State.NotAvailable state in
+      Intf.Pkg_diff.(section, {full_name; comp; diff = NowInstallable state}) :: acc
+  | [(New, new_state); (Old, old_state)] when Intf.State.equal new_state old_state -> acc
   | [(New, new_state); (Old, old_state)] ->
-      if Intf.State.equal new_state old_state then
-        acc
-      else
-        {Intf.Pkg_diff.full_name; comp; diff = Intf.Pkg_diff.StatusChanged (old_state, new_state)} :: acc
+      let section = detect_section old_state new_state in
+      Intf.Pkg_diff.(section, {full_name; comp; diff = StatusChanged (old_state, new_state)}) :: acc
   | _ -> assert false
+
+let split_diff (important, medium, low) = function
+  | Intf.Pkg_diff.Important, diff -> (diff :: important, medium, low)
+  | Intf.Pkg_diff.Medium, diff -> (important, diff :: medium, low)
+  | Intf.Pkg_diff.Low, diff -> (important, medium, diff :: low)
 
 let generate_diff old_pkgs new_pkgs =
   old_pkgs >>= fun old_pkgs ->
@@ -60,7 +87,7 @@ let generate_diff old_pkgs new_pkgs =
   List.iter (aux New) new_pkgs;
   List.sort_uniq ~cmp:Ord.(pair string Intf.Compiler.compare) (Pkg_htbl.keys_list pkg_htbl) |>
   List.fold_left (add_diff pkg_htbl) [] |>
-  List.rev
+  List.fold_left split_diff ([], [], [])
 
 type t = {
   html_tbl : string Html_cache.t;
@@ -70,7 +97,7 @@ type t = {
   mutable old_compilers : Intf.Compiler.t list Lwt.t;
   mutable maintainers : string list Maintainers_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
-  mutable pkgs_diff : Pkg_diff.t list Lwt.t;
+  mutable pkgs_diff : (Pkg_diff.t list * Pkg_diff.t list * Pkg_diff.t list) Lwt.t;
   mutable html_diff : string Lwt.t;
 }
 
@@ -82,7 +109,7 @@ let create () = {
   old_compilers = Lwt.return_nil;
   maintainers = Lwt.return (Maintainers_cache.create 0);
   revdeps = Lwt.return (Revdeps_cache.create 0);
-  pkgs_diff = Lwt.return_nil;
+  pkgs_diff = Lwt.return ([], [], []);
   html_diff = Lwt.return "";
 }
 

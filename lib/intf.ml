@@ -106,6 +106,11 @@ module Pkg_diff = struct
     | NotAvailableAnymore of State.t
     | StatusChanged of (State.t * State.t)
 
+  type section =
+    | Important
+    | Medium
+    | Low
+
   type t = {
     full_name : string;
     comp : Compiler.t;
