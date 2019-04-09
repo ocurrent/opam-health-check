@@ -42,9 +42,9 @@ let detect_section old_state new_state =
   | Bad, Partial -> Important
   | Bad, (Good | NotAvailable) -> Low
   | Bad, InternalFailure -> Medium
-  | Partial, (Bad | NotAvailable) -> Important
+  | Partial, Bad -> Important
   | Partial, Good -> Low
-  | Partial, InternalFailure -> Medium
+  | Partial, (NotAvailable | InternalFailure) -> Medium
   | Good, (Bad | Partial | NotAvailable | InternalFailure) -> Important
   | NotAvailable, (Bad | Partial | InternalFailure) -> Important
   | NotAvailable, Good -> Low
