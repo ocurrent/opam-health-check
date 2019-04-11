@@ -270,7 +270,7 @@ let run ~on_finished ~is_retry ~conf workdir =
       begin match switches with
       | switch::switches ->
           build_switch ~stderr ~cached:is_retry conf workdir switch >>= fun hd_pkgs ->
-          let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit) in
+          let pool = Lwt_pool.create 48 (fun () -> Lwt.return_unit) in
           Lwt_list.map_s (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
           let (_, jobs, pkgs, full_pkgs) = run_and_get_pkgs ~conf ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
           let jobs = set_git_hash ~pool ~stderr switch conf :: jobs in
