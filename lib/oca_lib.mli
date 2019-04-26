@@ -26,5 +26,6 @@ val default_html_port : string
 val default_admin_port : string
 val default_admin_name : string
 val default_auto_run_interval : int
+val default_processes : int
 val default_list_command : string
 val localhost : string
