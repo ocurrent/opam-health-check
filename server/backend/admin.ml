@@ -65,6 +65,13 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
   | ["set-auto-run-interval"; i] ->
       Server_configfile.set_auto_run_interval conf (int_of_string i) >|= fun () ->
       (fun () -> Lwt.return_none)
+  | ["set-processes"; i] ->
+      let i = int_of_string i in
+      if i < 0 then
+        Lwt.fail_with "Cannot set the number of processes to a negative value."
+      else
+        Server_configfile.set_processes conf i >|= fun () ->
+        (fun () -> Lwt.return_none)
   | "set-ocaml-switches"::switches ->
       let switches = List.map Intf.Compiler.from_string switches in
       let switches = List.sort Intf.Compiler.compare switches in

@@ -64,6 +64,19 @@ let set_auto_run_interval_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "set-auto-run-interval" in
   (term, info)
 
+let set_processes ~confdir ~conffile profilename i =
+  send_msg ~profilename ~confdir ~conffile ["set-processes"; i]
+
+let set_processes_cmd ~confdir ~conffile =
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (set_processes ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAT" [])
+  in
+  let info = Cmdliner.Term.info "set-processes" in
+  (term, info)
+
 let set_ocaml_switches ~confdir ~conffile profilename switches =
   send_msg ~profilename ~confdir ~conffile ("set-ocaml-switches"::switches)
 
@@ -206,6 +219,8 @@ let cmds =
     retry_cmd ~confdir ~conffile;
     clear_cache_cmd ~confdir ~conffile;
     log_cmd ~confdir ~conffile;
+    set_auto_run_interval_cmd ~confdir ~conffile;
+    set_processes_cmd ~confdir ~conffile;
   ]
 
 let () =
