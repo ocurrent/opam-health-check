@@ -19,5 +19,5 @@ val get_pkgs : old:bool -> t -> Intf.Pkg.t list Lwt.t
 val get_compilers : old:bool -> t -> Intf.Compiler.t list Lwt.t
 val get_maintainers : t -> string -> string list Lwt.t
 val get_revdeps : t -> string -> int Lwt.t
-val get_diff : t -> (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) Lwt.t
+val get_diff : t -> (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) Lwt.t
 val get_html_diff : t -> string Lwt.t

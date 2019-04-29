@@ -11,4 +11,4 @@ type query = {
 }
 
 val get_html : conf:Server_configfile.t -> query -> Intf.Pkg.t list -> string Lwt.t
-val get_diff : conf:Server_configfile.t -> (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) -> string
+val get_diff : conf:Server_configfile.t -> (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) -> string

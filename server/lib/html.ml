@@ -286,7 +286,7 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   in
   li (prefix @ diff)
 
-let get_diff ~conf (important, medium, low) =
+let get_diff ~conf (bad, partial, not_available, internal_failure, good) =
   let open Tyxml.Html in
   let title = title (txt "opam-health-check diff") in
   let charset = meta ~a:[a_charset "utf-8"] () in
@@ -300,16 +300,27 @@ let get_diff ~conf (important, medium, low) =
   let new_hash = Option.get_exn (Server_configfile.opam_repo_commit_hash conf) in
   let new_hash_elm = get_hash_elm new_hash in
   let git_diff = a ~a:[a_href (github_url^"/compare/"^old_hash^"..."^new_hash)] [txt "git diff"] in
+  let good_txt = span ~a:[a_style ("color: "^CUD_pallette.green^";")] [txt "passing"] in
+  let bad_txt = span ~a:[a_style ("color: "^CUD_pallette.red^";")] [txt "failing"] in
+  let partial_txt = span ~a:[a_style ("color: "^CUD_pallette.orange^";")] [txt "partially failing"] in
+  let not_available_txt = span ~a:[a_style ("color: "^CUD_pallette.grey^";")] [txt "not available"] in
+  let internal_failure_txt = span ~a:[a_style "border: 2px solid black;"] [txt "internal failure"] in
   let doc = html head (body [
     h2 [txt "Differences between "; old_hash_elm; txt " and "; new_hash_elm; txt " ("; git_diff; txt ")"];
     br ();
-    h3 [txt "Changes to take care of:"];
-    ul (List.map generate_diff_html important);
+    h3 [txt "Packages now ";bad_txt;txt ":"];
+    ul (List.map generate_diff_html bad);
     br ();
-    h3 [txt "Changes to notice:"];
-    ul (List.map generate_diff_html medium);
+    h3 [txt "Packages now ";partial_txt; txt ":"];
+    ul (List.map generate_diff_html partial);
     br ();
-    h3 [txt "Changes to be happy about:"];
-    ul (List.map generate_diff_html low);
+    h3 [txt "Packages now ";not_available_txt; txt ":"];
+    ul (List.map generate_diff_html not_available);
+    br ();
+    h3 [txt "Packages now ";internal_failure_txt; txt ":"];
+    ul (List.map generate_diff_html internal_failure);
+    br ();
+    h3 [txt "Packages now :";good_txt; txt ":"];
+    ul (List.map generate_diff_html good);
   ]) in
   Format.sprintf "%a\n" (pp ()) doc
