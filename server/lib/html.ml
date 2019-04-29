@@ -8,6 +8,7 @@ type query = {
   show_failures_only : bool;
   show_diff_only : bool;
   show_latest_only : bool;
+  sort_by_revdeps : bool;
   maintainers : string * Re.re option;
   logsearch : string * (Re.re * Compiler.t) option;
 }
@@ -105,14 +106,17 @@ let must_show_package query ~last pkg =
         Lwt.return_true
   end
 
-let pkg_to_html query (acc, last) pkg =
+let filter_pkg query (acc, last) pkg =
+  must_show_package query ~last pkg >|= function
+  | true -> (pkg :: acc, Some pkg)
+  | false -> (acc, last)
+
+let pkg_to_html query pkg =
   let open Tyxml.Html in
   let tr = tr ~a:[a_class ["results-row"]] in
   let td ?(a=[]) = td ~a:(a_class ["results-cell"; "pkgname"]::a) in
   let revdeps = td ~a:[a_style "text-align: center;"] [txt (string_of_int (Pkg.revdeps pkg))] in
-  must_show_package query ~last pkg >|= function
-  | true -> ((tr (td [txt (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg (Pkg.instances pkg)) query.compilers@ [revdeps])) :: acc, Some pkg)
-  | false -> (acc, last)
+  tr (td [txt (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg (Pkg.instances pkg)) query.compilers@ [revdeps])
 
 let result_legend query =
   let open Tyxml.Html in
@@ -162,10 +166,15 @@ let comp_checkboxes ~name checked query =
     end query.available_compilers
   end
 
+let revdeps_cmp p1 p2 =
+  Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
+
 let get_html ~conf query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
-  Lwt_list.fold_left_s (pkg_to_html query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
+  Lwt_list.fold_left_s (filter_pkg query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
+  let pkgs = if query.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
+  let pkgs = List.map (pkg_to_html query) pkgs in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers @ [th [txt "number of revdeps"]] in
   let title = title (txt "opam-health-check") in
@@ -212,6 +221,8 @@ let get_html ~conf query pkgs =
   let show_diff_only = input ~a:(a_input_type `Checkbox::a_name "show-diff-only"::a_value "true"::if query.show_diff_only then [a_checked ()] else []) () in
   let show_latest_only_text = [txt "Only show the latest version of each packages:"] in
   let show_latest_only = input ~a:(a_input_type `Checkbox::a_name "show-latest-only"::a_value "true"::if query.show_latest_only then [a_checked ()] else []) () in
+  let sort_by_revdeps_text = [txt "Sort by number of revdeps:"] in
+  let sort_by_revdeps = input ~a:(a_input_type `Checkbox::a_name "sort-by-revdeps"::a_value "true"::if query.sort_by_revdeps then [a_checked ()] else []) () in
   let maintainers_text = [txt "Show only packages maintained by [posix regexp]:"] in
   let maintainers = input ~a:[a_input_type `Text; a_name "maintainers"; a_value (fst query.maintainers)] () in
   let logsearch_text = [txt "Show only packages where one of the logs matches [posix regexp]:"] in
@@ -230,6 +241,7 @@ let get_html ~conf query pkgs =
     (show_failures_only_text, [show_failures_only]);
     (show_diff_only_text, [show_diff_only]);
     (show_latest_only_text, [show_latest_only]);
+    (sort_by_revdeps_text, [sort_by_revdeps]);
     (maintainers_text, [maintainers]);
     (logsearch_text, [logsearch; logsearch_comp]);
     ([], [submit_form]);

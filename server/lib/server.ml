@@ -25,6 +25,8 @@ module Make (Backend : Backend_intf.S) = struct
     let show_diff_only = if String.is_empty show_diff_only then false else bool_of_string show_diff_only in
     let show_latest_only = option_to_string (Uri.get_query_param uri "show-latest-only") in
     let show_latest_only = if String.is_empty show_latest_only then false else bool_of_string show_latest_only in
+    let sort_by_revdeps = option_to_string (Uri.get_query_param uri "sort-by-revdeps") in
+    let sort_by_revdeps = if String.is_empty sort_by_revdeps then false else bool_of_string sort_by_revdeps in
     let maintainers = option_to_string (Uri.get_query_param uri "maintainers") in
     let maintainers = if String.is_empty maintainers then None else Some maintainers in
     let maintainers = (option_to_string maintainers, Option.map (Re.Posix.compile_pat ~opts:[`ICase]) maintainers) in
@@ -52,6 +54,7 @@ module Make (Backend : Backend_intf.S) = struct
       Html.show_failures_only;
       Html.show_diff_only;
       Html.show_latest_only;
+      Html.sort_by_revdeps;
       Html.maintainers;
       Html.logsearch;
     }
