@@ -109,7 +109,7 @@ let must_show_package query ~last pkg =
 let filter_pkg query (acc, last) pkg =
   must_show_package query ~last pkg >|= function
   | true -> (pkg :: acc, Some pkg)
-  | false -> (acc, last)
+  | false -> (acc, Some pkg)
 
 let pkg_to_html query pkg =
   let open Tyxml.Html in
