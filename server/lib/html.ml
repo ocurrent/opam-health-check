@@ -317,10 +317,10 @@ let get_diff ~conf (bad, partial, not_available, internal_failure, good) =
     h3 [txt "Packages now ";not_available_txt; txt ":"];
     ul (List.map generate_diff_html not_available);
     br ();
-    h3 [txt "Packages now ";internal_failure_txt; txt ":"];
+    h3 [txt "Packages now failing with an ";internal_failure_txt; txt ":"];
     ul (List.map generate_diff_html internal_failure);
     br ();
-    h3 [txt "Packages now :";good_txt; txt ":"];
+    h3 [txt "Packages now ";good_txt; txt ":"];
     ul (List.map generate_diff_html good);
   ]) in
   Format.sprintf "%a\n" (pp ()) doc
