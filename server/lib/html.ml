@@ -59,10 +59,17 @@ let (>>&&) x f =
 
 let must_show_package query ~last pkg =
   let maintainers = Pkg.maintainers pkg in
-  let instances = Pkg.instances pkg in
-  List.exists (fun comp -> List.exists (fun instance -> Compiler.equal comp (Instance.compiler instance)) instances) query.show_available >>& fun () ->
-  let instances = List.filter (fun inst -> List.mem ~eq:Intf.Compiler.equal (Intf.Instance.compiler inst) query.compilers) instances in
+  let instances' = Pkg.instances pkg in
+  let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.compilers) instances' in
   begin
+    List.exists (fun comp ->
+      match List.find_opt (fun inst -> Compiler.equal comp (Instance.compiler inst)) instances' with
+      | None -> true (* TODO: Maybe switch to assert false? *)
+      | Some inst -> match Instance.state inst with
+        | State.NotAvailable -> false
+        | State.(Good | Partial | Bad | InternalFailure) -> true
+    ) query.show_available
+  end >>& begin fun () ->
     Lwt.return @@
     if query.show_failures_only then
       List.exists (fun instance -> match Instance.state instance with
