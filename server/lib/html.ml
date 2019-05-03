@@ -50,9 +50,6 @@ let instance_to_html ~pkg instances comp =
       end
   | None -> td "cell-not-available" [txt "☐"] (* NOTE: Should not happen in the new versions but can happen with old data or custom runs *)
 
-let (>>&) x f =
-  if x then f () else Lwt.return_false
-
 let (>>&&) x f =
   x >>= fun x ->
   if x then f () else Lwt.return_false
@@ -62,6 +59,7 @@ let must_show_package query ~last pkg =
   let instances' = Pkg.instances pkg in
   let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.compilers) instances' in
   begin
+    Lwt.return @@
     List.exists (fun comp ->
       match List.find_opt (fun inst -> Compiler.equal comp (Instance.compiler inst)) instances' with
       | None -> true (* TODO: Maybe switch to assert false? *)
@@ -69,7 +67,7 @@ let must_show_package query ~last pkg =
         | State.NotAvailable -> false
         | State.(Good | Partial | Bad | InternalFailure) -> true
     ) query.show_available
-  end >>& begin fun () ->
+  end >>&& begin fun () ->
     Lwt.return @@
     if query.show_failures_only then
       List.exists (fun instance -> match Instance.state instance with
