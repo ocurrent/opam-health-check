@@ -73,10 +73,8 @@ let generate_diff old_pkgs new_pkgs =
 
 type t = {
   html_tbl : string Html_cache.t;
-  mutable pkgs : Intf.Pkg.t list Lwt.t;
-  mutable old_pkgs : Intf.Pkg.t list Lwt.t;
-  mutable compilers : Intf.Compiler.t list Lwt.t;
-  mutable old_compilers : Intf.Compiler.t list Lwt.t;
+  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t) list Lwt.t;
+  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list Lwt.t) list Lwt.t;
   mutable maintainers : string list Maintainers_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
   mutable pkgs_diff : (Pkg_diff.t list * Pkg_diff.t list * Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) Lwt.t;
@@ -86,35 +84,39 @@ type t = {
 let create () = {
   html_tbl = Html_cache.create 32;
   pkgs = Lwt.return_nil;
-  old_pkgs = Lwt.return_nil;
   compilers = Lwt.return_nil;
-  old_compilers = Lwt.return_nil;
   maintainers = Lwt.return (Maintainers_cache.create 0);
   revdeps = Lwt.return (Revdeps_cache.create 0);
   pkgs_diff = Lwt.return ([], [], [], [], []);
   html_diff = Lwt.return "";
 }
 
-let tmp_wrap_logdirs ~old logdirs f =
-  logdirs >>= function
-  | logdir::_ when not old -> f ~old logdir
-  | _::logdir::_ when old -> f ~old logdir
-  | _ -> Lwt.return_nil
+let call_pkgs ~pkgs = function
+  | [] ->
+      Lwt.return_nil
+  | logdir::logdirs ->
+      let pkg = pkgs ~old:false logdir in
+      let pkgs = List.map (fun logdir -> (logdir, pkgs ~old:true logdir)) logdirs in
+      Lwt.return ((logdir, pkg) :: pkgs)
+
+let call_generate_diff = function
+  | (_, new_pkgs)::(_, old_pkgs)::_ -> generate_diff old_pkgs new_pkgs
+  | (_, new_pkgs)::_ -> generate_diff Lwt.return_nil new_pkgs
+  | [] -> generate_diff Lwt.return_nil Lwt.return_nil
 
 let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_diff =
   self.maintainers <- maintainers ();
   self.revdeps <- revdeps ();
   let logdirs = logdirs () in
-  self.compilers <- tmp_wrap_logdirs ~old:false logdirs (fun ~old:_ -> compilers);
-  self.old_compilers <- tmp_wrap_logdirs ~old:true logdirs (fun ~old:_ -> compilers);
-  self.pkgs <- tmp_wrap_logdirs ~old:false logdirs pkgs;
-  self.old_pkgs <- tmp_wrap_logdirs logdirs ~old:true pkgs;
-  self.pkgs_diff <- generate_diff self.old_pkgs self.pkgs;
+  self.compilers <- logdirs >|= List.map (fun logdir -> (logdir, compilers logdir));
+  self.pkgs <- logdirs >>= call_pkgs ~pkgs;
+  self.pkgs_diff <- self.pkgs >>= call_generate_diff;
   self.html_diff <- html_diff ();
   Html_cache.clear self.html_tbl
 
 let get_html ~conf self query =
   self.pkgs >>= fun pkgs ->
+  Option.map_or ~default:Lwt.return_nil snd (List.head_opt pkgs) >>= fun pkgs ->
   Html.get_html ~conf query pkgs >>= fun html ->
   Html_cache.add self.html_tbl query html;
   Lwt.return html
@@ -125,16 +127,16 @@ let get_html ~conf self query =
   | None -> get_html ~conf self query
 
 let get_pkgs ~old self =
-  if old then
-    self.old_pkgs
-  else
-    self.pkgs
+  self.pkgs >>= function
+  | (_, pkgs)::_ when not old -> pkgs
+  | _::(_, pkgs)::_ when old -> pkgs
+  | _ -> Lwt.return_nil
 
 let get_compilers ~old self =
-  if old then
-    self.old_compilers
-  else
-    self.compilers
+  self.compilers >>= function
+  | (_, compilers)::_ when not old -> compilers
+  | _::(_, compilers)::_ when old -> compilers
+  | _ -> Lwt.return_nil
 
 let get_maintainers self k =
   self.maintainers >|= fun maintainers ->
