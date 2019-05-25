@@ -7,8 +7,9 @@ val create : unit -> t
 
 val clear_and_init :
   t ->
-  pkgs:(old:bool -> Intf.Pkg.t list Lwt.t) ->
-  compilers:(old:bool -> Intf.Compiler.t list Lwt.t) ->
+  pkgs:(old:bool -> Server_workdirs.logdir -> Intf.Pkg.t list Lwt.t) ->
+  compilers:(Server_workdirs.logdir -> Intf.Compiler.t list Lwt.t) ->
+  logdirs:(unit -> Server_workdirs.logdir list Lwt.t) ->
   maintainers:(unit -> string list Maintainers_cache.t Lwt.t) ->
   revdeps:(unit -> int Revdeps_cache.t Lwt.t) ->
   html_diff:(unit -> string Lwt.t) ->

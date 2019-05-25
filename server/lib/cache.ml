@@ -95,13 +95,20 @@ let create () = {
   html_diff = Lwt.return "";
 }
 
-let clear_and_init self ~pkgs ~compilers ~maintainers ~revdeps ~html_diff =
+let tmp_wrap_logdirs ~old logdirs f =
+  logdirs >>= function
+  | logdir::_ when not old -> f ~old logdir
+  | _::logdir::_ when old -> f ~old logdir
+  | _ -> Lwt.return_nil
+
+let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_diff =
   self.maintainers <- maintainers ();
   self.revdeps <- revdeps ();
-  self.compilers <- compilers ~old:false;
-  self.old_compilers <- compilers ~old:true;
-  self.pkgs <- pkgs ~old:false;
-  self.old_pkgs <- pkgs ~old:true;
+  let logdirs = logdirs () in
+  self.compilers <- tmp_wrap_logdirs ~old:false logdirs (fun ~old:_ -> compilers);
+  self.old_compilers <- tmp_wrap_logdirs ~old:true logdirs (fun ~old:_ -> compilers);
+  self.pkgs <- tmp_wrap_logdirs ~old:false logdirs pkgs;
+  self.old_pkgs <- tmp_wrap_logdirs logdirs ~old:true pkgs;
   self.pkgs_diff <- generate_diff self.old_pkgs self.pkgs;
   self.html_diff <- html_diff ();
   Html_cache.clear self.html_tbl

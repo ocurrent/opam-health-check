@@ -10,21 +10,21 @@ let is_directory dir file =
   else
     None
 
-let get_compilers ~old workdir =
-  let dir = Server_workdirs.logdir ~old workdir in
+let get_compilers logdir =
+  let dir = Server_workdirs.get_logdir_path logdir in
   Oca_lib.get_files dir >|= fun files ->
   let dirs = List.filter_map (is_directory dir) files in
   List.sort Intf.Compiler.compare dirs
 
 module Pkg_tbl = Hashtbl.Make (String)
 
-let pkg_update ~old ~pool pkg_tbl workdir comp state pkg =
+let pkg_update ~old ~pool pkg_tbl logdir comp state pkg =
   let file =
     let comp = Intf.Compiler.to_string comp in
     let state = Intf.State.to_string state in
     Fpath.(to_string (v comp/state/pkg))
   in
-  let file = Server_workdirs.file_from_logdir ~old ~file workdir in
+  let file = Server_workdirs.file_from_logdir ~file logdir in
   let get_content () = Lwt_pool.use pool begin fun () ->
     Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
   end in
@@ -38,17 +38,17 @@ let pkg_update ~old ~pool pkg_tbl workdir comp state pkg =
   in
   Pkg_tbl.replace pkg_tbl pkg instances
 
-let fill_pkgs_from_dir ~old ~pool pkg_tbl workdir comp =
-  Oca_lib.get_files (Server_workdirs.gooddir ~old ~switch:comp workdir) >>= fun good_files ->
-  Oca_lib.get_files (Server_workdirs.partialdir ~old ~switch:comp workdir) >>= fun partial_files ->
-  Oca_lib.get_files (Server_workdirs.baddir ~old ~switch:comp workdir) >>= fun bad_files ->
-  Oca_lib.get_files (Server_workdirs.notavailabledir ~old ~switch:comp workdir) >>= fun notavailable_files ->
-  Oca_lib.get_files (Server_workdirs.internalfailuredir ~old ~switch:comp workdir) >|= fun internalfailure_files ->
-  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Good) good_files;
-  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Partial) partial_files;
-  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.Bad) bad_files;
-  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.NotAvailable) notavailable_files;
-  List.iter (pkg_update ~old ~pool pkg_tbl workdir comp Intf.State.InternalFailure) internalfailure_files
+let fill_pkgs_from_dir ~old ~pool pkg_tbl logdir comp =
+  Oca_lib.get_files (Server_workdirs.gooddir ~switch:comp logdir) >>= fun good_files ->
+  Oca_lib.get_files (Server_workdirs.partialdir ~switch:comp logdir) >>= fun partial_files ->
+  Oca_lib.get_files (Server_workdirs.baddir ~switch:comp logdir) >>= fun bad_files ->
+  Oca_lib.get_files (Server_workdirs.notavailabledir ~switch:comp logdir) >>= fun notavailable_files ->
+  Oca_lib.get_files (Server_workdirs.internalfailuredir ~switch:comp logdir) >|= fun internalfailure_files ->
+  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.Good) good_files;
+  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.Partial) partial_files;
+  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.Bad) bad_files;
+  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.NotAvailable) notavailable_files;
+  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.InternalFailure) internalfailure_files
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
@@ -108,8 +108,9 @@ let tcp_server port callback =
 let cache_clear_and_init conf workdir =
   Oca_server.Cache.clear_and_init
     cache
-    ~pkgs:(fun ~old -> get_pkgs ~old workdir)
-    ~compilers:(fun ~old -> get_compilers ~old workdir)
+    ~pkgs:(fun ~old logdir -> get_pkgs ~old logdir)
+    ~compilers:(fun logdir -> get_compilers logdir)
+    ~logdirs:(fun () -> Server_workdirs.logdirs workdir)
     ~maintainers:(fun () -> get_maintainers workdir)
     ~revdeps:(fun () -> get_revdeps workdir)
     ~html_diff:(fun () -> get_html_diff ~conf)
@@ -140,7 +141,7 @@ let start conf workdir =
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
   cache_clear_and_init conf workdir;
-  Server_configfile.set_default_ocaml_switches conf (fun () -> get_compilers ~old:false workdir) >>= fun () ->
+  Server_configfile.set_default_ocaml_switches conf (fun () -> Oca_server.Cache.get_compilers ~old:false cache) >>= fun () ->
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->
   let task () =

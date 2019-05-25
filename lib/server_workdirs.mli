@@ -5,18 +5,23 @@ val create : workdir:string -> t
 val keysdir : t -> Fpath.t
 val keyfile : username:string -> t -> Fpath.t
 
-val logdir : old:bool -> t -> Fpath.t
+type logdir
+
+val create_logdir : t -> Fpath.t
+val logdirs : t -> logdir list Lwt.t
 val tmplogdir : t -> Fpath.t
+
+val get_logdir_path : logdir -> Fpath.t
 
 val ilogdir : t -> Fpath.t
 val ilogfile : t -> Fpath.t
 
-val switchlogdir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
-val gooddir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
-val partialdir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
-val baddir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
-val notavailabledir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
-val internalfailuredir : old:bool -> switch:Intf.Compiler.t -> t -> Fpath.t
+val switchlogdir : switch:Intf.Compiler.t -> logdir -> Fpath.t
+val gooddir : switch:Intf.Compiler.t -> logdir -> Fpath.t
+val partialdir : switch:Intf.Compiler.t -> logdir -> Fpath.t
+val baddir : switch:Intf.Compiler.t -> logdir -> Fpath.t
+val notavailabledir : switch:Intf.Compiler.t -> logdir -> Fpath.t
+val internalfailuredir : switch:Intf.Compiler.t -> logdir -> Fpath.t
 
 val tmpswitchlogdir : switch:Intf.Compiler.t -> t -> Fpath.t
 val tmplogfile : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
@@ -38,7 +43,7 @@ val tmprevdepsdir : t -> Fpath.t
 val tmprevdepsfile : pkg:string -> t -> Fpath.t
 
 val configfile : t -> Fpath.t
-val file_from_logdir : old:bool -> file:string -> t -> Fpath.t
+val file_from_logdir : file:string -> logdir -> Fpath.t
 
 val init_base : t -> unit Lwt.t
 val init_base_jobs : stderr:Lwt_unix.file_descr -> t -> unit Lwt.t
