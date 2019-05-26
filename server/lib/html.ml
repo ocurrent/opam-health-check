@@ -29,24 +29,25 @@ module CUD_pallette = struct
   let grey = "#929292"
 end
 
-let log_url pkg instance =
+let log_url logdir pkg instance =
+  let logdir = Server_workdirs.get_logdir_name (Option.get_exn logdir) in
   let comp = Instance.compiler instance in
   let comp = Compiler.to_string comp in
   let state = State.to_string (Instance.state instance) in
   let pkg = Pkg.full_name pkg in
-  Printf.sprintf "/%s/%s/%s" comp state pkg
+  Printf.sprintf "/%s/%s/%s/%s" logdir comp state pkg
 
-let instance_to_html ~pkg instances comp =
+let instance_to_html ~pkg logdir instances comp =
   let open Tyxml.Html in
   let td c = td ~a:[a_class ["result-col"; "results-cell"; c]] in
   match List.find_opt (fun i -> Compiler.equal (Instance.compiler i) comp) instances with
   | Some instance ->
       begin match Instance.state instance with
-      | State.Good -> td "cell-good" [a ~a:[a_href (log_url pkg instance)] [txt "☑"]]
-      | State.Partial -> td "cell-partial" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
-      | State.Bad -> td "cell-bad" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
-      | State.NotAvailable -> td "cell-not-available" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
-      | State.InternalFailure -> td "cell-internal-failure" [a ~a:[a_href (log_url pkg instance)] [txt "☒"]]
+      | State.Good -> td "cell-good" [a ~a:[a_href (log_url logdir pkg instance)] [txt "☑"]]
+      | State.Partial -> td "cell-partial" [a ~a:[a_href (log_url logdir pkg instance)] [txt "☒"]]
+      | State.Bad -> td "cell-bad" [a ~a:[a_href (log_url logdir pkg instance)] [txt "☒"]]
+      | State.NotAvailable -> td "cell-not-available" [a ~a:[a_href (log_url logdir pkg instance)] [txt "☒"]]
+      | State.InternalFailure -> td "cell-internal-failure" [a ~a:[a_href (log_url logdir pkg instance)] [txt "☒"]]
       end
   | None -> td "cell-not-available" [txt "☐"] (* NOTE: Should not happen in the new versions but can happen with old data or custom runs *)
 
@@ -116,12 +117,12 @@ let filter_pkg query (acc, last) pkg =
   | true -> (pkg :: acc, Some pkg)
   | false -> (acc, Some pkg)
 
-let pkg_to_html query pkg =
+let pkg_to_html logdir query pkg =
   let open Tyxml.Html in
   let tr = tr ~a:[a_class ["results-row"]] in
   let td ?(a=[]) = td ~a:(a_class ["results-cell"; "pkgname"]::a) in
   let revdeps = td ~a:[a_style "text-align: center;"] [txt (string_of_int (Pkg.revdeps pkg))] in
-  tr (td [txt (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg (Pkg.instances pkg)) query.compilers@ [revdeps])
+  tr (td [txt (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg logdir (Pkg.instances pkg)) query.compilers@ [revdeps])
 
 let result_legend query =
   let open Tyxml.Html in
@@ -181,7 +182,7 @@ let get_html logdir query pkgs =
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
   Lwt_list.fold_left_s (filter_pkg query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
   let pkgs = if query.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
-  let pkgs = List.map (pkg_to_html query) pkgs in
+  let pkgs = List.map (pkg_to_html logdir query) pkgs in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers @ [th [txt "number of revdeps"]] in
   let title = title (txt "opam-health-check") in
@@ -257,7 +258,7 @@ let get_html logdir query pkgs =
   let doc = html head (body [filter_form; br (); doc; script javascript]) in
   Format.sprintf "%a\n" (pp ()) doc
 
-let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
+let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; diff} =
   let open Tyxml.Html in
   let comp_str = Intf.Compiler.to_string comp in
   let prefix = [b [txt full_name]; txt " on "; b [txt comp_str]] in
@@ -273,11 +274,13 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
     | Intf.State.NotAvailable -> not_available
     | Intf.State.InternalFailure -> internal_failure
   in
+  let old_logdir = Server_workdirs.get_logdir_name (Option.get_exn old_logdir) in
+  let new_logdir = Server_workdirs.get_logdir_name (Option.get_exn new_logdir) in
   let get_status_elm ~old status =
     let status_str = Intf.State.to_string status in
     let status = print_status status in
-    let root = if old then "/old/" else "/" in
-    a ~a:[a_href (root^comp_str^"/"^status_str^"/"^full_name)] [status]
+    let logdir = if old then old_logdir else new_logdir in
+    a ~a:[a_href ("/"^logdir^"/"^comp_str^"/"^status_str^"/"^full_name)] [status]
   in
   let diff = match diff with
     | Intf.Pkg_diff.StatusChanged (old_status, new_status) ->
@@ -316,18 +319,18 @@ let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_fail
     h2 [txt "Differences between "; old_hash_elm; txt " and "; new_hash_elm; txt " ("; git_diff; txt ")"];
     br ();
     h3 [txt "Packages now ";bad_txt;txt ":"];
-    ul (List.map generate_diff_html bad);
+    ul (List.map (generate_diff_html ~old_logdir ~new_logdir) bad);
     br ();
     h3 [txt "Packages now ";partial_txt; txt ":"];
-    ul (List.map generate_diff_html partial);
+    ul (List.map (generate_diff_html ~old_logdir ~new_logdir) partial);
     br ();
     h3 [txt "Packages now ";not_available_txt; txt ":"];
-    ul (List.map generate_diff_html not_available);
+    ul (List.map (generate_diff_html ~old_logdir ~new_logdir) not_available);
     br ();
     h3 [txt "Packages now failing with an ";internal_failure_txt; txt ":"];
-    ul (List.map generate_diff_html internal_failure);
+    ul (List.map (generate_diff_html ~old_logdir ~new_logdir) internal_failure);
     br ();
     h3 [txt "Packages now ";good_txt; txt ":"];
-    ul (List.map generate_diff_html good);
+    ul (List.map (generate_diff_html ~old_logdir ~new_logdir) good);
   ]) in
   Format.sprintf "%a\n" (pp ()) doc

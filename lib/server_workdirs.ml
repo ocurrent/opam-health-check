@@ -18,17 +18,25 @@ let tmpdir workdir = workdir/"tmp"
 
 type logdir = Logdir of float * string * t
 
+let logdir_from_string workdir s =
+  match String.split_on_char '-' s with
+  | [time; hash] -> Logdir (float_of_string time, hash, workdir)
+  | _ -> assert false
+
 let base_logdir workdir = workdir/"logs"
 let new_logdir ~hash workdir = Logdir (Unix.time (), hash, workdir)
 let logdirs workdir =
   Oca_lib.get_files (base_logdir workdir) >|= fun dirs ->
   let dirs = List.sort (fun x y -> -String.compare x y) dirs in
-  List.map (fun dir -> match String.split_on_char '-' dir with
-    | [time; hash] -> Logdir (float_of_string time, hash, workdir)
-    | _ -> assert false
-  ) dirs
+  List.map (logdir_from_string workdir) dirs
 
-let get_logdir_path (Logdir (time, hash, workdir)) = base_logdir workdir/Printf.sprintf "%.0f-%s" time hash
+let logdir_equal (Logdir (time1, hash1, workdir1)) (Logdir (time2, hash2, workdir2)) =
+  Float.equal time1 time2 &&
+  String.equal hash1 hash2 &&
+  Fpath.equal workdir1 workdir2
+
+let get_logdir_name (Logdir (time, hash, _)) = Printf.sprintf "%.0f-%s" time hash
+let get_logdir_path (Logdir (_, _, workdir) as logdir) = base_logdir workdir/get_logdir_name logdir
 let get_logdir_hash (Logdir (_, hash, _)) = hash
 
 let tmplogdir workdir = tmpdir workdir/"logs"

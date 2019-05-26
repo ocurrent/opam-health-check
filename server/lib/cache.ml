@@ -130,11 +130,8 @@ let get_html self query =
   | Some html -> Lwt.return html
   | None -> get_html self query
 
-let get_pkgs ~old self =
-  self.pkgs >>= function
-  | (_, pkgs)::_ when not old -> pkgs
-  | _::(_, pkgs)::_ when old -> pkgs
-  | _ -> Lwt.return_nil
+let get_pkgs ~logdir self =
+  self.pkgs >>= List.assoc ~eq:Server_workdirs.logdir_equal logdir
 
 let get_compilers ~old self =
   self.compilers >>= function

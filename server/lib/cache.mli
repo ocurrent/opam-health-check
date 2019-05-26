@@ -16,7 +16,7 @@ val clear_and_init :
   unit
 
 val get_html : t -> Html.query -> string Lwt.t
-val get_pkgs : old:bool -> t -> Intf.Pkg.t list Lwt.t
+val get_pkgs : logdir:Server_workdirs.logdir -> t -> Intf.Pkg.t list Lwt.t
 val get_compilers : old:bool -> t -> Intf.Compiler.t list Lwt.t
 val get_maintainers : t -> string -> string list Lwt.t
 val get_revdeps : t -> string -> int Lwt.t

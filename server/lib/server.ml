@@ -70,12 +70,13 @@ module Make (Backend : Backend_intf.S) = struct
     | "" -> []
     | path -> filter_path (Fpath.segs (Fpath.v path))
 
-  let callback backend _conn req _body =
+  let callback workdir backend _conn req _body =
     let uri = Cohttp.Request.uri req in
-    let get_log ~old ~comp ~state ~pkg =
+    let get_log ~logdir ~comp ~state ~pkg =
+      let logdir = Server_workdirs.logdir_from_string workdir logdir in
       let comp = Intf.Compiler.from_string comp in
       let state = Intf.State.from_string state in
-      Backend.get_log backend ~old ~comp ~state ~pkg >>= fun log ->
+      Backend.get_log backend ~logdir ~comp ~state ~pkg >>= fun log ->
       serv_text ~content_type:"text/plain; charset=utf-8" log
     in
     match path_from_uri uri with
@@ -86,10 +87,8 @@ module Make (Backend : Backend_intf.S) = struct
     | ["diff"] ->
         Cache.get_html_diff Backend.cache >>= fun html ->
         serv_text ~content_type:"text/html" html
-    | ["old"; comp; state; pkg] ->
-        get_log ~old:true ~comp ~state ~pkg
-    | [comp; state; pkg] ->
-        get_log ~old:false ~comp ~state ~pkg
+    | [logdir; comp; state; pkg] ->
+        get_log ~logdir ~comp ~state ~pkg
     | _ ->
         failwith "path non recognized: 404"
 
@@ -106,7 +105,7 @@ module Make (Backend : Backend_intf.S) = struct
     let port = Server_configfile.port conf in
     Backend.start conf workdir >>= fun (backend, backend_task) ->
     Lwt.join [
-      tcp_server port (callback backend);
+      tcp_server port (callback workdir backend);
       backend_task ();
     ]
 end

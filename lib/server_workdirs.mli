@@ -11,6 +11,9 @@ val new_logdir : hash:string -> t -> logdir
 val logdirs : t -> logdir list Lwt.t
 val tmplogdir : t -> Fpath.t
 
+val logdir_from_string : t -> string -> logdir
+val logdir_equal : logdir -> logdir -> bool
+val get_logdir_name : logdir -> string
 val get_logdir_path : logdir -> Fpath.t
 val get_logdir_hash : logdir -> string
 
