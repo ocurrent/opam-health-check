@@ -186,19 +186,17 @@ let get_revdeps ~conf ~pool ~jobs ~stderr switch workdir pkgs =
     end :: jobs
   end pkgs jobs
 
-let get_git_hash ~pool ~stderr switch conf =
+let get_git_hash ~stderr switch conf =
   let img_name = get_img_name ~conf switch in
-  Lwt_pool.use pool begin fun () ->
-    Oca_lib.write_line_unix stderr "Getting current git hash..." >>= fun () ->
-    docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= function
-    | [hash] ->
-        Oca_lib.write_line_unix stderr ("Current git hash: "^hash) >|= fun () ->
-        hash
-    | s ->
-        let s = String.unlines s in
-        Oca_lib.write_line_unix stderr ("Error: cannot parse git hash. Got:\n"^s) >>= fun () ->
-        Lwt.fail_with "Something went wrong. See internal log"
-  end
+  Oca_lib.write_line_unix stderr "Getting current git hash..." >>= fun () ->
+  docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= function
+  | [hash] ->
+      Oca_lib.write_line_unix stderr ("Current git hash: "^hash) >|= fun () ->
+      hash
+  | s ->
+      let s = String.unlines s in
+      Oca_lib.write_line_unix stderr ("Error: cannot parse git hash. Got:\n"^s) >>= fun () ->
+      Lwt.fail_with "Something went wrong. See internal log"
 
 let move_tmpdirs_to_final ~hash ~stderr workdir =
   let logdir = Server_workdirs.new_logdir ~hash workdir in
@@ -273,7 +271,7 @@ let run ~on_finished ~is_retry ~conf workdir =
           let jobs = get_maintainers ~conf ~pool ~jobs ~stderr switch workdir pkgs in
           let jobs = get_revdeps ~conf ~pool ~jobs ~stderr switch workdir full_pkgs in
           Lwt.join jobs >>= fun () ->
-          get_git_hash ~pool ~stderr switch conf
+          get_git_hash ~stderr switch conf
       | [] ->
           Lwt.fail_with "No switches"
       end >>= fun hash ->
