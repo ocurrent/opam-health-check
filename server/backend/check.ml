@@ -89,12 +89,18 @@ let run_job ~conf ~pool ~stderr ~switch ~num workdir pkg =
     end begin function
     | Oca_lib.Process_failure 31 ->
         is_partial_failure logfile >>= begin function
-        | true -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
-        | false -> Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
+        | true ->
+            Oca_lib.write_line_unix stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
+        | false ->
+            Oca_lib.write_line_unix stderr ("["^num^"] succeeded.") >>= fun () ->
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
         end
     | Oca_lib.Process_failure 20 ->
+        Oca_lib.write_line_unix stderr ("["^num^"] finished with not available.") >>= fun () ->
         Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch workdir))
     | Oca_lib.Process_failure _ | Oca_lib.Internal_failure ->
+        Oca_lib.write_line_unix stderr ("["^num^"] finished with an internal failure.") >>= fun () ->
         Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch workdir))
     | e ->
         Lwt.fail e
