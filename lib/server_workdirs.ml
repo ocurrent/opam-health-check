@@ -16,23 +16,27 @@ let keyfile ~username workdir = keysdir workdir/username+"key"
 
 let tmpdir workdir = workdir/"tmp"
 
-type logdir = Logdir of Fpath.t
+type logdir = Logdir of float * string * t
 
 let base_logdir workdir = workdir/"logs"
-let create_logdir workdir = base_logdir workdir/Printf.sprintf "%.0f" (Unix.time ())
+let new_logdir ~hash workdir = Logdir (Unix.time (), hash, workdir)
 let logdirs workdir =
   Oca_lib.get_files (base_logdir workdir) >|= fun dirs ->
   let dirs = List.sort (fun x y -> -String.compare x y) dirs in
-  List.map (fun dir -> Logdir (base_logdir workdir/dir)) dirs
+  List.map (fun dir -> match String.split_on_char '-' dir with
+    | [time; hash] -> Logdir (float_of_string time, hash, workdir)
+    | _ -> assert false
+  ) dirs
 
-let get_logdir_path (Logdir logdir) = logdir
+let get_logdir_path (Logdir (time, hash, workdir)) = base_logdir workdir/Printf.sprintf "%.0f-%s" time hash
+let get_logdir_hash (Logdir (_, hash, _)) = hash
 
 let tmplogdir workdir = tmpdir workdir/"logs"
 
 let ilogdir workdir = workdir/"ilogs"
 let ilogfile workdir = ilogdir workdir/Printf.sprintf "%.0f" (Unix.time ())
 
-let switchlogdir ~switch (Logdir logdir) = logdir/Intf.Compiler.to_string switch
+let switchlogdir ~switch logdir = get_logdir_path logdir/Intf.Compiler.to_string switch
 let gooddir ~switch logdir = switchlogdir ~switch logdir/"good"
 let partialdir ~switch logdir = switchlogdir ~switch logdir/"partial"
 let baddir ~switch logdir = switchlogdir ~switch logdir/"bad"
@@ -65,10 +69,10 @@ let tmprevdepsdir workdir = tmpdir workdir/"revdeps"
 let tmprevdepsfile ~pkg workdir = tmprevdepsdir workdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
-let file_from_logdir ~file (Logdir logdir) =
+let file_from_logdir ~file logdir =
   let file = Fpath.v file in
   let file = Fpath.segs file in
-  List.fold_left (/) logdir file
+  List.fold_left (/) (get_logdir_path logdir) file
 
 let init_base workdir =
   Oca_lib.mkdir_p (keysdir workdir) >>= fun () ->

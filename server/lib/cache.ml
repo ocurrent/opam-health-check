@@ -54,8 +54,6 @@ let split_diff (bad, partial, not_available, internal_failure, good) diff =
   | {diff = NowInstallable NotAvailable; _} -> assert false
 
 let generate_diff old_pkgs new_pkgs =
-  old_pkgs >>= fun old_pkgs ->
-  new_pkgs >|= fun new_pkgs ->
   let pkg_htbl = Pkg_htbl.create 10_000 in
   let aux pos pkg =
     Intf.Pkg.instances pkg |>
@@ -100,9 +98,14 @@ let call_pkgs ~pkgs = function
       Lwt.return ((logdir, pkg) :: pkgs)
 
 let call_generate_diff = function
-  | (_, new_pkgs)::(_, old_pkgs)::_ -> generate_diff old_pkgs new_pkgs
-  | (_, new_pkgs)::_ -> generate_diff Lwt.return_nil new_pkgs
-  | [] -> generate_diff Lwt.return_nil Lwt.return_nil
+  | (_, new_pkgs)::(_, old_pkgs)::_ -> new_pkgs >>= fun new_pkgs -> old_pkgs >|= fun old_pkgs -> generate_diff old_pkgs new_pkgs
+  | (_, new_pkgs)::_ -> new_pkgs >|= generate_diff []
+  | [] -> Lwt.return (generate_diff [] [])
+
+let call_html_diff ~html_diff = function
+  | new_logdir::old_logdir::_ -> html_diff ~old_logdir:(Some old_logdir) ~new_logdir:(Some new_logdir)
+  | new_logdir::_ -> html_diff ~old_logdir:None ~new_logdir:(Some new_logdir)
+  | [] -> html_diff ~old_logdir:None ~new_logdir:None
 
 let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_diff =
   self.maintainers <- maintainers ();
@@ -111,20 +114,21 @@ let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_di
   self.compilers <- logdirs >|= List.map (fun logdir -> (logdir, compilers logdir));
   self.pkgs <- logdirs >>= call_pkgs ~pkgs;
   self.pkgs_diff <- self.pkgs >>= call_generate_diff;
-  self.html_diff <- html_diff ();
+  self.html_diff <- logdirs >>= call_html_diff ~html_diff;
   Html_cache.clear self.html_tbl
 
-let get_html ~conf self query =
+let get_html self query =
   self.pkgs >>= fun pkgs ->
-  Option.map_or ~default:Lwt.return_nil snd (List.head_opt pkgs) >>= fun pkgs ->
-  Html.get_html ~conf query pkgs >>= fun html ->
+  let (logdir, pkgs) = Option.map_or ~default:(None, Lwt.return_nil) (fun (logdir, pkgs) -> (Some logdir, pkgs)) (List.head_opt pkgs) in
+  pkgs >>= fun pkgs ->
+  Html.get_html logdir query pkgs >>= fun html ->
   Html_cache.add self.html_tbl query html;
   Lwt.return html
 
-let get_html ~conf self query =
+let get_html self query =
   match Html_cache.find_opt self.html_tbl query with
   | Some html -> Lwt.return html
-  | None -> get_html ~conf self query
+  | None -> get_html self query
 
 let get_pkgs ~old self =
   self.pkgs >>= function

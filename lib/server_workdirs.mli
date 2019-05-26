@@ -7,11 +7,12 @@ val keyfile : username:string -> t -> Fpath.t
 
 type logdir
 
-val create_logdir : t -> Fpath.t
+val new_logdir : hash:string -> t -> logdir
 val logdirs : t -> logdir list Lwt.t
 val tmplogdir : t -> Fpath.t
 
 val get_logdir_path : logdir -> Fpath.t
+val get_logdir_hash : logdir -> string
 
 val ilogdir : t -> Fpath.t
 val ilogfile : t -> Fpath.t

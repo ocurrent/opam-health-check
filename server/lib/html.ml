@@ -139,21 +139,23 @@ let get_opam_repository_commit_url ~hash ~content =
   let open Tyxml.Html in
   a ~a:[a_href (github_url^"/commit/"^hash)] content
 
-let gen_table_form ~conf query l =
+let gen_table_form logdir query l =
   let open Tyxml.Html in
   let aux (txt, elts) = tr [td txt; td elts] in
   let legend = legend [b [txt "Filter form:"]] in
-  let opam_repo_uri = match Server_configfile.opam_repo_commit_hash conf with
-    | None -> b [txt "undefined opam-repository commit hash"]
-    | Some hash -> get_opam_repository_commit_url ~hash ~content:[b [txt "🔗 opam-repository commit hash"]]
+  let opam_repo_uri =
+    Option.map (fun logdir ->
+      let hash = Server_workdirs.get_logdir_hash logdir in
+      get_opam_repository_commit_url ~hash ~content:[b [txt "🔗 opam-repository commit hash"]]
+    ) logdir
   in
   let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last check"]] in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
-    td [result_legend query;
-        p ~a:[a_style "text-align: right;"] [opam_repo_uri];
-        p ~a:[a_style "text-align: right;"] [opam_diff_uri];
-       ]
+    td ([result_legend query] @
+        Option.map_or ~default:[] (fun opam_repo_uri -> [p ~a:[a_style "text-align: right;"] [opam_repo_uri]]) opam_repo_uri @
+        [p ~a:[a_style "text-align: right;"] [opam_diff_uri]]
+       )
   ]]]]
 
 let comp_checkboxes ~name checked query =
@@ -174,7 +176,7 @@ let comp_checkboxes ~name checked query =
 let revdeps_cmp p1 p2 =
   Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
 
-let get_html ~conf query pkgs =
+let get_html logdir query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
   Lwt_list.fold_left_s (filter_pkg query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
@@ -240,7 +242,7 @@ let get_html ~conf query pkgs =
   end query.compilers in
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form ~conf query [
+  let filter_form = gen_table_form logdir query [
     (compilers_text, compilers);
     (show_available_text, show_available);
     (show_failures_only_text, [show_failures_only]);
@@ -291,7 +293,7 @@ let generate_diff_html {Intf.Pkg_diff.full_name; comp; diff} =
   in
   li (prefix @ diff)
 
-let get_diff ~conf (bad, partial, not_available, internal_failure, good) =
+let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_failure, good) =
   let open Tyxml.Html in
   let title = title (txt "opam-health-check diff") in
   let charset = meta ~a:[a_charset "utf-8"] () in
@@ -300,9 +302,9 @@ let get_diff ~conf (bad, partial, not_available, internal_failure, good) =
     let hash = String.take 7 hash in
     get_opam_repository_commit_url ~hash ~content:[b [txt hash]]
   in
-  let old_hash = Option.get_exn (Server_configfile.opam_repo_old_commit_hash conf) in
+  let old_hash = Option.map_or ~default:"unknown" Server_workdirs.get_logdir_hash old_logdir in
   let old_hash_elm = get_hash_elm old_hash in
-  let new_hash = Option.get_exn (Server_configfile.opam_repo_commit_hash conf) in
+  let new_hash = Option.map_or ~default:"unknown" Server_workdirs.get_logdir_hash new_logdir in
   let new_hash_elm = get_hash_elm new_hash in
   let git_diff = a ~a:[a_href (github_url^"/compare/"^old_hash^"..."^new_hash)] [txt "git diff"] in
   let good_txt = span ~a:[a_style ("color: "^CUD_pallette.green^";")] [txt "passing"] in

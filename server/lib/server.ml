@@ -70,7 +70,7 @@ module Make (Backend : Backend_intf.S) = struct
     | "" -> []
     | path -> filter_path (Fpath.segs (Fpath.v path))
 
-  let callback ~conf backend _conn req _body =
+  let callback backend _conn req _body =
     let uri = Cohttp.Request.uri req in
     let get_log ~old ~comp ~state ~pkg =
       let comp = Intf.Compiler.from_string comp in
@@ -81,7 +81,7 @@ module Make (Backend : Backend_intf.S) = struct
     match path_from_uri uri with
     | [] ->
         parse_raw_query uri >>= fun query ->
-        Cache.get_html ~conf Backend.cache query >>= fun html ->
+        Cache.get_html Backend.cache query >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["diff"] ->
         Cache.get_html_diff Backend.cache >>= fun html ->
@@ -106,7 +106,7 @@ module Make (Backend : Backend_intf.S) = struct
     let port = Server_configfile.port conf in
     Backend.start conf workdir >>= fun (backend, backend_task) ->
     Lwt.join [
-      tcp_server port (callback ~conf backend);
+      tcp_server port (callback backend);
       backend_task ();
     ]
 end

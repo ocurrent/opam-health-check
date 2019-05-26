@@ -10,8 +10,6 @@ type t = {
   mutable list_command : string option;
   mutable extra_command : string option;
   mutable ocaml_switches : Intf.Compiler.t list option;
-  mutable opam_repo_commit_hash : string option;
-  mutable opam_repo_old_commit_hash : string option;
   mutable slack_webhooks : Uri.t list option;
 }
 
@@ -25,8 +23,6 @@ let create_conf yamlfile = {
   list_command = None;
   extra_command = None;
   ocaml_switches = None;
-  opam_repo_commit_hash = None;
-  opam_repo_old_commit_hash = None;
   slack_webhooks = None;
 }
 
@@ -67,10 +63,6 @@ let set_config conf = function
   | "ocaml-switches" as field, `A switches ->
       let switches = List.map get_comp switches in
       set_field ~field (fun () -> conf.ocaml_switches <- Some switches) conf.ocaml_switches
-  | "opam-repo-commit-hash" as field, `String hash ->
-      set_field ~field (fun () -> conf.opam_repo_commit_hash <- Some hash) conf.opam_repo_commit_hash
-  | "opam-repo-old-commit-hash" as field, `String hash ->
-      set_field ~field (fun () -> conf.opam_repo_old_commit_hash <- Some hash) conf.opam_repo_old_commit_hash
   | "slack-webhooks" as field, `A webhooks ->
       let webhooks = List.map get_uri webhooks in
       set_field ~field (fun () -> conf.slack_webhooks <- Some webhooks) conf.slack_webhooks
@@ -87,8 +79,6 @@ let yaml_of_conf conf =
     "list-command", `String (Option.get_exn conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
     "ocaml-switches", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
-    "opam-repo-commit-hash", Option.map_or ~default:`Null (fun s -> `String s) conf.opam_repo_commit_hash;
-    "opam-repo-old-commit-hash", Option.map_or ~default:`Null (fun s -> `String s) conf.opam_repo_old_commit_hash;
     "slack-webhooks", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Uri.to_string s)) l)) conf.slack_webhooks;
   ]
 
@@ -141,12 +131,6 @@ let set_extra_command conf cmd =
   set_defaults conf;
   Lwt.return_unit
 
-let set_opam_repo_commit_hash conf hash =
-  conf.opam_repo_old_commit_hash <- conf.opam_repo_commit_hash;
-  conf.opam_repo_commit_hash <- Some hash;
-  set_defaults conf;
-  Lwt.return_unit
-
 let set_slack_webhooks conf webhooks =
   conf.slack_webhooks <- Some webhooks;
   set_defaults conf;
@@ -174,6 +158,4 @@ let processes {processes; _} = Option.get_exn processes
 let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
-let opam_repo_commit_hash {opam_repo_commit_hash; _} = opam_repo_commit_hash
-let opam_repo_old_commit_hash {opam_repo_old_commit_hash; _} = opam_repo_old_commit_hash
 let slack_webhooks {slack_webhooks; _} = Option.get_exn slack_webhooks

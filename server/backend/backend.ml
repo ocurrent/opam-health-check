@@ -95,8 +95,8 @@ let get_revdeps workdir =
   end files >|= fun () ->
   revdeps
 
-let get_html_diff ~conf =
-  Oca_server.Cache.get_diff cache >|= Oca_server.Html.get_diff ~conf
+let get_html_diff ~old_logdir ~new_logdir =
+  Oca_server.Cache.get_diff cache >|= Oca_server.Html.get_diff ~old_logdir ~new_logdir
 
 (* TODO: Deduplicate with Server.tcp_server *)
 let tcp_server port callback =
@@ -105,7 +105,7 @@ let tcp_server port callback =
     ~mode:(`TCP (`Port port))
     (Cohttp_lwt_unix.Server.make ~callback ())
 
-let cache_clear_and_init conf workdir =
+let cache_clear_and_init workdir =
   Oca_server.Cache.clear_and_init
     cache
     ~pkgs:(fun ~old logdir -> get_pkgs ~old logdir)
@@ -113,7 +113,7 @@ let cache_clear_and_init conf workdir =
     ~logdirs:(fun () -> Server_workdirs.logdirs workdir)
     ~maintainers:(fun () -> get_maintainers workdir)
     ~revdeps:(fun () -> get_revdeps workdir)
-    ~html_diff:(fun () -> get_html_diff ~conf)
+    ~html_diff:(fun ~old_logdir ~new_logdir -> get_html_diff ~old_logdir ~new_logdir)
 
 let run_action_loop ~conf ~run_trigger f =
   let rec loop () =
@@ -137,10 +137,10 @@ let run_action_loop ~conf ~run_trigger f =
 
 let start conf workdir =
   let port = Server_configfile.admin_port conf in
-  let on_finished = cache_clear_and_init conf in
+  let on_finished = cache_clear_and_init in
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
-  cache_clear_and_init conf workdir;
+  cache_clear_and_init workdir;
   Server_configfile.set_default_ocaml_switches conf (fun () -> Oca_server.Cache.get_compilers ~old:false cache) >>= fun () ->
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->

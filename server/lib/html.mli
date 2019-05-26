@@ -10,5 +10,5 @@ type query = {
   logsearch : string * (Re.re * Intf.Compiler.t) option;
 }
 
-val get_html : conf:Server_configfile.t -> query -> Intf.Pkg.t list -> string Lwt.t
-val get_diff : conf:Server_configfile.t -> (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) -> string
+val get_html : Server_workdirs.logdir option -> query -> Intf.Pkg.t list -> string Lwt.t
+val get_diff : old_logdir:Server_workdirs.logdir option -> new_logdir:Server_workdirs.logdir option -> (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) -> string

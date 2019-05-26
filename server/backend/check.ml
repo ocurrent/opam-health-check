@@ -186,22 +186,23 @@ let get_revdeps ~conf ~pool ~jobs ~stderr switch workdir pkgs =
     end :: jobs
   end pkgs jobs
 
-let set_git_hash ~pool ~stderr switch conf =
+let get_git_hash ~pool ~stderr switch conf =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr "Getting current git hash..." >>= fun () ->
     docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= function
     | [hash] ->
-        Oca_lib.write_line_unix stderr ("Current git hash: "^hash) >>= fun () ->
-        Server_configfile.set_opam_repo_commit_hash conf hash
+        Oca_lib.write_line_unix stderr ("Current git hash: "^hash) >|= fun () ->
+        hash
     | s ->
         let s = String.unlines s in
         Oca_lib.write_line_unix stderr ("Error: cannot parse git hash. Got:\n"^s) >>= fun () ->
         Lwt.fail_with "Something went wrong. See internal log"
   end
 
-let move_tmpdirs_to_final ~stderr workdir =
-  let logdir = Server_workdirs.create_logdir workdir in
+let move_tmpdirs_to_final ~hash ~stderr workdir =
+  let logdir = Server_workdirs.new_logdir ~hash workdir in
+  let logdir = Server_workdirs.get_logdir_path logdir in
   let tmplogdir = Server_workdirs.tmplogdir workdir in
   let maintainersdir = Server_workdirs.maintainersdir workdir in
   let tmpmaintainersdir = Server_workdirs.tmpmaintainersdir workdir in
@@ -269,15 +270,15 @@ let run ~on_finished ~is_retry ~conf workdir =
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_s (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
           let (_, jobs, pkgs, full_pkgs) = run_and_get_pkgs ~conf ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
-          let jobs = set_git_hash ~pool ~stderr switch conf :: jobs in
           let jobs = get_maintainers ~conf ~pool ~jobs ~stderr switch workdir pkgs in
           let jobs = get_revdeps ~conf ~pool ~jobs ~stderr switch workdir full_pkgs in
-          Lwt.join jobs
+          Lwt.join jobs >>= fun () ->
+          get_git_hash ~pool ~stderr switch conf
       | [] ->
-          Lwt.return_unit
-      end >>= fun () ->
+          Lwt.fail_with "No switches"
+      end >>= fun hash ->
       Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
-      move_tmpdirs_to_final ~stderr workdir >>= fun () ->
+      move_tmpdirs_to_final ~hash ~stderr workdir >>= fun () ->
       on_finished workdir;
       trigger_slack_webhooks ~stderr conf >>= fun () ->
       let end_time = Unix.time () in
