@@ -84,8 +84,14 @@ module Make (Backend : Backend_intf.S) = struct
         parse_raw_query uri >>= fun query ->
         Cache.get_html Backend.cache query >>= fun html ->
         serv_text ~content_type:"text/html" html
-    | ["diff"] ->
-        Cache.get_html_diff Backend.cache >>= fun html ->
+    | ["diff"; range] ->
+        let (old_logdir, new_logdir) = match String.split_on_char '.' range with
+          | [old_logdir; ""; new_logdir] -> (old_logdir, new_logdir)
+          | _ -> assert false
+        in
+        let old_logdir = Server_workdirs.logdir_from_string workdir old_logdir in
+        let new_logdir = Server_workdirs.logdir_from_string workdir new_logdir in
+        Cache.get_html_diff ~old_logdir ~new_logdir Backend.cache >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["log"; logdir; comp; state; pkg] ->
         get_log ~logdir ~comp ~state ~pkg

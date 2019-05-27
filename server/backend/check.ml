@@ -205,20 +205,23 @@ let get_git_hash ~stderr switch conf =
       Lwt.fail_with "Something went wrong. See internal log"
 
 let move_tmpdirs_to_final ~hash ~stderr workdir =
+  Server_workdirs.logdirs workdir >>= fun old_logdir -> (* TODO: Add Oca_server.Cache.get_logdirs *)
+  let old_logdir = List.head_opt old_logdir in
   let logdir = Server_workdirs.new_logdir ~hash workdir in
-  let logdir = Server_workdirs.get_logdir_path logdir in
+  let logdir_path = Server_workdirs.get_logdir_path logdir in
   let tmplogdir = Server_workdirs.tmplogdir workdir in
   let maintainersdir = Server_workdirs.maintainersdir workdir in
   let tmpmaintainersdir = Server_workdirs.tmpmaintainersdir workdir in
   let revdepsdir = Server_workdirs.revdepsdir workdir in
   let tmprevdepsdir = Server_workdirs.tmprevdepsdir workdir in
-  Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir) >>= fun () ->
+  Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir_path) >>= fun () ->
   (* TODO: replace by Oca_lib.rm_rf *)
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string maintainersdir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmaintainersdir) (Fpath.to_string maintainersdir) >>= fun () ->
   (* TODO: replace by Oca_lib.rm_rf *)
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string revdepsdir] >>= fun () ->
-  Lwt_unix.rename (Fpath.to_string tmprevdepsdir) (Fpath.to_string revdepsdir)
+  Lwt_unix.rename (Fpath.to_string tmprevdepsdir) (Fpath.to_string revdepsdir) >|= fun () ->
+  (old_logdir, logdir)
 
 let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
   let len_suffix = "/"^string_of_int (List.fold_left (fun n (_, pkgs) -> n + List.length pkgs) 0 pkgs) in
@@ -232,13 +235,21 @@ let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
     end (i, jobs, pkgs_set, full_pkgs_set) pkgs
   end (0, [], Pkg_set.empty, Pkg_set.empty) pkgs
 
-let trigger_slack_webhooks ~stderr conf =
+let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
+  let body = match old_logdir with
+    | Some old_logdir ->
+        let old_logdir = Server_workdirs.get_logdir_name old_logdir in
+        let new_logdir = Server_workdirs.get_logdir_name new_logdir in
+        Printf.sprintf {|{"text":"The latest check is done. Check out http://check.ocamllabs.io/diff/%s..%s to discover which packages are now broken or fixed"}|} old_logdir new_logdir
+    | None ->
+        {|{"text":"The first check is done. Check out http://check.ocamllabs.io/ to discover which packages are now broken or fixed"}|}
+  in
   Server_configfile.slack_webhooks conf |>
   Lwt_list.iter_p begin fun webhook ->
     Oca_lib.write_line_unix stderr ("Triggering Slack webhook "^Uri.to_string webhook) >>= fun () ->
     Cohttp_lwt_unix.Client.post
       ~headers:(Cohttp.Header.of_list ["Content-type", "application/json"])
-      ~body:(`String {|{"text":"The latest check is done. Check out http://check.ocamllabs.io/diff to discover which packages are now broken or fixed"}|}) (* TODO: Get the url parameterized *)
+      ~body:(`String body)
       webhook
     >>= fun (resp, _body) ->
     match Cohttp.Response.status resp with
@@ -282,9 +293,9 @@ let run ~on_finished ~is_retry ~conf workdir =
           Lwt.fail_with "No switches"
       end >>= fun hash ->
       Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
-      move_tmpdirs_to_final ~hash ~stderr workdir >>= fun () ->
+      move_tmpdirs_to_final ~hash ~stderr workdir >>= fun (old_logdir, new_logdir) ->
       on_finished workdir;
-      trigger_slack_webhooks ~stderr conf >>= fun () ->
+      trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
       let end_time = Unix.time () in
       Oca_lib.write_line_unix stderr ("Done. Operation took: "^string_of_float (end_time -. start_time)^" seconds")
     end

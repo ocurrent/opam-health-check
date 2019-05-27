@@ -10,5 +10,15 @@ type query = {
   logsearch : string * (Re.re * Intf.Compiler.t) option;
 }
 
-val get_html : Server_workdirs.logdir option -> query -> Intf.Pkg.t list -> string Lwt.t
-val get_diff : old_logdir:Server_workdirs.logdir option -> new_logdir:Server_workdirs.logdir option -> (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) -> string
+val get_html :
+  old_logdir:Server_workdirs.logdir option ->
+  new_logdir:Server_workdirs.logdir option ->
+  query ->
+  Intf.Pkg.t list ->
+  string Lwt.t
+
+val get_diff :
+  old_logdir:Server_workdirs.logdir ->
+  new_logdir:Server_workdirs.logdir ->
+  (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) ->
+  string

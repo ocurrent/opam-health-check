@@ -76,7 +76,7 @@ type t = {
   mutable maintainers : string list Maintainers_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
   mutable pkgs_diff : (Pkg_diff.t list * Pkg_diff.t list * Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) Lwt.t;
-  mutable html_diff : string Lwt.t;
+  mutable html_diff : ((Server_workdirs.logdir * Server_workdirs.logdir) * string Lwt.t) list Lwt.t;
 }
 
 let create () = {
@@ -86,7 +86,7 @@ let create () = {
   maintainers = Lwt.return (Maintainers_cache.create 0);
   revdeps = Lwt.return (Revdeps_cache.create 0);
   pkgs_diff = Lwt.return ([], [], [], [], []);
-  html_diff = Lwt.return "";
+  html_diff = Lwt.return_nil;
 }
 
 let call_pkgs ~pkgs = function
@@ -102,10 +102,12 @@ let call_generate_diff = function
   | (_, new_pkgs)::_ -> new_pkgs >|= generate_diff []
   | [] -> Lwt.return (generate_diff [] [])
 
-let call_html_diff ~html_diff = function
-  | new_logdir::old_logdir::_ -> html_diff ~old_logdir:(Some old_logdir) ~new_logdir:(Some new_logdir)
-  | new_logdir::_ -> html_diff ~old_logdir:None ~new_logdir:(Some new_logdir)
-  | [] -> html_diff ~old_logdir:None ~new_logdir:None
+let rec call_html_diff ~html_diff = function
+  | new_logdir::(old_logdir::_ as l) ->
+      ((old_logdir, new_logdir), html_diff ~old_logdir ~new_logdir) ::
+      call_html_diff ~html_diff l
+  | [_] | [] ->
+      []
 
 let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_diff =
   self.maintainers <- maintainers ();
@@ -114,16 +116,20 @@ let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_di
   self.compilers <- logdirs >|= List.map (fun logdir -> (logdir, compilers logdir));
   self.pkgs <- logdirs >>= call_pkgs ~pkgs;
   self.pkgs_diff <- self.pkgs >>= call_generate_diff;
-  self.html_diff <- logdirs >>= call_html_diff ~html_diff;
+  self.html_diff <- logdirs >|= call_html_diff ~html_diff;
   Html_cache.clear self.html_tbl
 
 let get_html self query =
-  self.pkgs >>= fun pkgs ->
-  let (logdir, pkgs) = Option.map_or ~default:(None, Lwt.return_nil) (fun (logdir, pkgs) -> (Some logdir, pkgs)) (List.head_opt pkgs) in
-  pkgs >>= fun pkgs ->
-  Html.get_html logdir query pkgs >>= fun html ->
-  Html_cache.add self.html_tbl query html;
-  Lwt.return html
+  let aux ?old_logdir ?new_logdir pkgs =
+    pkgs >>= fun pkgs ->
+    Html.get_html ~old_logdir ~new_logdir query pkgs >>= fun html ->
+    Html_cache.add self.html_tbl query html;
+    Lwt.return html
+  in
+  self.pkgs >>= function
+  | (new_logdir, pkgs)::(old_logdir, _)::_ -> aux ~old_logdir ~new_logdir pkgs
+  | (new_logdir, pkgs)::[] -> aux ~new_logdir pkgs
+  | [] -> aux Lwt.return_nil
 
 let get_html self query =
   match Html_cache.find_opt self.html_tbl query with
@@ -150,5 +156,8 @@ let get_revdeps self k =
 let get_diff self =
   self.pkgs_diff
 
-let get_html_diff self =
-  self.html_diff
+let get_html_diff ~old_logdir ~new_logdir self =
+  self.html_diff >>=
+  List.assoc
+    ~eq:(CCEqual.pair Server_workdirs.logdir_equal Server_workdirs.logdir_equal)
+    (old_logdir, new_logdir)
