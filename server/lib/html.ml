@@ -35,7 +35,7 @@ let log_url logdir pkg instance =
   let comp = Compiler.to_string comp in
   let state = State.to_string (Instance.state instance) in
   let pkg = Pkg.full_name pkg in
-  Printf.sprintf "/%s/%s/%s/%s" logdir comp state pkg
+  Printf.sprintf "/log/%s/%s/%s/%s" logdir comp state pkg
 
 let instance_to_html ~pkg logdir instances comp =
   let open Tyxml.Html in
@@ -280,7 +280,7 @@ let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; d
     let status_str = Intf.State.to_string status in
     let status = print_status status in
     let logdir = if old then old_logdir else new_logdir in
-    a ~a:[a_href ("/"^logdir^"/"^comp_str^"/"^status_str^"/"^full_name)] [status]
+    a ~a:[a_href ("/log/"^logdir^"/"^comp_str^"/"^status_str^"/"^full_name)] [status]
   in
   let diff = match diff with
     | Intf.Pkg_diff.StatusChanged (old_status, new_status) ->

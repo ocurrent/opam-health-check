@@ -87,7 +87,7 @@ module Make (Backend : Backend_intf.S) = struct
     | ["diff"] ->
         Cache.get_html_diff Backend.cache >>= fun html ->
         serv_text ~content_type:"text/html" html
-    | [logdir; comp; state; pkg] ->
+    | ["log"; logdir; comp; state; pkg] ->
         get_log ~logdir ~comp ~state ~pkg
     | _ ->
         failwith "path non recognized: 404"
