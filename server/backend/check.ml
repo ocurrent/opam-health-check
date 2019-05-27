@@ -204,8 +204,8 @@ let get_git_hash ~stderr switch conf =
       Oca_lib.write_line_unix stderr ("Error: cannot parse git hash. Got:\n"^s) >>= fun () ->
       Lwt.fail_with "Something went wrong. See internal log"
 
-let move_tmpdirs_to_final ~hash ~stderr workdir =
-  Server_workdirs.logdirs workdir >>= fun old_logdir -> (* TODO: Add Oca_server.Cache.get_logdirs *)
+let move_tmpdirs_to_final ~hash ~stderr cache workdir =
+  Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
   let old_logdir = List.head_opt old_logdir in
   let logdir = Server_workdirs.new_logdir ~hash workdir in
   let logdir_path = Server_workdirs.get_logdir_path logdir in
@@ -270,7 +270,7 @@ let wait_current_run_to_finish =
   in
   loop
 
-let run ~on_finished ~is_retry ~conf workdir =
+let run ~on_finished ~is_retry ~conf cache workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   if !run_locked then
     failwith "operation locked";
@@ -293,7 +293,7 @@ let run ~on_finished ~is_retry ~conf workdir =
           Lwt.fail_with "No switches"
       end >>= fun hash ->
       Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
-      move_tmpdirs_to_final ~hash ~stderr workdir >>= fun (old_logdir, new_logdir) ->
+      move_tmpdirs_to_final ~hash ~stderr cache workdir >>= fun (old_logdir, new_logdir) ->
       on_finished workdir;
       trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
       let end_time = Unix.time () in
