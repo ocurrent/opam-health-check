@@ -17,8 +17,10 @@ val get_html :
   Intf.Pkg.t list ->
   string Lwt.t
 
+type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list)
+
 val get_diff :
   old_logdir:Server_workdirs.logdir ->
   new_logdir:Server_workdirs.logdir ->
-  (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) ->
+  diff ->
   string

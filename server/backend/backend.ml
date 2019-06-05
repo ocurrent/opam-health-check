@@ -95,9 +95,6 @@ let get_revdeps workdir =
   end files >|= fun () ->
   revdeps
 
-let get_html_diff ~old_logdir ~new_logdir =
-  Oca_server.Cache.get_diff cache >|= Oca_server.Html.get_diff ~old_logdir ~new_logdir
-
 (* TODO: Deduplicate with Server.tcp_server *)
 let tcp_server port callback =
   Cohttp_lwt_unix.Server.create
@@ -113,7 +110,7 @@ let cache_clear_and_init workdir =
     ~logdirs:(fun () -> Server_workdirs.logdirs workdir)
     ~maintainers:(fun () -> get_maintainers workdir)
     ~revdeps:(fun () -> get_revdeps workdir)
-    ~html_diff:(fun ~old_logdir ~new_logdir -> get_html_diff ~old_logdir ~new_logdir)
+    ~html_diff:Oca_server.Html.get_diff
 
 let run_action_loop ~conf ~run_trigger f =
   let rec loop () =

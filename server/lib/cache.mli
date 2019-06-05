@@ -12,7 +12,7 @@ val clear_and_init :
   logdirs:(unit -> Server_workdirs.logdir list Lwt.t) ->
   maintainers:(unit -> string list Maintainers_cache.t Lwt.t) ->
   revdeps:(unit -> int Revdeps_cache.t Lwt.t) ->
-  html_diff:(old_logdir:Server_workdirs.logdir -> new_logdir:Server_workdirs.logdir -> string Lwt.t) ->
+  html_diff:(old_logdir:Server_workdirs.logdir -> new_logdir:Server_workdirs.logdir -> Html.diff -> string) ->
   unit
 
 val get_html : t -> Html.query -> string Lwt.t
@@ -21,5 +21,4 @@ val get_pkgs : logdir:Server_workdirs.logdir -> t -> Intf.Pkg.t list Lwt.t
 val get_compilers : old:bool -> t -> Intf.Compiler.t list Lwt.t
 val get_maintainers : t -> string -> string list Lwt.t
 val get_revdeps : t -> string -> int Lwt.t
-val get_diff : t -> (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list) Lwt.t
 val get_html_diff : old_logdir:Server_workdirs.logdir -> new_logdir:Server_workdirs.logdir -> t -> string Lwt.t

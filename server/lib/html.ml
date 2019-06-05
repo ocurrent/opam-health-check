@@ -308,6 +308,8 @@ let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; d
   in
   li (prefix @ diff)
 
+type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list)
+
 let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_failure, good) =
   let open Tyxml.Html in
   let title = title (txt "opam-health-check diff") in

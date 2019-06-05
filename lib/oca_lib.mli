@@ -1,3 +1,6 @@
+val list_map_cube : ('a -> 'a -> 'b) -> 'a list -> 'b list
+val lwt_list_assoc : eq:('a -> 'a -> bool) -> 'a -> ('a * 'b) Lwt.t list -> 'b Lwt.t
+
 val is_valid_filename : string -> bool
 val char_is_docker_compatible : char -> bool
 
