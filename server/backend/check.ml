@@ -167,30 +167,26 @@ let build_switch ~stderr ~cached conf workdir switch =
 
 module Pkg_set = Set.Make (String)
 
-let get_maintainers ~conf ~pool ~jobs ~stderr switch workdir pkgs =
+let get_maintainers ~conf ~pool ~stderr switch workdir pkg =
   let img_name = get_img_name ~conf switch in
-  Pkg_set.fold begin fun pkg jobs ->
-    Lwt_pool.use pool begin fun () ->
-      Oca_lib.write_line_unix stderr ("Getting the list of maintainers for "^pkg^"...") >>= fun () ->
-      docker_run_to_str ~stderr ~img_name ["opam";"show";"-f";"maintainer:";pkg] >>= fun maintainers ->
-      let maintainers = parse_maintainers "" maintainers in
-      let file = Server_workdirs.tmpmaintainersfile ~pkg workdir in
-      Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c maintainers)
-    end :: jobs
-  end pkgs jobs
+  Lwt_pool.use pool begin fun () ->
+    Oca_lib.write_line_unix stderr ("Getting the list of maintainers for "^pkg^"...") >>= fun () ->
+    docker_run_to_str ~stderr ~img_name ["opam";"show";"-f";"maintainer:";pkg] >>= fun maintainers ->
+    let maintainers = parse_maintainers "" maintainers in
+    let file = Server_workdirs.tmpmaintainersfile ~pkg workdir in
+    Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c maintainers)
+  end
 
-let get_revdeps ~conf ~pool ~jobs ~stderr switch workdir pkgs =
+let get_revdeps ~conf ~pool ~stderr switch workdir pkg =
   let img_name = get_img_name ~conf switch in
-  Pkg_set.fold begin fun pkg jobs ->
-    Lwt_pool.use pool begin fun () ->
-      Oca_lib.write_line_unix stderr ("Getting the number of revdeps for "^pkg^"...") >>= fun () ->
-      docker_run_to_str ~stderr ~img_name ["opam";"list";"-s";"--recursive";"--depopts";"--depends-on";pkg] >>= fun revdeps ->
-      let revdeps = List.length revdeps - 1 in (* NOTE: -1 before opam list --recursive lists the package itself as a revdeps *)
-      let revdeps = string_of_int revdeps in
-      let file = Server_workdirs.tmprevdepsfile ~pkg workdir in
-      Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c revdeps)
-    end :: jobs
-  end pkgs jobs
+  Lwt_pool.use pool begin fun () ->
+    Oca_lib.write_line_unix stderr ("Getting the number of revdeps for "^pkg^"...") >>= fun () ->
+    docker_run_to_str ~stderr ~img_name ["opam";"list";"-s";"--recursive";"--depopts";"--depends-on";pkg] >>= fun revdeps ->
+    let revdeps = List.length revdeps - 1 in (* NOTE: -1 before opam list --recursive lists the package itself as a revdeps *)
+    let revdeps = string_of_int revdeps in
+    let file = Server_workdirs.tmprevdepsfile ~pkg workdir in
+    Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c revdeps)
+  end
 
 let get_git_hash ~stderr switch conf =
   let img_name = get_img_name ~conf switch in
@@ -231,6 +227,8 @@ let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
       let num = string_of_int i^len_suffix in
       let job = run_job ~conf ~pool ~stderr ~switch ~num workdir full_name in
       let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
+      let jobs = if Pkg_set.mem pkg pkgs_set then jobs else get_maintainers ~conf ~pool ~stderr switch workdir pkg :: jobs in
+      let jobs = if Pkg_set.mem full_name full_pkgs_set then jobs else get_revdeps ~conf ~pool ~stderr switch workdir full_name :: jobs in
       (i, job :: jobs, Pkg_set.add pkg pkgs_set, Pkg_set.add full_name full_pkgs_set)
     end (i, jobs, pkgs_set, full_pkgs_set) pkgs
   end (0, [], Pkg_set.empty, Pkg_set.empty) pkgs
@@ -284,9 +282,7 @@ let run ~on_finished ~is_retry ~conf cache workdir =
           build_switch ~stderr ~cached:is_retry conf workdir switch >>= fun hd_pkgs ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
-          let (_, jobs, pkgs, full_pkgs) = run_and_get_pkgs ~conf ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
-          let jobs = get_maintainers ~conf ~pool ~jobs ~stderr switch workdir pkgs in
-          let jobs = get_revdeps ~conf ~pool ~jobs ~stderr switch workdir full_pkgs in
+          let (_, jobs, _, _) = run_and_get_pkgs ~conf ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
           Lwt.join jobs >>= fun () ->
           get_git_hash ~stderr switch conf
       | [] ->
