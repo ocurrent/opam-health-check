@@ -76,8 +76,8 @@ type t = {
   mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list Lwt.t) list Lwt.t;
   mutable maintainers : string list Maintainers_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
-  mutable pkgs_diff : ((Server_workdirs.logdir * Server_workdirs.logdir) * Html.diff) Lwt.t list Lwt.t;
-  mutable html_diff : ((Server_workdirs.logdir * Server_workdirs.logdir) * string) Lwt.t list Lwt.t;
+  mutable pkgs_diff : ((Server_workdirs.logdir * Server_workdirs.logdir) * Html.diff Lwt.t) list Lwt.t;
+  mutable html_diff : ((Server_workdirs.logdir * Server_workdirs.logdir) * string Lwt.t) list Lwt.t;
   mutable html_diff_list : string Lwt.t;
 }
 
@@ -102,17 +102,19 @@ let call_pkgs ~pkgs = function
       Lwt.return ((logdir, pkg) :: pkgs)
 
 let call_generate_diff (new_logdir, new_pkgs) (old_logdir, old_pkgs) =
-  new_pkgs >>= fun new_pkgs ->
-  old_pkgs >|= fun old_pkgs ->
-  ((old_logdir, new_logdir), generate_diff old_pkgs new_pkgs)
+  let diff =
+    new_pkgs >>= fun new_pkgs ->
+    old_pkgs >|= fun old_pkgs ->
+    generate_diff old_pkgs new_pkgs
+  in
+  ((old_logdir, new_logdir), diff)
 
-let call_html_diff ~html_diff diff =
-  diff >|= fun ((old_logdir, new_logdir), diff) ->
-  ((old_logdir, new_logdir), html_diff ~old_logdir ~new_logdir diff)
+let call_html_diff ~html_diff ((old_logdir, new_logdir), diff) =
+  let html_diff = diff >|=html_diff ~old_logdir ~new_logdir in
+  ((old_logdir, new_logdir), html_diff)
 
 let call_html_diff_list diff =
-  let fst x = x >|= fst in
-  Lwt_list.map_s fst diff >|= Html.get_diff_list
+  Html.get_diff_list (List.map fst diff)
 
 let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_diff =
   self.maintainers <- maintainers ();
@@ -122,7 +124,7 @@ let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_di
   self.pkgs <- self.logdirs >>= call_pkgs ~pkgs;
   self.pkgs_diff <- self.pkgs >|= Oca_lib.list_map_cube call_generate_diff;
   self.html_diff <- self.pkgs_diff >|= List.map (call_html_diff ~html_diff);
-  self.html_diff_list <- self.pkgs_diff >>= call_html_diff_list;
+  self.html_diff_list <- self.pkgs_diff >|= call_html_diff_list;
   Html_cache.clear self.html_tbl
 
 let get_html self query =
@@ -164,7 +166,7 @@ let get_revdeps self k =
 
 let get_html_diff ~old_logdir ~new_logdir self =
   self.html_diff >>=
-  Oca_lib.lwt_list_assoc
+  List.assoc
     ~eq:(CCEqual.pair Server_workdirs.logdir_equal Server_workdirs.logdir_equal)
     (old_logdir, new_logdir)
 

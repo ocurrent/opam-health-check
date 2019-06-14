@@ -4,16 +4,6 @@ let rec list_map_cube f = function
   | x::(_::_ as xs) -> List.map (f x) xs @ list_map_cube f xs
   | [_] | [] -> []
 
-let rec lwt_list_assoc ~eq k = function
-  | x::xs ->
-      x >>= fun (k', x) ->
-      if eq k k' then
-        Lwt.return x
-      else
-        lwt_list_assoc ~eq k xs
-  | [] ->
-      Lwt.fail Not_found
-
 let is_valid_filename file =
   not begin
     String.is_empty file ||
