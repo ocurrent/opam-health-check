@@ -354,7 +354,9 @@ let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_fail
 let date_to_string date =
   let open Unix in
   let date = localtime date in
-  Printf.sprintf "%d-%02d-%02d %d:%d:%d" (date.tm_year + 1900) (date.tm_mon + 1) date.tm_mday date.tm_hour date.tm_min date.tm_sec
+  Printf.sprintf "%d-%02d-%02d %02d:%02d:%02d"
+    (date.tm_year + 1900) (date.tm_mon + 1) date.tm_mday
+    date.tm_hour date.tm_min date.tm_sec
 
 let map_diff (old_logdir, new_logdir) =
   let open Tyxml.Html in
