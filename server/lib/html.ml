@@ -360,15 +360,11 @@ let map_diff (old_logdir, new_logdir) =
   let open Tyxml.Html in
   let old_date = Server_workdirs.get_logdir_time old_logdir in
   let old_date = date_to_string old_date in
-  let old_hash = Server_workdirs.get_logdir_hash old_logdir in
   let new_date = Server_workdirs.get_logdir_time new_logdir in
   let new_date = date_to_string new_date in
-  let new_hash = Server_workdirs.get_logdir_hash new_logdir in
   li [get_diff_url ~old_logdir ~new_logdir
-        [txt "Diff between check made on the ";
-         b [txt old_date]; txt " (commit "; txt old_hash;
-         txt ") and check made on the ";
-         b [txt new_date]; txt " (commit "; txt new_hash; txt ")"]]
+        [txt "Diff between check made on the "; b [txt old_date];
+         txt " and check made on the "; b [txt new_date]]]
 
 let get_diff_list diffs =
   let open Tyxml.Html in
