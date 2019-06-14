@@ -140,31 +140,20 @@ let get_opam_repository_commit_url ~hash ~content =
   let open Tyxml.Html in
   a ~a:[a_href (github_url^"/commit/"^hash)] [content]
 
-let get_diff_url ~old_logdir ~new_logdir content =
-  let open Tyxml.Html in
-  let old_logdir = Server_workdirs.get_logdir_name old_logdir in
-  let new_logdir = Server_workdirs.get_logdir_name new_logdir in
-  a ~a:[a_href ("/diff/"^old_logdir^".."^new_logdir)] content
-
-let gen_table_form ~old_logdir ~new_logdir query l =
+let gen_table_form ~logdir query l =
   let open Tyxml.Html in
   let aux (txt, elts) = tr [td txt; td elts] in
   let legend = legend [b [txt "Filter form:"]] in
   let opam_repo_uri =
     let content = b [txt "🔗 opam-repository commit hash"] in
-    match new_logdir with
+    match logdir with
     | Some new_logdir ->
         let hash = Server_workdirs.get_logdir_hash new_logdir in
         get_opam_repository_commit_url ~hash ~content
     | None ->
         content
   in
-  let opam_diff_uri =
-    let content = b [txt "🔗 Differences with the last check"] in
-    match old_logdir with
-    | Some old_logdir -> get_diff_url ~old_logdir ~new_logdir:(Option.get_exn new_logdir) [content]
-    | None -> content
-  in
+  let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last checks"]] in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
     td [result_legend query;
@@ -191,12 +180,12 @@ let comp_checkboxes ~name checked query =
 let revdeps_cmp p1 p2 =
   Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
 
-let get_html ~old_logdir ~new_logdir query pkgs =
+let get_html ~logdir query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
   Lwt_list.fold_left_s (filter_pkg query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
   let pkgs = if query.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
-  let pkgs = List.map (pkg_to_html new_logdir query) pkgs in
+  let pkgs = List.map (pkg_to_html logdir query) pkgs in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers @ [th [txt "number of revdeps"]] in
   let title = title (txt "opam-health-check") in
@@ -257,7 +246,7 @@ let get_html ~old_logdir ~new_logdir query pkgs =
   end query.compilers in
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form ~old_logdir ~new_logdir query [
+  let filter_form = gen_table_form ~logdir query [
     (compilers_text, compilers);
     (show_available_text, show_available);
     (show_failures_only_text, [show_failures_only]);
@@ -357,6 +346,12 @@ let date_to_string date =
   Printf.sprintf "%d-%02d-%02d %02d:%02d:%02d"
     (date.tm_year + 1900) (date.tm_mon + 1) date.tm_mday
     date.tm_hour date.tm_min date.tm_sec
+
+let get_diff_url ~old_logdir ~new_logdir content =
+  let open Tyxml.Html in
+  let old_logdir = Server_workdirs.get_logdir_name old_logdir in
+  let new_logdir = Server_workdirs.get_logdir_name new_logdir in
+  a ~a:[a_href ("/diff/"^old_logdir^".."^new_logdir)] content
 
 let map_diff (old_logdir, new_logdir) =
   let open Tyxml.Html in

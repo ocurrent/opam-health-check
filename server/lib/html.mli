@@ -11,8 +11,7 @@ type query = {
 }
 
 val get_html :
-  old_logdir:Server_workdirs.logdir option ->
-  new_logdir:Server_workdirs.logdir option ->
+  logdir:Server_workdirs.logdir option ->
   query ->
   Intf.Pkg.t list ->
   string Lwt.t

@@ -128,16 +128,15 @@ let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_di
   Html_cache.clear self.html_tbl
 
 let get_html self query =
-  let aux ?old_logdir ?new_logdir pkgs =
+  let aux ~logdir pkgs =
     pkgs >>= fun pkgs ->
-    Html.get_html ~old_logdir ~new_logdir query pkgs >>= fun html ->
+    Html.get_html ~logdir query pkgs >>= fun html ->
     Html_cache.add self.html_tbl query html;
     Lwt.return html
   in
   self.pkgs >>= function
-  | (new_logdir, pkgs)::(old_logdir, _)::_ -> aux ~old_logdir ~new_logdir pkgs
-  | (new_logdir, pkgs)::[] -> aux ~new_logdir pkgs
-  | [] -> aux Lwt.return_nil
+  | (logdir, pkgs)::_ -> aux ~logdir:(Some logdir) pkgs
+  | [] -> aux ~logdir:None Lwt.return_nil
 
 let get_html self query =
   match Html_cache.find_opt self.html_tbl query with
