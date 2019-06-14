@@ -173,7 +173,8 @@ let comp_checkboxes ~name checked query =
              a_name name ::
              a_value comp_str ::
              if List.mem ~eq:Compiler.equal comp checked then [a_checked ()] else [])
-         ()]
+         ();
+       br ()]
     end query.available_compilers
   end
 
