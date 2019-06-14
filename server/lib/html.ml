@@ -374,5 +374,5 @@ let get_diff_list diffs =
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
   let diffs = ul (List.map map_diff diffs) in
-  let doc = html head (body [diffs]) in
+  let doc = html head (body [h2 [txt "Available diffs:"]; diffs]) in
   Format.sprintf "%a\n" (pp ()) doc
