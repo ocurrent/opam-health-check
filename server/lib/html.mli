@@ -24,3 +24,7 @@ val get_diff :
   new_logdir:Server_workdirs.logdir ->
   diff ->
   string
+
+val get_diff_list :
+  (Server_workdirs.logdir * Server_workdirs.logdir) list ->
+  string

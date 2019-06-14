@@ -85,15 +85,8 @@ module Make (Backend : Backend_intf.S) = struct
         Cache.get_html Backend.cache query >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["diff"] ->
-        Cache.get_logdirs Backend.cache >>= begin function
-        | new_logdir::old_logdir::_ ->
-            let new_logdir = Server_workdirs.get_logdir_name new_logdir in
-            let old_logdir = Server_workdirs.get_logdir_name old_logdir in
-            let headers = Cohttp.Header.init_with "Location" ("http://check.ocamllabs.io/diff/"^old_logdir^".."^new_logdir) in
-            Cohttp_lwt_unix.Server.respond ~headers ~status:`Found ~body:`Empty ()
-        | _ ->
-            Cohttp_lwt_unix.Server.respond ~status:`Not_found ~body:`Empty () (* TODO: Do better *)
-        end
+        Cache.get_html_diff_list Backend.cache >>=
+        serv_text ~content_type:"text/html"
     | ["diff"; range] ->
         let (old_logdir, new_logdir) = match String.split_on_char '.' range with
           | [old_logdir; ""; new_logdir] -> (old_logdir, new_logdir)

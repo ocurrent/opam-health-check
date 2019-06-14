@@ -22,3 +22,4 @@ val get_compilers : old:bool -> t -> Intf.Compiler.t list Lwt.t
 val get_maintainers : t -> string -> string list Lwt.t
 val get_revdeps : t -> string -> int Lwt.t
 val get_html_diff : old_logdir:Server_workdirs.logdir -> new_logdir:Server_workdirs.logdir -> t -> string Lwt.t
+val get_html_diff_list : t -> string Lwt.t

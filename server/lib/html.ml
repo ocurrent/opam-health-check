@@ -140,6 +140,12 @@ let get_opam_repository_commit_url ~hash ~content =
   let open Tyxml.Html in
   a ~a:[a_href (github_url^"/commit/"^hash)] [content]
 
+let get_diff_url ~old_logdir ~new_logdir content =
+  let open Tyxml.Html in
+  let old_logdir = Server_workdirs.get_logdir_name old_logdir in
+  let new_logdir = Server_workdirs.get_logdir_name new_logdir in
+  a ~a:[a_href ("/diff/"^old_logdir^".."^new_logdir)] content
+
 let gen_table_form ~old_logdir ~new_logdir query l =
   let open Tyxml.Html in
   let aux (txt, elts) = tr [td txt; td elts] in
@@ -156,12 +162,8 @@ let gen_table_form ~old_logdir ~new_logdir query l =
   let opam_diff_uri =
     let content = b [txt "🔗 Differences with the last check"] in
     match old_logdir with
-    | Some old_logdir ->
-        let old_logdir = Server_workdirs.get_logdir_name old_logdir in
-        let new_logdir = Server_workdirs.get_logdir_name (Option.get_exn new_logdir) in
-        a ~a:[a_href ("/diff/"^old_logdir^".."^new_logdir)] [content]
-    | None ->
-        content
+    | Some old_logdir -> get_diff_url ~old_logdir ~new_logdir:(Option.get_exn new_logdir) [content]
+    | None -> content
   in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
@@ -347,4 +349,32 @@ let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_fail
     h3 [txt "Packages now ";good_txt; txt ":"];
     ul (List.map (generate_diff_html ~old_logdir ~new_logdir) good);
   ]) in
+  Format.sprintf "%a\n" (pp ()) doc
+
+let date_to_string date =
+  let open Unix in
+  let date = localtime date in
+  Printf.sprintf "%d-%02d-%02d %d:%d:%d" (date.tm_year + 1900) (date.tm_mon + 1) date.tm_mday date.tm_hour date.tm_min date.tm_sec
+
+let map_diff (old_logdir, new_logdir) =
+  let open Tyxml.Html in
+  let old_date = Server_workdirs.get_logdir_time old_logdir in
+  let old_date = date_to_string old_date in
+  let old_hash = Server_workdirs.get_logdir_hash old_logdir in
+  let new_date = Server_workdirs.get_logdir_time new_logdir in
+  let new_date = date_to_string new_date in
+  let new_hash = Server_workdirs.get_logdir_hash new_logdir in
+  li [get_diff_url ~old_logdir ~new_logdir
+        [txt "Diff between check made on the ";
+         b [txt old_date]; txt " (commit "; txt old_hash;
+         txt ") and check made on the ";
+         b [txt new_date]; txt " (commit "; txt new_hash; txt ")"]]
+
+let get_diff_list diffs =
+  let open Tyxml.Html in
+  let title = title (txt "opam-health-check diff") in
+  let charset = meta ~a:[a_charset "utf-8"] () in
+  let head = head title [charset] in
+  let diffs = ul (List.map map_diff diffs) in
+  let doc = html head (body [diffs]) in
   Format.sprintf "%a\n" (pp ()) doc

@@ -38,6 +38,7 @@ let logdir_equal (Logdir (time1, hash1, workdir1)) (Logdir (time2, hash2, workdi
 let get_logdir_name (Logdir (time, hash, _)) = Printf.sprintf "%.0f-%s" time hash
 let get_logdir_path (Logdir (_, _, workdir) as logdir) = base_logdir workdir/get_logdir_name logdir
 let get_logdir_hash (Logdir (_, hash, _)) = hash
+let get_logdir_time (Logdir (time, _, _)) = time
 
 let tmplogdir workdir = tmpdir workdir/"logs"
 

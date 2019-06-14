@@ -16,6 +16,7 @@ val logdir_equal : logdir -> logdir -> bool
 val get_logdir_name : logdir -> string
 val get_logdir_path : logdir -> Fpath.t
 val get_logdir_hash : logdir -> string
+val get_logdir_time : logdir -> float
 
 val ilogdir : t -> Fpath.t
 val ilogfile : t -> Fpath.t
