@@ -164,7 +164,10 @@ let gen_table_form ~logdir query l =
 
 let comp_checkboxes ~name checked query =
   let open Tyxml.Html in
-  fieldset ~a:[Unsafe.string_attrib "data-role" "controlgroup"; Unsafe.string_attrib "data-type" "horizontal"] begin
+  fieldset (* See: http://demos.jquerymobile.com/1.4.0/controlgroup/ *)
+    ~a:[Unsafe.string_attrib "data-role" "controlgroup";
+        Unsafe.string_attrib "data-type" "horizontal";
+        Unsafe.string_attrib "data-mini" "true"] begin
     List.map begin fun comp ->
       let comp_str = Compiler.to_string comp in
       label [
@@ -173,7 +176,6 @@ let comp_checkboxes ~name checked query =
            ~a:(a_input_type `Checkbox ::
                a_name name ::
                a_value comp_str ::
-               a_hidden () ::
                if List.mem ~eq:Compiler.equal comp checked then [a_checked ()] else [])
            ()]
     end query.available_compilers
@@ -223,7 +225,7 @@ let get_html ~logdir query pkgs =
     charset;
     style [style_table; style_thead; style_col; style_case; style_pkgname; style_row; style_a;
            style_cell_good; style_cell_partial; style_cell_bad; style_cell_not_available; style_cell_internal_failure];
-    link ~rel:[`Stylesheet] ~href:"http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css" ();
+    link ~rel:[`Stylesheet] ~href:"http://code.jquery.com/mobile/1.4.5/jquery.mobile.structure-1.4.5.min.css" ();
     script ~a:[a_src "http://code.jquery.com/jquery-1.11.1.min.js"] (txt "");
     script ~a:[a_src "http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"] (txt "");
   ] in
