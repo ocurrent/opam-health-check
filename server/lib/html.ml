@@ -164,20 +164,20 @@ let gen_table_form ~logdir query l =
 
 let comp_checkboxes ~name checked query =
   let open Tyxml.Html in
-  fieldset (* See: http://demos.jquerymobile.com/1.4.0/controlgroup/ *)
-    ~a:[Unsafe.string_attrib "data-role" "controlgroup";
-        Unsafe.string_attrib "data-type" "horizontal";
-        Unsafe.string_attrib "data-mini" "true"] begin
+  ul ~a:[a_class ["ks-cboxtags"]] begin
     List.map begin fun comp ->
       let comp_str = Compiler.to_string comp in
-      label [
-         txt comp_str;
-         input
-           ~a:(a_input_type `Checkbox ::
-               a_name name ::
-               a_value comp_str ::
-               if List.mem ~eq:Compiler.equal comp checked then [a_checked ()] else [])
-           ()]
+      let random = Random.run (Random.int 1000) in
+      li [
+        input
+          ~a:(a_input_type `Checkbox ::
+              a_name name ::
+              a_value comp_str ::
+              a_id (string_of_int random) ::
+              if List.mem ~eq:Compiler.equal comp checked then [a_checked ()] else [])
+          ();
+        label ~a:[a_label_for (string_of_int random)] [txt comp_str];
+      ]
     end query.available_compilers
   end
 
@@ -225,9 +225,75 @@ let get_html ~logdir query pkgs =
     charset;
     style [style_table; style_thead; style_col; style_case; style_pkgname; style_row; style_a;
            style_cell_good; style_cell_partial; style_cell_bad; style_cell_not_available; style_cell_internal_failure];
-    link ~rel:[`Stylesheet] ~href:"http://code.jquery.com/mobile/1.4.5/jquery.mobile.structure-1.4.5.min.css" ();
-    script ~a:[a_src "http://code.jquery.com/jquery-1.11.1.min.js"] (txt "");
-    script ~a:[a_src "http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"] (txt "");
+    link ~rel:[`Stylesheet] ~href:"https://use.fontawesome.com/releases/v5.4.1/css/all.css" ();
+    style [txt {|
+ul.ks-cboxtags {
+    list-style: none;
+    padding: 20px;
+}
+ul.ks-cboxtags li{
+    display: inline;
+}
+ul.ks-cboxtags li label{
+    display: inline-block;
+    background-color: rgba(255, 255, 255, .9);
+    border: 2px solid rgba(139, 139, 139, .3);
+    color: #adadad;
+    border-radius: 25px;
+    white-space: nowrap;
+    margin: 3px 0px;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: all .2s;
+}
+
+ul.ks-cboxtags li label {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+ul.ks-cboxtags li label::before {
+    display: inline-block;
+    font-style: normal;
+    font-variant: normal;
+    text-rendering: auto;
+    -webkit-font-smoothing: antialiased;
+    font-family: "Font Awesome 5 Free";
+    font-weight: 900;
+    font-size: 12px;
+    padding: 2px 6px 2px 2px;
+    content: "\f067";
+    transition: transform .3s ease-in-out;
+}
+
+ul.ks-cboxtags li input[type="checkbox"]:checked + label::before {
+    content: "\f00c";
+    transform: rotate(-360deg);
+    transition: transform .3s ease-in-out;
+}
+
+ul.ks-cboxtags li input[type="checkbox"]:checked + label {
+    border: 2px solid #1bdbf8;
+    background-color: #12bbd4;
+    color: #fff;
+    transition: all .2s;
+}
+
+ul.ks-cboxtags li input[type="checkbox"] {
+    display: absolute;
+}
+ul.ks-cboxtags li input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+}
+ul.ks-cboxtags li input[type="checkbox"]:hover + label {
+    border: 2px solid #e9a1ff;
+}
+    |}]
   ] in
   let compilers_text = [txt "Show only:"] in
   let compilers = comp_checkboxes ~name:"comp" query.compilers query in
