@@ -164,17 +164,18 @@ let gen_table_form ~logdir query l =
 
 let comp_checkboxes ~name checked query =
   let open Tyxml.Html in
-  List.concat begin
+  fieldset ~a:[Unsafe.string_attrib "data-role" "controlgroup"; Unsafe.string_attrib "data-type" "horizontal"] begin
     List.map begin fun comp ->
       let comp_str = Compiler.to_string comp in
-      [txt (" "^comp_str^": ");
-       input
-         ~a:(a_input_type `Checkbox ::
-             a_name name ::
-             a_value comp_str ::
-             if List.mem ~eq:Compiler.equal comp checked then [a_checked ()] else [])
-         ();
-       br ()]
+      label [
+         txt comp_str;
+         input
+           ~a:(a_input_type `Checkbox ::
+               a_name name ::
+               a_value comp_str ::
+               a_hidden () ::
+               if List.mem ~eq:Compiler.equal comp checked then [a_checked ()] else [])
+           ()]
     end query.available_compilers
   end
 
@@ -222,6 +223,9 @@ let get_html ~logdir query pkgs =
     charset;
     style [style_table; style_thead; style_col; style_case; style_pkgname; style_row; style_a;
            style_cell_good; style_cell_partial; style_cell_bad; style_cell_not_available; style_cell_internal_failure];
+    link ~rel:[`Stylesheet] ~href:"http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css" ();
+    script ~a:[a_src "http://code.jquery.com/jquery-1.11.1.min.js"] (txt "");
+    script ~a:[a_src "http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"] (txt "");
   ] in
   let compilers_text = [txt "Show only:"] in
   let compilers = comp_checkboxes ~name:"comp" query.compilers query in
@@ -248,8 +252,8 @@ let get_html ~logdir query pkgs =
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
   let filter_form = gen_table_form ~logdir query [
-    (compilers_text, compilers);
-    (show_available_text, show_available);
+    (compilers_text, [compilers]);
+    (show_available_text, [show_available]);
     (show_failures_only_text, [show_failures_only]);
     (show_diff_only_text, [show_diff_only]);
     (show_latest_only_text, [show_latest_only]);
