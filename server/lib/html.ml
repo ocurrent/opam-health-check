@@ -237,12 +237,21 @@ let get_html ~logdir query pkgs =
         display: inline;
       }
 
+      ul.ks-cboxtags li:first-child label {
+        border-top-left-radius: 10px;
+        border-bottom-left-radius: 10px;
+      }
+
+      ul.ks-cboxtags li:last-child label {
+        border-top-right-radius: 10px;
+        border-bottom-right-radius: 10px;
+      }
+
       ul.ks-cboxtags li label{
         display: inline-block;
         background-color: rgba(255, 255, 255, .9);
         border: 2px solid rgba(139, 139, 139, .3);
         color: #adadad;
-        border-radius: 10px;
         white-space: nowrap;
         margin: 3px 0px;
         user-select: none;
