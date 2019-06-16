@@ -245,12 +245,7 @@ let get_html ~logdir query pkgs =
         border-radius: 10px;
         white-space: nowrap;
         margin: 3px 0px;
-        -webkit-touch-callout: none;
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
         user-select: none;
-        -webkit-tap-highlight-color: transparent;
         transition: all .2s;
         font-size: 11px;
       }
