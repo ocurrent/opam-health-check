@@ -128,8 +128,7 @@ let result_legend query =
   let open Tyxml.Html in
   let legend = legend [b [txt "Legend:"]] in
   fieldset ~legend [table ~a:[a_style "white-space: nowrap;"] [
-    tr [td [txt "Available compilers:"]; td [txt (String.concat ", " (List.map Compiler.to_string query.available_compilers))]];
-    tr [td ~a:[a_class ["cell-good"]] [txt "☑"]; td [txt "Package successfully built"]];
+    tr [td ~a:[a_class ["cell-good"]; a_style "min-width: 10em;"] [txt "☑"]; td [txt "Package successfully built"]];
     tr [td ~a:[a_class ["cell-partial"]] [txt "☒"]; td [txt "One of the dependencies failed to build"]];
     tr [td ~a:[a_class ["cell-bad"]] [txt "☒"]; td [txt "Package failed to build"]];
     tr [td ~a:[a_class ["cell-not-available"]] [txt "☒"]; td [txt "Package is not available in this environment"]];
@@ -263,12 +262,12 @@ ul.ks-cboxtags li label::before {
     font-weight: 900;
     font-size: 12px;
     padding: 2px 6px 2px 2px;
-    content: "✓";
+    content: "+";
     transition: transform .3s ease-in-out;
 }
 
 ul.ks-cboxtags li input[type="checkbox"]:checked + label::before {
-    content: "+";
+    content: "✓";
     transform: rotate(-360deg);
     transition: transform .3s ease-in-out;
 }
