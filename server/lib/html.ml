@@ -225,70 +225,76 @@ let get_html ~logdir query pkgs =
     style [style_table; style_thead; style_col; style_case; style_pkgname; style_row; style_a;
            style_cell_good; style_cell_partial; style_cell_bad; style_cell_not_available; style_cell_internal_failure];
     style [Unsafe.data {|
-ul.ks-cboxtags {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-ul.ks-cboxtags li{
-    display: inline;
-}
-ul.ks-cboxtags li label{
-    display: inline-block;
-    background-color: rgba(255, 255, 255, .9);
-    border: 2px solid rgba(139, 139, 139, .3);
-    color: #adadad;
-    border-radius: 10px;
-    white-space: nowrap;
-    margin: 3px 0px;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    transition: all .2s;
-    font-size: 11px;
-}
+      /* Original source from: https://codepen.io/quinlo/pen/ReMRXz */
 
-ul.ks-cboxtags li label {
-    padding: 8px 12px;
-    cursor: pointer;
-}
+      ul.ks-cboxtags {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
 
-ul.ks-cboxtags li label::before {
-    display: inline-block;
-    text-rendering: auto;
-    font-weight: 900;
-    font-size: 12px;
-    padding: 2px 6px 2px 2px;
-    content: "+";
-    transition: transform .3s ease-in-out;
-}
+      ul.ks-cboxtags li{
+        display: inline;
+      }
 
-ul.ks-cboxtags li input[type="checkbox"]:checked + label::before {
-    content: "✓";
-    transform: rotate(-360deg);
-    transition: transform .3s ease-in-out;
-}
+      ul.ks-cboxtags li label{
+        display: inline-block;
+        background-color: rgba(255, 255, 255, .9);
+        border: 2px solid rgba(139, 139, 139, .3);
+        color: #adadad;
+        border-radius: 10px;
+        white-space: nowrap;
+        margin: 3px 0px;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        transition: all .2s;
+        font-size: 11px;
+      }
 
-ul.ks-cboxtags li input[type="checkbox"]:checked + label {
-    border: 2px solid #1bdbf8;
-    background-color: #12bbd4;
-    color: #fff;
-    transition: all .2s;
-}
+      ul.ks-cboxtags li label {
+        padding: 8px 12px;
+        cursor: pointer;
+      }
 
-ul.ks-cboxtags li input[type="checkbox"] {
-    display: absolute;
-}
-ul.ks-cboxtags li input[type="checkbox"] {
-    position: absolute;
-    opacity: 0;
-}
-ul.ks-cboxtags li input[type="checkbox"]:hover + label {
-    border: 2px solid #e9a1ff;
-}
+      ul.ks-cboxtags li label::before {
+        display: inline-block;
+        text-rendering: auto;
+        font-weight: 900;
+        font-size: 12px;
+        padding: 2px 6px 2px 2px;
+        content: "+";
+        transition: transform .3s ease-in-out;
+      }
+
+      ul.ks-cboxtags li input[type="checkbox"]:checked + label::before {
+        content: "✓";
+        transform: rotate(-360deg);
+        transition: transform .3s ease-in-out;
+      }
+
+      ul.ks-cboxtags li input[type="checkbox"]:checked + label {
+        border: 2px solid #1bdbf8;
+        background-color: #12bbd4;
+        color: #fff;
+        transition: all .2s;
+      }
+
+      ul.ks-cboxtags li input[type="checkbox"] {
+        display: absolute;
+      }
+
+      ul.ks-cboxtags li input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+      }
+
+      ul.ks-cboxtags li input[type="checkbox"]:hover + label {
+        border: 2px solid #e9a1ff;
+      }
     |}]
   ] in
   let compilers_text = [txt "Show only:"] in
