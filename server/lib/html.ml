@@ -225,11 +225,11 @@ let get_html ~logdir query pkgs =
     charset;
     style [style_table; style_thead; style_col; style_case; style_pkgname; style_row; style_a;
            style_cell_good; style_cell_partial; style_cell_bad; style_cell_not_available; style_cell_internal_failure];
-    link ~rel:[`Stylesheet] ~href:"https://use.fontawesome.com/releases/v5.4.1/css/all.css" ();
-    style [txt {|
+    style [Unsafe.data {|
 ul.ks-cboxtags {
     list-style: none;
-    padding: 20px;
+    padding: 0;
+    margin: 0;
 }
 ul.ks-cboxtags li{
     display: inline;
@@ -239,7 +239,7 @@ ul.ks-cboxtags li label{
     background-color: rgba(255, 255, 255, .9);
     border: 2px solid rgba(139, 139, 139, .3);
     color: #adadad;
-    border-radius: 25px;
+    border-radius: 10px;
     white-space: nowrap;
     margin: 3px 0px;
     -webkit-touch-callout: none;
@@ -249,6 +249,7 @@ ul.ks-cboxtags li label{
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     transition: all .2s;
+    font-size: 11px;
 }
 
 ul.ks-cboxtags li label {
@@ -258,20 +259,16 @@ ul.ks-cboxtags li label {
 
 ul.ks-cboxtags li label::before {
     display: inline-block;
-    font-style: normal;
-    font-variant: normal;
     text-rendering: auto;
-    -webkit-font-smoothing: antialiased;
-    font-family: "Font Awesome 5 Free";
     font-weight: 900;
     font-size: 12px;
     padding: 2px 6px 2px 2px;
-    content: "\f067";
+    content: "✓";
     transition: transform .3s ease-in-out;
 }
 
 ul.ks-cboxtags li input[type="checkbox"]:checked + label::before {
-    content: "\f00c";
+    content: "+";
     transform: rotate(-360deg);
     transition: transform .3s ease-in-out;
 }
