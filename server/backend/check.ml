@@ -117,6 +117,7 @@ let get_dockerfile ~conf switch =
   let open Dockerfile in
   from "ocaml/opam2:debian-unstable AS base" @@
   workdir "opam-repository" @@
+  run "opam switch 4.07" @@
   run "git pull origin master" @@
   run "opam update" @@
   run "opam depext -yui z3" @@
