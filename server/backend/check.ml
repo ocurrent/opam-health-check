@@ -85,6 +85,7 @@ let run_job ~conf ~pool ~stderr ~switch ~num workdir pkg =
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
+      Oca_lib.write_line_unix stderr ("["^num^"] succeeded.") >>= fun () ->
       Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch workdir))
     end begin function
     | Oca_lib.Process_failure 31 ->
@@ -93,7 +94,7 @@ let run_job ~conf ~pool ~stderr ~switch ~num workdir pkg =
             Oca_lib.write_line_unix stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
         | false ->
-            Oca_lib.write_line_unix stderr ("["^num^"] succeeded.") >>= fun () ->
+            Oca_lib.write_line_unix stderr ("["^num^"] failed.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
         end
     | Oca_lib.Process_failure 20 ->
