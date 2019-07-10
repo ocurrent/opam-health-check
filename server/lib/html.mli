@@ -27,3 +27,5 @@ val get_diff :
 val get_diff_list :
   (Server_workdirs.logdir * Server_workdirs.logdir) list ->
   string
+
+val get_run_list : Server_workdirs.logdir list -> string

@@ -153,11 +153,13 @@ let gen_table_form ~logdir l =
         content
   in
   let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last checks"]] in
+  let opam_previous_runs_uri = a ~a:[a_href "/run"] [b [txt "🔗 Previous runs"]] in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
     td [result_legend;
         p ~a:[a_style "text-align: right;"] [opam_repo_uri];
         p ~a:[a_style "text-align: right;"] [opam_diff_uri];
+        p ~a:[a_style "text-align: right;"] [opam_previous_runs_uri];
        ]
   ]]]]
 
@@ -458,4 +460,20 @@ let get_diff_list diffs =
       ]
   in
   let doc = html head (body (h2 [txt "Available diffs:"] :: diffs)) in
+  Format.sprintf "%a\n" (pp ()) doc
+
+let map_logdir logdir =
+  let open Tyxml.Html in
+  let date = Server_workdirs.get_logdir_time logdir in
+  let date = date_to_string date in
+  let logdir = Server_workdirs.get_logdir_name logdir in
+  li [a ~a:[a_href ("/run/"^logdir)] [txt ("Run made on the "^date)]]
+
+let get_run_list logdirs =
+  let open Tyxml.Html in
+  let title = title (txt "opam-health-check runs") in
+  let charset = meta ~a:[a_charset "utf-8"] () in
+  let head = head title [charset] in
+  let runs = List.map map_logdir logdirs in
+  let doc = html head (body [h2 [txt "Available runs:"]; ul runs]) in
   Format.sprintf "%a\n" (pp ()) doc

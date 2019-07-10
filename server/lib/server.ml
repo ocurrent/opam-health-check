@@ -85,6 +85,9 @@ module Make (Backend : Backend_intf.S) = struct
         parse_raw_query uri >>= fun query ->
         Cache.get_latest_html Backend.cache query >>= fun html ->
         serv_text ~content_type:"text/html" html
+    | ["run"] ->
+        Cache.get_html_run_list Backend.cache >>= fun html ->
+        serv_text ~content_type:"text/html" html
     | ["run";logdir] ->
         let logdir = Server_workdirs.logdir_from_string workdir logdir in
         parse_raw_query uri >>= fun query ->
