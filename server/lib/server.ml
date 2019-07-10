@@ -83,7 +83,12 @@ module Make (Backend : Backend_intf.S) = struct
     match path_from_uri uri with
     | [] ->
         parse_raw_query uri >>= fun query ->
-        Cache.get_html Backend.cache query >>= fun html ->
+        Cache.get_latest_html Backend.cache query >>= fun html ->
+        serv_text ~content_type:"text/html" html
+    | ["run";logdir] ->
+        let logdir = Server_workdirs.logdir_from_string workdir logdir in
+        parse_raw_query uri >>= fun query ->
+        Cache.get_html Backend.cache query logdir >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["diff"] ->
         Cache.get_html_diff_list Backend.cache >>=

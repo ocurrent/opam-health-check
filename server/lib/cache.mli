@@ -15,7 +15,8 @@ val clear_and_init :
   html_diff:(old_logdir:Server_workdirs.logdir -> new_logdir:Server_workdirs.logdir -> Html.diff -> string) ->
   unit
 
-val get_html : t -> Html.query -> string Lwt.t
+val get_html : t -> Html.query -> Server_workdirs.logdir -> string Lwt.t
+val get_latest_html : t -> Html.query -> string Lwt.t
 val get_logdirs : t -> Server_workdirs.logdir list Lwt.t
 val get_pkgs : logdir:Server_workdirs.logdir -> t -> Intf.Pkg.t list Lwt.t
 val get_compilers : old:bool -> t -> Intf.Compiler.t list Lwt.t

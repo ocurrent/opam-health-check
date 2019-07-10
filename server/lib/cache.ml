@@ -3,9 +3,10 @@ open Lwt.Infix
 open Intf
 
 module Html_cache = Hashtbl.Make (struct
-    type t = Html.query
+    type t = (Server_workdirs.logdir option * Html.query)
     let hash = Hashtbl.hash (* TODO: WRONG!! *)
-    let equal {Html.available_compilers; compilers; show_available; show_failures_only; show_diff_only; show_latest_only; sort_by_revdeps; maintainers; logsearch} y =
+    let equal (logdir1, {Html.available_compilers; compilers; show_available; show_failures_only; show_diff_only; show_latest_only; sort_by_revdeps; maintainers; logsearch}) (logdir2, y) =
+      Option.equal Server_workdirs.logdir_equal logdir1 logdir2 &&
       List.equal Compiler.equal available_compilers y.Html.available_compilers &&
       List.equal Compiler.equal compilers y.Html.compilers &&
       List.equal Compiler.equal show_available y.Html.show_available &&
@@ -127,21 +128,33 @@ let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_di
   self.html_diff_list <- self.pkgs_diff >|= call_html_diff_list;
   Html_cache.clear self.html_tbl
 
-let get_html self query =
+let get_html self query logdir =
   let aux ~logdir pkgs =
     pkgs >>= fun pkgs ->
     Html.get_html ~logdir query pkgs >>= fun html ->
-    Html_cache.add self.html_tbl query html;
+    Html_cache.add self.html_tbl (logdir, query) html;
     Lwt.return html
   in
-  self.pkgs >>= function
-  | (logdir, pkgs)::_ -> aux ~logdir:(Some logdir) pkgs
-  | [] -> aux ~logdir:None Lwt.return_nil
+  self.pkgs >>= fun pkgs ->
+  match logdir with
+  | Some logdir ->
+      let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
+      aux ~logdir:(Some logdir) pkgs
+  | None ->
+      aux ~logdir:None Lwt.return_nil
 
-let get_html self query =
-  match Html_cache.find_opt self.html_tbl query with
+let get_html self query logdir =
+  match Html_cache.find_opt self.html_tbl (logdir, query) with
   | Some html -> Lwt.return html
-  | None -> get_html self query
+  | None -> get_html self query logdir
+
+let get_latest_html self query =
+  self.pkgs >>= function
+  | (logdir, _)::_ -> get_html self query (Some logdir)
+  | [] -> get_html self query None
+
+let get_html self query logdir =
+  get_html self query (Some logdir)
 
 let get_logdirs self =
   self.logdirs
