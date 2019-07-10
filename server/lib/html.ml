@@ -124,7 +124,7 @@ let pkg_to_html logdir query pkg =
   let revdeps = td ~a:[a_style "text-align: center;"] [txt (string_of_int (Pkg.revdeps pkg))] in
   tr (td [txt (Pkg.full_name pkg)] :: List.map (instance_to_html ~pkg logdir (Pkg.instances pkg)) query.compilers@ [revdeps])
 
-let result_legend query =
+let result_legend =
   let open Tyxml.Html in
   let legend = legend [b [txt "Legend:"]] in
   fieldset ~legend [table ~a:[a_style "white-space: nowrap;"] [
@@ -139,7 +139,7 @@ let get_opam_repository_commit_url ~hash ~content =
   let open Tyxml.Html in
   a ~a:[a_href (github_url^"/commit/"^hash)] [content]
 
-let gen_table_form ~logdir query l =
+let gen_table_form ~logdir l =
   let open Tyxml.Html in
   let aux (txt, elts) = tr [td txt; td elts] in
   let legend = legend [b [txt "Filter form:"]] in
@@ -155,7 +155,7 @@ let gen_table_form ~logdir query l =
   let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last checks"]] in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
-    td [result_legend query;
+    td [result_legend;
         p ~a:[a_style "text-align: right;"] [opam_repo_uri];
         p ~a:[a_style "text-align: right;"] [opam_diff_uri];
        ]
@@ -325,7 +325,7 @@ let get_html ~logdir query pkgs =
   end query.compilers in
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form ~logdir query [
+  let filter_form = gen_table_form ~logdir [
     (compilers_text, [compilers]);
     (show_available_text, [show_available]);
     (show_failures_only_text, [show_failures_only]);
