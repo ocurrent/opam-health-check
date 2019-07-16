@@ -360,22 +360,21 @@ let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; d
   in
   let old_logdir = Server_workdirs.get_logdir_name old_logdir in
   let new_logdir = Server_workdirs.get_logdir_name new_logdir in
-  let get_status_elm ~old status =
+  let get_status_elm ~logdir status =
     let status_str = Intf.State.to_string status in
     let status = print_status status in
-    let logdir = if old then old_logdir else new_logdir in
     a ~a:[a_href ("/log/"^logdir^"/"^comp_str^"/"^status_str^"/"^full_name)] [status]
   in
   let diff = match diff with
     | Intf.Pkg_diff.StatusChanged (old_status, new_status) ->
-        let old_status = get_status_elm ~old:true old_status in
-        let new_status = get_status_elm ~old:false new_status in
+        let old_status = get_status_elm ~logdir:old_logdir old_status in
+        let new_status = get_status_elm ~logdir:new_logdir new_status in
         [txt " had its build status changed: "; old_status; txt " to "; new_status]
     | Intf.Pkg_diff.NowInstallable new_status ->
-        let new_status = get_status_elm ~old:false new_status in
+        let new_status = get_status_elm ~logdir:new_logdir new_status in
         [txt " is now installable. Current state is: "; new_status]
     | Intf.Pkg_diff.NotAvailableAnymore old_status ->
-        let old_status = get_status_elm ~old:true old_status in
+        let old_status = get_status_elm ~logdir:old_logdir old_status in
         [txt " is not available anymore. Previous state was: "; old_status]
   in
   li (prefix @ diff)

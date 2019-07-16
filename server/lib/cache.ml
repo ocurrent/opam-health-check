@@ -168,11 +168,13 @@ let get_logdirs self =
 let get_pkgs ~logdir self =
   self.pkgs >>= List.assoc ~eq:Server_workdirs.logdir_equal logdir
 
-let get_compilers ~old self =
+let get_compilers ~logdir self =
+  self.compilers >>= List.assoc ~eq:Server_workdirs.logdir_equal logdir
+
+let get_latest_compilers self =
   self.compilers >>= function
-  | (_, compilers)::_ when not old -> compilers
-  | _::(_, compilers)::_ when old -> compilers
-  | _ -> Lwt.return_nil
+  | (_, compilers)::_ -> compilers
+  | [] -> Lwt.fail Not_found
 
 let get_maintainers self k =
   self.maintainers >|= fun maintainers ->

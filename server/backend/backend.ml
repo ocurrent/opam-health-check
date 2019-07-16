@@ -57,11 +57,11 @@ let add_pkg full_name instances acc =
   Oca_server.Cache.get_revdeps cache full_name >|= fun revdeps ->
   Intf.Pkg.create ~full_name ~instances ~maintainers ~revdeps :: acc
 
-let get_pkgs ~old workdir =
+let get_pkgs ~old logdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
-  Oca_server.Cache.get_compilers ~old cache >>= fun compilers ->
+  Oca_server.Cache.get_compilers ~logdir cache >>= fun compilers ->
   let pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit) in
-  Lwt_list.iter_s (fill_pkgs_from_dir ~old ~pool pkg_tbl workdir) compilers >>= fun () ->
+  Lwt_list.iter_s (fill_pkgs_from_dir ~old ~pool pkg_tbl logdir) compilers >>= fun () ->
   Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
   List.sort Intf.Pkg.compare
 
@@ -138,7 +138,7 @@ let start conf workdir =
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
   cache_clear_and_init workdir;
-  Server_configfile.set_default_ocaml_switches conf (fun () -> Oca_server.Cache.get_compilers ~old:false cache) >>= fun () ->
+  Server_configfile.set_default_ocaml_switches conf (fun () -> Oca_server.Cache.get_latest_compilers cache) >>= fun () ->
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->
   let task () =

@@ -39,7 +39,7 @@ module Make (Backend : Backend_intf.S) = struct
       end logsearch (Uri.get_query_param uri "logsearch_comp")
     in
     let logsearch = (option_to_string logsearch, logsearch') in
-    Cache.get_compilers ~old:false Backend.cache >>= fun available_compilers ->
+    Cache.get_latest_compilers Backend.cache >>= fun available_compilers ->
     let compilers = match compilers with
       | [] -> available_compilers
       | compilers -> List.map Intf.Compiler.from_string compilers
