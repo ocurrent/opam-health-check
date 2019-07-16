@@ -110,20 +110,21 @@ module Make (Backend : Backend_intf.S) = struct
     | _ ->
         failwith "path non recognized: 404"
 
-  let tcp_server port callback =
+  let tcp_server ~debug port callback =
+    Printexc.record_backtrace debug;
     Cohttp_lwt_unix.Server.create
-      ~on_exn:(fun _ -> ())
+      ~on_exn:(fun e -> if debug then prerr_endline Printexc.(get_backtrace () ^ to_string e))
       ~mode:(`TCP (`Port port))
       (Cohttp_lwt_unix.Server.make ~callback ())
 
-  let main ~workdir =
+  let main ~debug ~workdir =
     let workdir = Server_workdirs.create ~workdir in
     Server_workdirs.init_base workdir >>= fun () ->
     let conf = Server_configfile.from_workdir workdir in
     let port = Server_configfile.port conf in
     Backend.start conf workdir >>= fun (backend, backend_task) ->
     Lwt.join [
-      tcp_server port (callback workdir backend);
+      tcp_server ~debug port (callback workdir backend);
       backend_task ();
     ]
 end
