@@ -56,7 +56,12 @@ let get_pkgs ~conf ~stderr switch =
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   docker_run_to_str ~stderr ~img_name [] >>= fun pkgs ->
   let rgen = Random.int_range (-1) 1 in
-  let pkgs = List.filter Oca_lib.is_valid_filename pkgs in
+  let pkgs = List.filter begin fun pkg ->
+    Oca_lib.is_valid_filename pkg &&
+    match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
+    | "ocaml" | "ocaml-base-compiler" | "ocaml-variants" -> false
+    | _ -> true
+  end pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
   let nelts = string_of_int (List.length pkgs) in
   Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
