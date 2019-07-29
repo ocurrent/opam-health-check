@@ -168,16 +168,16 @@ let comp_checkboxes ~name checked query =
   ul ~a:[a_class ["ks-cboxtags"]] begin
     List.map begin fun comp ->
       let comp_str = Compiler.to_string comp in
-      let random = Random.run (Random.int 1000) in
+      let id = "id_"^name^"_"^comp_str in
       li [
         input
           ~a:(a_input_type `Checkbox ::
               a_name name ::
               a_value comp_str ::
-              a_id (string_of_int random) ::
+              a_id id ::
               if List.mem ~eq:Compiler.equal comp checked then [a_checked ()] else [])
           ();
-        label ~a:[a_label_for (string_of_int random)] [txt comp_str];
+        label ~a:[a_label_for id] [txt comp_str];
       ]
     end query.available_compilers
   end
