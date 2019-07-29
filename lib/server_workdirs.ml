@@ -72,10 +72,7 @@ let maintainersfile ~pkg workdir = maintainersdir workdir/pkg
 let revdepsdir workdir = metadatadir workdir/"revdeps"
 let revdepsfile ~pkg workdir = revdepsdir workdir/pkg
 
-let tmpmaintainersdir workdir = tmpdir workdir/"maintainers"
-let tmpmaintainersfile ~pkg workdir = tmpmaintainersdir workdir/pkg
-let tmprevdepsdir workdir = tmpdir workdir/"revdeps"
-let tmprevdepsfile ~pkg workdir = tmprevdepsdir workdir/pkg
+let tmpmetadatadir workdir = tmpdir workdir/"metadata"
 
 let configfile workdir = workdir/"config.yaml"
 let file_from_logdir ~file logdir =
@@ -93,8 +90,7 @@ let init_base workdir =
 let init_base_jobs ~stderr workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string (tmpdir workdir)] >>= fun () ->
   Oca_lib.mkdir_p (tmplogdir workdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpmaintainersdir workdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmprevdepsdir workdir)
+  Oca_lib.mkdir_p (tmpmetadatadir workdir)
 
 let init_base_job ~switch workdir =
   Oca_lib.mkdir_p (tmpgooddir ~switch workdir) >>= fun () ->

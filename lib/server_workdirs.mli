@@ -37,15 +37,13 @@ val tmpbadlog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 val tmpnotavailablelog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 val tmpinternalfailurelog : pkg:string -> switch:Intf.Compiler.t -> t -> Fpath.t
 
+val metadatadir : t -> Fpath.t
 val maintainersdir : t -> Fpath.t
 val maintainersfile : pkg:string -> t -> Fpath.t
 val revdepsdir : t -> Fpath.t
 val revdepsfile : pkg:string -> t -> Fpath.t
 
-val tmpmaintainersdir : t -> Fpath.t
-val tmpmaintainersfile : pkg:string -> t -> Fpath.t
-val tmprevdepsdir : t -> Fpath.t
-val tmprevdepsfile : pkg:string -> t -> Fpath.t
+val tmpmetadatadir : t -> Fpath.t
 
 val configfile : t -> Fpath.t
 val file_from_logdir : file:string -> logdir -> Fpath.t

@@ -21,8 +21,12 @@ let docker_build ~conf ~cached ~stderr ~img_name dockerfile =
   Lwt_unix.close fd >>= fun () ->
   proc
 
-let docker_run ~stdout ~stderr img cmd =
-  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
+let docker_run ~stdout ~stderr ?volume img cmd =
+  let volume = match volume with
+    | Some (local_dir, docker_dir) -> ["-v";local_dir^":"^docker_dir]
+    | None -> []
+  in
+  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::volume@img::cmd)
 
 let rec read_lines fd =
   Lwt_io.read_line_opt fd >>= function
@@ -155,16 +159,6 @@ let with_stderr workdir f =
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
   Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
-let rec parse_maintainers acc = function
-  | x::xs ->
-      let len = String.length x in
-      if len > 2 && Char.equal x.[0] '"' && Char.equal x.[len - 1] '"' then
-        parse_maintainers (acc ^ String.sub x 1 (len - 2)) xs
-      else
-        parse_maintainers acc xs
-  | [] ->
-      acc
-
 let build_switch ~stderr ~cached conf workdir switch =
   let img_name = get_img_name ~conf switch in
   docker_build ~conf ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
@@ -174,25 +168,32 @@ let build_switch ~stderr ~cached conf workdir switch =
 
 module Pkg_set = Set.Make (String)
 
-let get_maintainers ~conf ~pool ~stderr switch workdir pkg =
-  let img_name = get_img_name ~conf switch in
-  Lwt_pool.use pool begin fun () ->
-    Oca_lib.write_line_unix stderr ("Getting the list of maintainers for "^pkg^"...") >>= fun () ->
-    docker_run_to_str ~stderr ~img_name ["opam";"show";"-f";"maintainer:";pkg] >>= fun maintainers ->
-    let maintainers = parse_maintainers "" maintainers in
-    let file = Server_workdirs.tmpmaintainersfile ~pkg workdir in
-    Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c maintainers)
-  end
+let metadata_script pkgs = {|
+root=/metadata
+revdeps_dir=$root/revdeps
+maintainers_dir=$root/maintainers
+all_dir=$revdeps_dir $maintainers_dir
+mkdir $all_dir
+prev_pkg=
+for pkg in |}^pkgs^{|; do
+    echo $(opam list -s --recursive --depopts --depends-on "$pkg" | wc -l) - 1 | bc > "$revdeps_dir/$pkg"
+    pkg_name=$(echo "$pkg" | sed -E 's/^([^.]*).*$/\1/')
+    if [ "$pkg_name" != "$prev_pkg" ]; then
+        opam show -f maintainer: "$pkg_name" | sed -E 's/^"(.*)"$/\1/' > "$maintainers_dir/$pkg_name"
+        prev_pkg=$pkg_name
+    fi
+done
+chown -R $(stat -c '%u' $root):$(stat -c '%g' $root) $all_dir
+|}
 
-let get_revdeps ~conf ~pool ~stderr switch workdir pkg =
+let get_metadata ~conf ~pool ~stderr switch workdir pkgs =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
-    Oca_lib.write_line_unix stderr ("Getting the number of revdeps for "^pkg^"...") >>= fun () ->
-    docker_run_to_str ~stderr ~img_name ["opam";"list";"-s";"--recursive";"--depopts";"--depends-on";pkg] >>= fun revdeps ->
-    let revdeps = List.length revdeps - 1 in (* NOTE: -1 before opam list --recursive lists the package itself as a revdeps *)
-    let revdeps = string_of_int revdeps in
-    let file = Server_workdirs.tmprevdepsfile ~pkg workdir in
-    Lwt_io.with_file ~mode:Lwt_io.Output (Fpath.to_string file) (fun c -> Lwt_io.write c revdeps)
+    Oca_lib.write_line_unix stderr ("Getting all the metadata...") >>= fun () ->
+    let metadatadir = Fpath.to_string (Server_workdirs.tmpmetadatadir workdir) in
+    let pkgs = Pkg_set.fold (fun acc pkg -> acc^" "^pkg) pkgs "" in
+    let metadata_script = metadata_script pkgs in
+    docker_run ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["sh";"-c";metadata_script]
   end
 
 let get_git_hash ~stderr switch conf =
@@ -213,32 +214,24 @@ let move_tmpdirs_to_final ~hash ~stderr cache workdir =
   let logdir = Server_workdirs.new_logdir ~hash workdir in
   let logdir_path = Server_workdirs.get_logdir_path logdir in
   let tmplogdir = Server_workdirs.tmplogdir workdir in
-  let maintainersdir = Server_workdirs.maintainersdir workdir in
-  let tmpmaintainersdir = Server_workdirs.tmpmaintainersdir workdir in
-  let revdepsdir = Server_workdirs.revdepsdir workdir in
-  let tmprevdepsdir = Server_workdirs.tmprevdepsdir workdir in
+  let metadatadir = Server_workdirs.metadatadir workdir in
+  let tmpmetadatadir = Server_workdirs.tmpmetadatadir workdir in
   Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir_path) >>= fun () ->
   (* TODO: replace by Oca_lib.rm_rf *)
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string maintainersdir] >>= fun () ->
-  Lwt_unix.rename (Fpath.to_string tmpmaintainersdir) (Fpath.to_string maintainersdir) >>= fun () ->
-  (* TODO: replace by Oca_lib.rm_rf *)
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string revdepsdir] >>= fun () ->
-  Lwt_unix.rename (Fpath.to_string tmprevdepsdir) (Fpath.to_string revdepsdir) >|= fun () ->
+  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
+  Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) >|= fun () ->
   (old_logdir, logdir)
 
 let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
   let len_suffix = "/"^string_of_int (List.fold_left (fun n (_, pkgs) -> n + List.length pkgs) 0 pkgs) in
-  List.fold_left begin fun (i, jobs, pkgs_set, full_pkgs_set) (switch, pkgs) ->
-    List.fold_left begin fun (i, jobs, pkgs_set, full_pkgs_set) full_name ->
+  List.fold_left begin fun (i, jobs, full_pkgs_set) (switch, pkgs) ->
+    List.fold_left begin fun (i, jobs, full_pkgs_set) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
       let job = run_job ~conf ~pool ~stderr ~switch ~num workdir full_name in
-      let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
-      let jobs = if Pkg_set.mem pkg pkgs_set then jobs else get_maintainers ~conf ~pool ~stderr switch workdir pkg :: jobs in
-      let jobs = if Pkg_set.mem full_name full_pkgs_set then jobs else get_revdeps ~conf ~pool ~stderr switch workdir full_name :: jobs in
-      (i, job :: jobs, Pkg_set.add pkg pkgs_set, Pkg_set.add full_name full_pkgs_set)
-    end (i, jobs, pkgs_set, full_pkgs_set) pkgs
-  end (0, [], Pkg_set.empty, Pkg_set.empty) pkgs
+      (i, job :: jobs, Pkg_set.add full_name full_pkgs_set)
+    end (i, jobs, full_pkgs_set) pkgs
+  end (0, [], Pkg_set.empty) pkgs
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   let body = match old_logdir with
@@ -289,7 +282,8 @@ let run ~on_finished ~is_retry ~conf cache workdir =
           build_switch ~stderr ~cached:is_retry conf workdir switch >>= fun hd_pkgs ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
-          let (_, jobs, _, _) = run_and_get_pkgs ~conf ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
+          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
+          let jobs = get_metadata ~conf ~pool ~stderr switch workdir pkgs :: jobs in
           Lwt.join jobs >>= fun () ->
           get_git_hash ~stderr switch conf
       | [] ->
