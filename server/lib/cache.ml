@@ -174,7 +174,7 @@ let get_compilers ~logdir self =
 let get_latest_compilers self =
   self.compilers >>= function
   | (_, compilers)::_ -> compilers
-  | [] -> Lwt.fail Not_found
+  | [] -> Lwt.return_nil
 
 let get_maintainers self k =
   self.maintainers >|= fun maintainers ->
