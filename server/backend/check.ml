@@ -190,7 +190,9 @@ let get_metadata ~conf ~pool ~stderr switch workdir pkgs =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("Getting all the metadata...") >>= fun () ->
-    let metadatadir = Fpath.to_string (Server_workdirs.tmpmetadatadir workdir) in
+    Lwt_unix.getcwd () >>= fun cwd ->
+    let metadatadir = Server_workdirs.tmpmetadatadir workdir in
+    let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
     let pkgs = Pkg_set.fold (fun acc pkg -> acc^" "^pkg) pkgs "" in
     let metadata_script = metadata_script pkgs in
     docker_run ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["sh";"-c";metadata_script]
