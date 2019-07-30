@@ -79,6 +79,7 @@ let get_maintainers workdir =
     let file = Server_workdirs.maintainersfile ~pkg workdir in
     Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) >|= fun content ->
     let content = String.split_on_char '\n' content in
+    let content = List.filter (fun pkg -> not (String.is_empty pkg)) content in
     Oca_server.Cache.Maintainers_cache.add maintainers pkg content
   end files >|= fun () ->
   maintainers
@@ -90,6 +91,8 @@ let get_revdeps workdir =
   Lwt_list.iter_s begin fun pkg ->
     let file = Server_workdirs.revdepsfile ~pkg workdir in
     Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) >|= fun content ->
+    let content = String.split_on_char '\n' content in
+    let content = List.hd content in
     let content = int_of_string content in
     Oca_server.Cache.Revdeps_cache.add revdeps pkg content
   end files >|= fun () ->
