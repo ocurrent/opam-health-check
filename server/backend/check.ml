@@ -169,21 +169,26 @@ let build_switch ~stderr ~cached conf workdir switch =
 module Pkg_set = Set.Make (String)
 
 let metadata_script pkgs = {|
+sudo apt-get -qq install bc &> /dev/null
+
 root=/metadata
 revdeps_dir=$root/revdeps
 maintainers_dir=$root/maintainers
-all_dir=$revdeps_dir $maintainers_dir
-mkdir $all_dir
+
+user=$(stat -c '%u' $root)
+group=$(stat -c '%g' $root)
+sudo="sudo -u #$user -g #$group"
+
+$sudo mkdir $revdeps_dir $maintainers_dir
 prev_pkg=
 for pkg in |}^pkgs^{|; do
-    echo $(opam list -s --recursive --depopts --depends-on "$pkg" | wc -l) - 1 | bc > "$revdeps_dir/$pkg"
+    echo $(opam list -s --recursive --depopts --depends-on "$pkg" | wc -l) - 1 | bc | $sudo tee "$revdeps_dir/$pkg" > /dev/null
     pkg_name=$(echo "$pkg" | sed -E 's/^([^.]*).*$/\1/')
     if [ "$pkg_name" != "$prev_pkg" ]; then
-        opam show -f maintainer: "$pkg_name" | sed -E 's/^"(.*)"$/\1/' > "$maintainers_dir/$pkg_name"
+        opam show -f maintainer: "$pkg_name" | sed -E 's/^"(.*)"$/\1/' | $sudo tee "$maintainers_dir/$pkg_name" > /dev/null
         prev_pkg=$pkg_name
     fi
 done
-chown -R $(stat -c '%u' $root):$(stat -c '%g' $root) $all_dir
 |}
 
 let get_metadata ~conf ~pool ~stderr switch workdir pkgs =
@@ -195,7 +200,7 @@ let get_metadata ~conf ~pool ~stderr switch workdir pkgs =
     let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
     let pkgs = Pkg_set.fold (fun acc pkg -> acc^" "^pkg) pkgs "" in
     let metadata_script = metadata_script pkgs in
-    docker_run ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["sh";"-c";metadata_script]
+    docker_run ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["bash";"-c";metadata_script]
   end
 
 let get_git_hash ~stderr switch conf =
