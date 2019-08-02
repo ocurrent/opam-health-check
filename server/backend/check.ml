@@ -21,12 +21,17 @@ let docker_build ~conf ~cached ~stderr ~img_name dockerfile =
   Lwt_unix.close fd >>= fun () ->
   proc
 
-let docker_run ~stdout ~stderr ?volume img cmd =
-  let volume = match volume with
-    | Some (local_dir, docker_dir) -> ["-v";local_dir^":"^docker_dir]
-    | None -> []
-  in
-  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::volume@img::cmd)
+let docker_run ~stdout ~stderr img cmd =
+  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
+
+let docker_run_with_stdin_and_volume ~stdin_content ~stdout ~stderr ~volume:(local_dir, docker_dir) img cmd =
+  let stdin, fd = Lwt_unix.pipe () in
+  let stdin = `FD_move stdin in
+  Lwt_unix.set_close_on_exec fd;
+  let proc = Oca_lib.exec ~stdin ~stdout ~stderr ("docker"::"run"::"--rm"::"-i"::"-v"::(local_dir^":"^docker_dir)::img::cmd) in
+  Lwt_list.iter_s (Oca_lib.write_line_unix fd) stdin_content >>= fun () ->
+  Lwt_unix.close fd >>= fun () ->
+  proc
 
 let rec read_lines fd =
   Lwt_io.read_line_opt fd >>= function
@@ -168,7 +173,7 @@ let build_switch ~stderr ~cached conf workdir switch =
 
 module Pkg_set = Set.Make (String)
 
-let metadata_script pkgs = {|
+let metadata_script = {|
 sudo apt-get -qq install bc &> /dev/null
 
 root=/metadata
@@ -181,7 +186,7 @@ sudo="sudo -u #$user -g #$group"
 
 $sudo mkdir $revdeps_dir $maintainers_dir
 prev_pkg=
-for pkg in |}^pkgs^{|; do
+while read pkg; do
     echo $(opam list -s --recursive --depopts --depends-on "$pkg" | wc -l) - 1 | bc | $sudo tee "$revdeps_dir/$pkg" > /dev/null
     pkg_name=$(echo "$pkg" | sed -E 's/^([^.]*).*$/\1/')
     if [ "$pkg_name" != "$prev_pkg" ]; then
@@ -198,9 +203,8 @@ let get_metadata ~conf ~pool ~stderr switch workdir pkgs =
     Lwt_unix.getcwd () >>= fun cwd ->
     let metadatadir = Server_workdirs.tmpmetadatadir workdir in
     let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
-    let pkgs = Pkg_set.fold (fun acc pkg -> acc^" "^pkg) pkgs "" in
-    let metadata_script = metadata_script pkgs in
-    docker_run ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["bash";"-c";metadata_script]
+    let stdin_content = Pkg_set.elements pkgs in
+    docker_run_with_stdin_and_volume ~stdin_content ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["bash";"-c";metadata_script]
   end
 
 let get_git_hash ~stderr switch conf =
