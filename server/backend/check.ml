@@ -28,7 +28,7 @@ let docker_run_with_stdin_and_volume ~stdin_content ~stdout ~stderr ~volume:(loc
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
   Lwt_unix.set_close_on_exec fd;
-  let proc = Oca_lib.exec ~stdin ~stdout ~stderr ("docker"::"run"::"--rm"::"-i"::"-v"::(local_dir^":"^docker_dir)::img::cmd) in
+  let proc = Oca_lib.exec ~timeout:48 ~stdin ~stdout ~stderr ("docker"::"run"::"--rm"::"-i"::"-v"::(local_dir^":"^docker_dir)::img::cmd) in
   Lwt_list.iter_s (Oca_lib.write_line_unix fd) stdin_content >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
   proc
@@ -239,10 +239,10 @@ let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
     List.fold_left begin fun (i, jobs, full_pkgs_set) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job = run_job ~conf ~pool ~stderr ~switch ~num workdir full_name in
-      (i, job :: jobs, Pkg_set.add full_name full_pkgs_set)
+      let job () = run_job ~conf ~pool ~stderr ~switch ~num workdir full_name in
+      (i, (fun () -> job () :: jobs ()), Pkg_set.add full_name full_pkgs_set)
     end (i, jobs, full_pkgs_set) pkgs
-  end (0, [], Pkg_set.empty) pkgs
+  end (0, (fun () -> []), Pkg_set.empty) pkgs
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   let body = match old_logdir with
@@ -294,8 +294,9 @@ let run ~on_finished ~is_retry ~conf cache workdir =
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
           let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
-          let jobs = get_metadata ~conf ~pool ~stderr switch workdir pkgs :: jobs in
-          Lwt.join jobs >>= fun () ->
+          let metadata_job = get_metadata ~conf ~pool ~stderr switch workdir pkgs in
+          Lwt.join (jobs ()) >>= fun () ->
+          Lwt.pick [metadata_job; Lwt.return ()] >>= fun () ->
           get_git_hash ~stderr switch conf
       | [] ->
           Lwt.fail_with "No switches"

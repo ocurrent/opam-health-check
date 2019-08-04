@@ -67,7 +67,7 @@ let proc_fd_of_unix = function
 exception Process_failure of int
 exception Internal_failure
 
-let exec ~stdin ~stdout ~stderr cmd =
+let exec ?(timeout=5) ~stdin ~stdout ~stderr cmd =
   let stdin = proc_fd_of_unix stdin in
   let stdout = proc_fd_of_unix (`FD_copy stdout) in
   let stderr_lwt = stderr in
@@ -85,7 +85,7 @@ let exec ~stdin ~stdout ~stderr cmd =
   in
   (* NOTE: any processes shouldn't take more than 5 hours *)
   let timeout =
-    let hours = 5 in
+    let hours = timeout in
     Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
     let cmd = String.concat " " cmd in
     write_line_unix stderr_lwt ("Command '"^cmd^"' timed-out ("^string_of_int hours^" hours).") >>= fun () ->

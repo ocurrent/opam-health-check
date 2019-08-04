@@ -12,6 +12,7 @@ exception Process_failure of int
 exception Internal_failure
 
 val exec :
+  ?timeout:int ->
   stdin:[< `Close
         | `Dev_null
         | `FD_copy of Lwt_unix.file_descr
