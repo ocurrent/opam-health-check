@@ -187,12 +187,13 @@ sudo="sudo -u #$user -g #$group"
 $sudo mkdir $revdeps_dir $maintainers_dir
 prev_pkg=
 while read pkg; do
-    echo $(opam list -s --recursive --depopts --depends-on "$pkg" | wc -l) - 1 | bc | $sudo tee "$revdeps_dir/$pkg" > /dev/null
+    echo $(opam list -s --recursive --depopts --depends-on "$pkg" | wc -l) - 1 | bc | $sudo tee "$revdeps_dir/$pkg" > /dev/null &
     pkg_name=$(echo "$pkg" | sed -E 's/^([^.]*).*$/\1/')
     if [ "$pkg_name" != "$prev_pkg" ]; then
         opam show -f maintainer: "$pkg_name" | sed -E 's/^"(.*)"$/\1/' | $sudo tee "$maintainers_dir/$pkg_name" > /dev/null
         prev_pkg=$pkg_name
     fi
+    [ $(jobs | wc -l) -gt $0 ] && wait
 done
 |}
 
@@ -204,7 +205,8 @@ let get_metadata ~conf ~pool ~stderr switch workdir pkgs =
     let metadatadir = Server_workdirs.tmpmetadatadir workdir in
     let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
     let stdin_content = Pkg_set.elements pkgs in
-    docker_run_with_stdin_and_volume ~stdin_content ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["bash";"-c";metadata_script]
+    let max_thread = string_of_int (Server_configfile.processes conf) in
+    docker_run_with_stdin_and_volume ~stdin_content ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["bash";"-c";metadata_script;max_thread]
   end
 
 let get_git_hash ~stderr switch conf =
