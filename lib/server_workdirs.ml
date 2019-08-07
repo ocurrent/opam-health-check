@@ -14,8 +14,6 @@ let create ~workdir = Fpath.v workdir
 let keysdir workdir = workdir/"keys"
 let keyfile ~username workdir = keysdir workdir/username+"key"
 
-let tmpdir workdir = workdir/"tmp"
-
 type logdir = Logdir of float * string * t
 
 let logdir_from_string workdir s =
@@ -24,7 +22,8 @@ let logdir_from_string workdir s =
   | _ -> assert false
 
 let base_logdir workdir = workdir/"logs"
-let new_logdir ~hash workdir = Logdir (Unix.time (), hash, workdir)
+let base_tmpdir workdir = workdir/"tmp"
+let new_logdir ~hash ~start_time workdir = Logdir (start_time, hash, workdir)
 let logdirs workdir =
   Oca_lib.get_files (base_logdir workdir) >|= fun dirs ->
   let dirs = List.sort (fun x y -> -String.compare x y) dirs in
@@ -40,10 +39,10 @@ let get_logdir_path (Logdir (_, _, workdir) as logdir) = base_logdir workdir/get
 let get_logdir_hash (Logdir (_, hash, _)) = hash
 let get_logdir_time (Logdir (time, _, _)) = time
 
-let tmplogdir workdir = tmpdir workdir/"logs"
+let tmplogdir (Logdir (_, _, workdir) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"logs"
 
 let ilogdir workdir = workdir/"ilogs"
-let ilogfile workdir = ilogdir workdir/Printf.sprintf "%.0f" (Unix.time ())
+let new_ilogfile ~start_time workdir = ilogdir workdir/Printf.sprintf "%.0f" start_time
 
 let switchlogdir ~switch logdir = get_logdir_path logdir/Intf.Compiler.to_string switch
 let gooddir ~switch logdir = switchlogdir ~switch logdir/"good"
@@ -52,19 +51,19 @@ let baddir ~switch logdir = switchlogdir ~switch logdir/"bad"
 let notavailabledir ~switch logdir = switchlogdir ~switch logdir/"not-available"
 let internalfailuredir ~switch logdir = switchlogdir ~switch logdir/"internal-failure"
 
-let tmpswitchlogdir ~switch workdir = tmplogdir workdir/Intf.Compiler.to_string switch
-let tmpgooddir ~switch workdir = tmpswitchlogdir ~switch workdir/"good"
-let tmppartialdir ~switch workdir = tmpswitchlogdir ~switch workdir/"partial"
-let tmpbaddir ~switch workdir = tmpswitchlogdir ~switch workdir/"bad"
-let tmpnotavailabledir ~switch workdir = tmpswitchlogdir ~switch workdir/"not-available"
-let tmpinternalfailuredir ~switch workdir = tmpswitchlogdir ~switch workdir/"internal-failure"
-let tmplogfile ~pkg ~switch workdir = tmpswitchlogdir ~switch workdir/pkg
+let tmpswitchlogdir ~switch logdir = get_logdir_path logdir/Intf.Compiler.to_string switch
+let tmpgooddir ~switch logdir = tmpswitchlogdir ~switch logdir/"good"
+let tmppartialdir ~switch logdir = tmpswitchlogdir ~switch logdir/"partial"
+let tmpbaddir ~switch logdir = tmpswitchlogdir ~switch logdir/"bad"
+let tmpnotavailabledir ~switch logdir = tmpswitchlogdir ~switch logdir/"not-available"
+let tmpinternalfailuredir ~switch logdir = tmpswitchlogdir ~switch logdir/"internal-failure"
+let tmplogfile ~pkg ~switch logdir = tmpswitchlogdir ~switch logdir/pkg
 
-let tmpgoodlog ~pkg ~switch workdir = tmpgooddir ~switch workdir/pkg
-let tmppartiallog ~pkg ~switch workdir = tmppartialdir ~switch workdir/pkg
-let tmpbadlog ~pkg ~switch workdir = tmpbaddir ~switch workdir/pkg
-let tmpnotavailablelog ~pkg ~switch workdir = tmpnotavailabledir ~switch workdir/pkg
-let tmpinternalfailurelog ~pkg ~switch workdir = tmpinternalfailuredir ~switch workdir/pkg
+let tmpgoodlog ~pkg ~switch logdir = tmpgooddir ~switch logdir/pkg
+let tmppartiallog ~pkg ~switch logdir = tmppartialdir ~switch logdir/pkg
+let tmpbadlog ~pkg ~switch logdir = tmpbaddir ~switch logdir/pkg
+let tmpnotavailablelog ~pkg ~switch logdir = tmpnotavailabledir ~switch logdir/pkg
+let tmpinternalfailurelog ~pkg ~switch logdir = tmpinternalfailuredir ~switch logdir/pkg
 
 let metadatadir workdir = workdir/"metadata"
 let maintainersdir workdir = metadatadir workdir/"maintainers"
@@ -72,7 +71,7 @@ let maintainersfile ~pkg workdir = maintainersdir workdir/pkg
 let revdepsdir workdir = metadatadir workdir/"revdeps"
 let revdepsfile ~pkg workdir = revdepsdir workdir/pkg
 
-let tmpmetadatadir workdir = tmpdir workdir/"metadata"
+let tmpmetadatadir (Logdir (_, _, workdir) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"metadata"
 
 let configfile workdir = workdir/"config.yaml"
 let file_from_logdir ~file logdir =
@@ -87,14 +86,14 @@ let init_base workdir =
   Oca_lib.mkdir_p (maintainersdir workdir) >>= fun () ->
   Oca_lib.mkdir_p (revdepsdir workdir)
 
-let init_base_jobs ~stderr workdir =
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string (tmpdir workdir)] >>= fun () ->
-  Oca_lib.mkdir_p (tmplogdir workdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpmetadatadir workdir)
+let init_base_job ~switch logdir =
+  Oca_lib.mkdir_p (tmpgooddir ~switch logdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmppartialdir ~switch logdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpbaddir ~switch logdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpnotavailabledir ~switch logdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpinternalfailuredir ~switch logdir)
 
-let init_base_job ~switch workdir =
-  Oca_lib.mkdir_p (tmpgooddir ~switch workdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmppartialdir ~switch workdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpbaddir ~switch workdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpnotavailabledir ~switch workdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpinternalfailuredir ~switch workdir)
+let init_base_jobs ~switches logdir =
+  Oca_lib.mkdir_p (tmplogdir logdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpmetadatadir logdir) >>= fun () ->
+  Lwt_list.iter_s (fun switch -> init_base_job ~switch logdir) switches

@@ -87,11 +87,11 @@ let is_partial_failure logfile =
     lookup ()
   end
 
-let run_job ~conf ~pool ~stderr ~switch ~num workdir pkg =
+let run_job ~conf ~pool ~stderr ~switch ~num logdir pkg =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Compiler.to_string switch^"...") >>= fun () ->
-    let logfile = Server_workdirs.tmplogfile ~pkg ~switch workdir in
+    let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
@@ -100,23 +100,23 @@ let run_job ~conf ~pool ~stderr ~switch ~num workdir pkg =
         Lwt_unix.close stdout
       end >>= fun () ->
       Oca_lib.write_line_unix stderr ("["^num^"] succeeded.") >>= fun () ->
-      Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch workdir))
+      Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
     end begin function
     | Oca_lib.Process_failure 31 ->
         is_partial_failure logfile >>= begin function
         | true ->
             Oca_lib.write_line_unix stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch workdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir))
         | false ->
             Oca_lib.write_line_unix stderr ("["^num^"] failed.") >>= fun () ->
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch workdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch logdir))
         end
     | Oca_lib.Process_failure 20 ->
         Oca_lib.write_line_unix stderr ("["^num^"] finished with not available.") >>= fun () ->
-        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch workdir))
+        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch logdir))
     | Oca_lib.Process_failure _ | Oca_lib.Internal_failure ->
         Oca_lib.write_line_unix stderr ("["^num^"] finished with an internal failure.") >>= fun () ->
-        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch workdir))
+        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch logdir))
     | e ->
         Lwt.fail e
     end
@@ -158,16 +158,15 @@ let get_dockerfile ~conf switch =
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
   cmd "%s" (Server_configfile.list_command conf)
 
-let with_stderr workdir f =
+let with_stderr ~start_time workdir f =
   Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) >>= fun () ->
-  let logfile = Server_workdirs.ilogfile workdir in
+  let logfile = Server_workdirs.new_ilogfile ~start_time workdir in
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
   Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
-let build_switch ~stderr ~cached conf workdir switch =
+let build_switch ~stderr ~cached conf switch =
   let img_name = get_img_name ~conf switch in
   docker_build ~conf ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
-  Server_workdirs.init_base_job ~switch workdir >>= fun () ->
   get_pkgs ~conf ~stderr switch >|= fun pkgs ->
   (switch, pkgs)
 
@@ -198,12 +197,12 @@ done
 exit 0
 |}
 
-let get_metadata ~conf ~pool ~stderr switch workdir pkgs =
+let get_metadata ~conf ~pool ~stderr switch logdir pkgs =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("Getting all the metadata...") >>= fun () ->
     Lwt_unix.getcwd () >>= fun cwd ->
-    let metadatadir = Server_workdirs.tmpmetadatadir workdir in
+    let metadatadir = Server_workdirs.tmpmetadatadir logdir in
     let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
     let stdin_content = Pkg_set.elements pkgs in
     let max_thread = string_of_int (Server_configfile.processes conf) in
@@ -222,27 +221,23 @@ let get_git_hash ~stderr switch conf =
       Oca_lib.write_line_unix stderr ("Error: cannot parse git hash. Got:\n"^s) >>= fun () ->
       Lwt.fail_with "Something went wrong. See internal log"
 
-let move_tmpdirs_to_final ~hash ~stderr cache workdir =
-  Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
-  let old_logdir = List.head_opt old_logdir in
-  let logdir = Server_workdirs.new_logdir ~hash workdir in
+let move_tmpdirs_to_final ~stderr logdir workdir =
   let logdir_path = Server_workdirs.get_logdir_path logdir in
-  let tmplogdir = Server_workdirs.tmplogdir workdir in
+  let tmplogdir = Server_workdirs.tmplogdir logdir in
   let metadatadir = Server_workdirs.metadatadir workdir in
-  let tmpmetadatadir = Server_workdirs.tmpmetadatadir workdir in
+  let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
   Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir_path) >>= fun () ->
   (* TODO: replace by Oca_lib.rm_rf *)
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
-  Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) >|= fun () ->
-  (old_logdir, logdir)
+  Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~conf ~pool ~stderr workdir pkgs =
+let run_and_get_pkgs ~conf ~pool ~stderr logdir pkgs =
   let len_suffix = "/"^string_of_int (List.fold_left (fun n (_, pkgs) -> n + List.length pkgs) 0 pkgs) in
   List.fold_left begin fun (i, jobs, full_pkgs_set) (switch, pkgs) ->
     List.fold_left begin fun (i, jobs, full_pkgs_set) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job () = run_job ~conf ~pool ~stderr ~switch ~num workdir full_name in
+      let job () = run_job ~conf ~pool ~stderr ~switch ~num logdir full_name in
       (i, (fun () -> job () :: jobs ()), Pkg_set.add full_name full_pkgs_set)
     end (i, jobs, full_pkgs_set) pkgs
   end (0, (fun () -> []), Pkg_set.empty) pkgs
@@ -289,27 +284,31 @@ let run ~on_finished ~is_retry ~conf cache workdir =
   run_locked := true;
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     let start_time = Unix.time () in
-    with_stderr workdir begin fun ~stderr ->
-      Server_workdirs.init_base_jobs ~stderr workdir >>= fun () ->
+    with_stderr ~start_time workdir begin fun ~stderr ->
       begin match switches with
       | switch::switches ->
-          build_switch ~stderr ~cached:is_retry conf workdir switch >>= fun hd_pkgs ->
+          build_switch ~stderr ~cached:is_retry conf switch >>= fun hd_pkgs ->
+          get_git_hash ~stderr switch conf >>= fun hash ->
+          Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
+          let old_logdir = List.head_opt old_logdir in
+          let new_logdir = Server_workdirs.new_logdir ~hash ~start_time workdir in
+          Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
-          Lwt_list.map_p (build_switch ~stderr ~cached:true conf workdir) switches >>= fun tl_pkgs ->
-          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr workdir (hd_pkgs :: tl_pkgs) in
-          let metadata_job = get_metadata ~conf ~pool ~stderr switch workdir pkgs in
+          Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
+          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr new_logdir (hd_pkgs :: tl_pkgs) in
+          let metadata_job = get_metadata ~conf ~pool ~stderr switch new_logdir pkgs in
           Lwt.join (jobs ()) >>= fun () ->
           Lwt.pick [metadata_job; Lwt.return ()] >>= fun () ->
-          get_git_hash ~stderr switch conf
+          Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
+          move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
+          on_finished workdir;
+          trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
+          let end_time = Unix.time () in
+          let time_span = end_time -. start_time in
+          Oca_lib.write_line_unix stderr ("Done. Operation took: "^string_of_float time_span^" seconds")
       | [] ->
-          Lwt.fail_with "No switches"
-      end >>= fun hash ->
-      Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
-      move_tmpdirs_to_final ~hash ~stderr cache workdir >>= fun (old_logdir, new_logdir) ->
-      on_finished workdir;
-      trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
-      let end_time = Unix.time () in
-      Oca_lib.write_line_unix stderr ("Done. Operation took: "^string_of_float (end_time -. start_time)^" seconds")
+          Oca_lib.write_line_unix stderr "No switches."
+      end
     end
   end (fun () -> run_locked := false; Lwt.return_unit) end;
   Lwt.return_unit
