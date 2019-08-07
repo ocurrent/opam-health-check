@@ -195,6 +195,7 @@ while read pkg; do
     fi
     [ $(jobs | wc -l) -gt $0 ] && wait
 done
+exit 0
 |}
 
 let get_metadata ~conf ~pool ~stderr switch workdir pkgs =
