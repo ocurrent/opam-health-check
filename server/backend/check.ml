@@ -194,6 +194,7 @@ while read pkg; do
     fi
     [ $(jobs | wc -l) -gt $0 ] && wait
 done
+wait
 exit 0
 |}
 
