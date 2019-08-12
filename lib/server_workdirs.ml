@@ -51,7 +51,7 @@ let baddir ~switch logdir = switchlogdir ~switch logdir/"bad"
 let notavailabledir ~switch logdir = switchlogdir ~switch logdir/"not-available"
 let internalfailuredir ~switch logdir = switchlogdir ~switch logdir/"internal-failure"
 
-let tmpswitchlogdir ~switch logdir = get_logdir_path logdir/Intf.Compiler.to_string switch
+let tmpswitchlogdir ~switch logdir = tmplogdir logdir/Intf.Compiler.to_string switch
 let tmpgooddir ~switch logdir = tmpswitchlogdir ~switch logdir/"good"
 let tmppartialdir ~switch logdir = tmpswitchlogdir ~switch logdir/"partial"
 let tmpbaddir ~switch logdir = tmpswitchlogdir ~switch logdir/"bad"
