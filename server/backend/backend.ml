@@ -141,7 +141,6 @@ let start conf workdir =
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
   cache_clear_and_init workdir;
-  Server_configfile.set_default_ocaml_switches conf (fun () -> Oca_server.Cache.get_latest_compilers cache) >>= fun () ->
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
   Admin.create_admin_key workdir >|= fun () ->
   let task () =

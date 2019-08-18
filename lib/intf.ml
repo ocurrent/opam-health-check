@@ -36,6 +36,18 @@ module Compiler = struct
   let compare (Comp x) (Comp y) = OpamVersionCompare.compare x y
 end
 
+module Switch = struct
+  type t = Switch of Compiler.t * string
+
+  let create ~name ~switch = Switch (Compiler.from_string name, switch)
+
+  let name (Switch (x, _)) = x
+  let switch (Switch (_, x)) = x
+
+  let equal (Switch (x, _)) (Switch (y, _)) = Compiler.equal x y
+  let compare (Switch (x, _)) (Switch (y, _)) = Compiler.compare x y
+end
+
 module Log = struct
   type t =
     | Compressed of bytes Lwt.t

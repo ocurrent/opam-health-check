@@ -77,17 +77,45 @@ let set_processes_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "set-processes" in
   (term, info)
 
-let set_ocaml_switches ~confdir ~conffile profilename switches =
-  send_msg ~profilename ~confdir ~conffile ("set-ocaml-switches"::switches)
+let add_ocaml_switch ~confdir ~conffile profilename name switch =
+  send_msg ~profilename ~confdir ~conffile ["add-ocaml-switch";name;switch]
 
-let set_ocaml_switches_cmd ~confdir ~conffile =
+let add_ocaml_switch_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (set_ocaml_switches ~confdir ~conffile) $
+    Cmdliner.Term.const (add_ocaml_switch ~confdir ~conffile) $
     Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Arg.(value & pos_all string [] & info ~docv:"SWITCHES" [])
+    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" []) $
+    Cmdliner.Arg.(required & pos 1 (some string) None & info ~docv:"SWITCH" [])
   in
-  let info = Cmdliner.Term.info "set-ocaml-switches" in
+  let info = Cmdliner.Term.info "add-ocaml-switch" in
+  (term, info)
+
+let set_ocaml_switch ~confdir ~conffile profilename name switch =
+  send_msg ~profilename ~confdir ~conffile ["set-ocaml-switch";name;switch]
+
+let set_ocaml_switch_cmd ~confdir ~conffile =
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (set_ocaml_switch ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" []) $
+    Cmdliner.Arg.(required & pos 1 (some string) None & info ~docv:"SWITCH" [])
+  in
+  let info = Cmdliner.Term.info "set-ocaml-switch" in
+  (term, info)
+
+let rm_ocaml_switch ~confdir ~conffile profilename name =
+  send_msg ~profilename ~confdir ~conffile ["rm-ocaml-switches";name]
+
+let rm_ocaml_switch_cmd ~confdir ~conffile =
+  let term =
+    let ($) = Cmdliner.Term.($) in
+    Cmdliner.Term.const (rm_ocaml_switch ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" [])
+  in
+  let info = Cmdliner.Term.info "rm-ocaml-switch" in
   (term, info)
 
 let set_slack_webhooks ~confdir ~conffile profilename webhooks =
@@ -212,7 +240,9 @@ let cmds =
   [
     init_cmd ~confdir ~conffile; (* TODO: Handle profilename on init *)
     add_user_cmd ~confdir ~conffile;
-    set_ocaml_switches_cmd ~confdir ~conffile;
+    add_ocaml_switch_cmd ~confdir ~conffile;
+    set_ocaml_switch_cmd ~confdir ~conffile;
+    rm_ocaml_switch_cmd ~confdir ~conffile;
     set_slack_webhooks_cmd ~confdir ~conffile;
     set_list_command_cmd ~confdir ~conffile;
     run_cmd ~confdir ~conffile;

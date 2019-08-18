@@ -9,7 +9,7 @@ type t = {
   mutable processes : int option;
   mutable list_command : string option;
   mutable extra_command : string option;
-  mutable ocaml_switches : Intf.Compiler.t list option;
+  mutable ocaml_switches : Intf.Switch.t list option;
   mutable slack_webhooks : Uri.t list option;
 }
 
@@ -31,8 +31,8 @@ let set_field ~field set = function
   | None -> set ()
 
 let get_comp = function
-  | `String s -> Intf.Compiler.from_string s
-  | _ -> failwith "string expected"
+  | `O [name, `String switch] -> Intf.Switch.create ~name ~switch
+  | _ -> failwith "key and value expected"
 
 let get_uri = function
   | `String s -> Uri.of_string s
@@ -78,7 +78,7 @@ let yaml_of_conf conf =
     "processes", `Float (float_of_int (Option.get_exn conf.processes));
     "list-command", `String (Option.get_exn conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
-    "ocaml-switches", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) l)) conf.ocaml_switches;
+    "ocaml-switches", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `O [Intf.(Compiler.to_string (Switch.name s)), `String (Intf.Switch.switch s)]) l)) conf.ocaml_switches;
     "slack-webhooks", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Uri.to_string s)) l)) conf.slack_webhooks;
   ]
 

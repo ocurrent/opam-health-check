@@ -17,6 +17,18 @@ module Compiler : sig
   val compare : t -> t -> int
 end
 
+module Switch : sig
+  type t
+
+  val create : name:string -> switch:string -> t
+
+  val name : t -> Compiler.t
+  val switch : t -> string
+
+  val equal : t -> t -> bool
+  val compare : t -> t -> int
+end
+
 module Log : sig
   type t
 

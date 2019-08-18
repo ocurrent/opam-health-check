@@ -87,6 +87,7 @@ let init_base workdir =
   Oca_lib.mkdir_p (revdepsdir workdir)
 
 let init_base_job ~switch logdir =
+  let switch = Intf.Switch.name switch in
   Oca_lib.mkdir_p (tmpgooddir ~switch logdir) >>= fun () ->
   Oca_lib.mkdir_p (tmppartialdir ~switch logdir) >>= fun () ->
   Oca_lib.mkdir_p (tmpbaddir ~switch logdir) >>= fun () ->

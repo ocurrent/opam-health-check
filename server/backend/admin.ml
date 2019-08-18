@@ -72,9 +72,23 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
       else
         Server_configfile.set_processes conf i >|= fun () ->
         (fun () -> Lwt.return_none)
-  | "set-ocaml-switches"::switches ->
-      let switches = List.map Intf.Compiler.from_string switches in
-      let switches = List.sort Intf.Compiler.compare switches in
+  | ["add-ocaml-switch";name;switch] ->
+      let switch = Intf.Switch.create ~name ~switch in
+      let switches = switch :: Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
+      let switches = List.sort Intf.Switch.compare switches in
+      Server_configfile.set_ocaml_switches conf switches >|= fun () ->
+      (fun () -> Lwt.return_none)
+  | ["set-ocaml-switch";name;switch] ->
+      let switch = Intf.Switch.create ~name ~switch in
+      let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
+      let idx, _ = Option.get_exn (List.find_idx (Intf.Switch.equal switch) switches) in
+      let switches = List.set_at_idx idx switch switches in
+      Server_configfile.set_ocaml_switches conf switches >|= fun () ->
+      (fun () -> Lwt.return_none)
+  | ["rm-ocaml-switch";name] ->
+      let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
+      let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
+      let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
       Server_configfile.set_ocaml_switches conf switches >|= fun () ->
       (fun () -> Lwt.return_none)
   | "set-slack-webhooks"::webhooks ->

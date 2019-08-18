@@ -48,7 +48,7 @@ let docker_run_to_str ~stderr ~img_name cmd =
   pkgs
 
 let get_img_name ~conf switch =
-  let switch = Intf.Compiler.to_string switch in
+  let switch = Intf.Switch.switch switch in
   let switch =
     let rec normalize_docker_tag_name = function
       | ('a'..'z' | 'A'..'Z' | '0'..'9' | '-' | '.') as c::cs -> c::normalize_docker_tag_name cs
@@ -90,7 +90,8 @@ let is_partial_failure logfile =
 let run_job ~conf ~pool ~stderr ~switch ~num logdir pkg =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
-    Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Compiler.to_string switch^"...") >>= fun () ->
+    Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
+    let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
@@ -152,7 +153,7 @@ let get_dockerfile ~conf switch =
   run "opam admin cache" @@
   run "opam init -ya --bare --disable-sandboxing ." @@
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
-  run "opam switch create --repositories=default,beta %s" (Intf.Compiler.to_string switch) @@
+  run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
   run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
   run "opam install -y opam-depext" @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@

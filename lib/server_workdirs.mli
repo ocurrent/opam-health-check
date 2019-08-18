@@ -49,4 +49,4 @@ val configfile : t -> Fpath.t
 val file_from_logdir : file:string -> logdir -> Fpath.t
 
 val init_base : t -> unit Lwt.t
-val init_base_jobs : switches:Intf.Compiler.t list -> logdir -> unit Lwt.t
+val init_base_jobs : switches:Intf.Switch.t list -> logdir -> unit Lwt.t
