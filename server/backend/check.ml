@@ -87,6 +87,18 @@ let is_partial_failure logfile =
     lookup ()
   end
 
+let run_script = {|
+opam depext -ivy "$0"
+res=$?
+if [ $res = 20 ]; then
+    if opam show -f tags: "$0" | grep -q '"ci-accept-failures:debian-sid"'; then
+        echo "This package failed and has been disabled for CI using the 'ci-accept-failures:debian-sid' tag."
+        exit 69
+    fi
+fi
+exit $res
+|}
+
 let run_job ~conf ~pool ~stderr ~switch ~num logdir pkg =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
@@ -96,7 +108,7 @@ let run_job ~conf ~pool ~stderr ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        docker_run ~stdout ~stderr:stdout img_name ["opam";"depext";"-ivy";pkg]
+        docker_run ~stdout ~stderr:stdout img_name ["bash";"-c";run_script;pkg]
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
