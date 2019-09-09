@@ -91,8 +91,8 @@ let run_script = {|
 opam depext -ivy "$0"
 res=$?
 if [ $res = 20 ]; then
-    if opam show -f tags: "$0" | grep -q '"ci-accept-failures:debian-sid"'; then
-        echo "This package failed and has been disabled for CI using the 'ci-accept-failures:debian-sid' tag."
+    if opam show -f tags: "$0" | grep -q '"ci:accept-failures:debian-sid"'; then
+        echo "This package failed and has been disabled for CI using the 'ci:accept-failures:debian-sid' tag."
         exit 69
     fi
 fi
