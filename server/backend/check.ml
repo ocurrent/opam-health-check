@@ -87,12 +87,14 @@ let is_partial_failure logfile =
     lookup ()
   end
 
+let distribution_used = "debian-unstable"
+
 let run_script = {|
 opam depext -ivy "$0"
 res=$?
 if [ $res = 20 ]; then
-    if opam show -f tags: "$0" | grep -q '"ci:accept-failures:debian-sid"'; then
-        echo "This package failed and has been disabled for CI using the 'ci:accept-failures:debian-sid' tag."
+    if opam show -f x-ci-accept-failures: "$0" | grep -q '"|}^distribution_used^{|"'; then
+        echo "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field."
         exit 69
     fi
 fi
@@ -143,7 +145,7 @@ let () =
 
 let get_dockerfile ~conf switch =
   let open Dockerfile in
-  from "ocaml/opam2:debian-unstable AS base" @@
+  from ("ocaml/opam2:"^distribution_used^" AS base") @@
   workdir "opam-repository" @@
   run "opam switch 4.07" @@
   run "git pull origin master" @@
@@ -156,7 +158,7 @@ let get_dockerfile ~conf switch =
   run "eval $(opam config env) && ./configure" @@
   run "eval $(opam config env) && make lib-ext" @@
   run "eval $(opam config env) && make" @@
-  from "ocaml/opam2:debian-unstable-opam" @@
+  from ("ocaml/opam2:"^distribution_used^"-opam") @@
   copy ~from:"base" ~src:["/tmp/opam/opam"] ~dst:"/usr/bin/opam" () @@
   copy ~from:"base" ~src:["/tmp/opam/opam-installer"] ~dst:"/usr/bin/opam-installer" () @@
   run "sudo apt-get update" @@
