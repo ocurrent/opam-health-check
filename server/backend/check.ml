@@ -92,7 +92,7 @@ let distribution_used = "debian-unstable"
 let run_script = {|
 opam depext -ivy "$0"
 res=$?
-if [ $res = 20 ]; then
+if [ $res = 31 ]; then
     if opam show -f x-ci-accept-failures: "$0" | grep -q '"|}^distribution_used^{|"'; then
         echo "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field."
         exit 69
