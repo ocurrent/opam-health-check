@@ -313,8 +313,9 @@ let run ~on_finished ~is_retry ~conf cache workdir =
           Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
           let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr new_logdir (hd_pkgs :: tl_pkgs) in
           let metadata_job = get_metadata ~conf ~pool ~stderr switch new_logdir pkgs in
+          let metadata_timeout = Lwt_unix.sleep (48. *. 60. *. 60.) in
           Lwt.join (jobs ()) >>= fun () ->
-          Lwt.pick [metadata_job; Lwt.return ()] >>= fun () ->
+          Lwt.pick [metadata_job; metadata_timeout] >>= fun () ->
           Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
           move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
           on_finished workdir;
