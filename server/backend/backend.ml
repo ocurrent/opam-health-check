@@ -57,10 +57,9 @@ let add_pkg full_name instances acc =
   Oca_server.Cache.get_revdeps cache full_name >|= fun revdeps ->
   Intf.Pkg.create ~full_name ~instances ~maintainers ~revdeps :: acc
 
-let get_pkgs ~old logdir =
+let get_pkgs ~pool ~old logdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
   Oca_server.Cache.get_compilers ~logdir cache >>= fun compilers ->
-  let pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit) in
   Lwt_list.iter_s (fill_pkgs_from_dir ~old ~pool pkg_tbl logdir) compilers >>= fun () ->
   Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
   List.sort Intf.Pkg.compare
@@ -106,9 +105,10 @@ let tcp_server port callback =
     (Cohttp_lwt_unix.Server.make ~callback ())
 
 let cache_clear_and_init workdir =
+  let pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit) in
   Oca_server.Cache.clear_and_init
     cache
-    ~pkgs:(fun ~old logdir -> get_pkgs ~old logdir)
+    ~pkgs:(fun ~old logdir -> get_pkgs ~pool ~old logdir)
     ~compilers:(fun logdir -> get_compilers logdir)
     ~logdirs:(fun () -> Server_workdirs.logdirs workdir)
     ~maintainers:(fun () -> get_maintainers workdir)
