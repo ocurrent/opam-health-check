@@ -74,7 +74,7 @@ type t = {
   html_tbl : string Html_cache.t;
   mutable logdirs : Server_workdirs.logdir list Lwt.t;
   mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t) list Lwt.t;
-  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list Lwt.t) list Lwt.t;
+  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list) list Lwt.t;
   mutable maintainers : string list Maintainers_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
   mutable pkgs_diff : ((Server_workdirs.logdir * Server_workdirs.logdir) * Html.diff Lwt.t) list Lwt.t;
@@ -99,9 +99,9 @@ let create () = {
 let call_pkgs ~pkgs = function
   | [] ->
       Lwt.return_nil
-  | logdir::logdirs ->
-      let pkg = pkgs ~old:false logdir in
-      let pkgs = List.map (fun logdir -> (logdir, pkgs ~old:true logdir)) logdirs in
+  | (logdir, compilers)::logdirs ->
+      let pkg = pkgs ~old:false ~compilers logdir in
+      let pkgs = List.map (fun (logdir, compilers) -> (logdir, pkgs ~old:true ~compilers logdir)) logdirs in
       Lwt.return ((logdir, pkg) :: pkgs)
 
 let call_generate_diff (new_logdir, new_pkgs) (old_logdir, old_pkgs) =
@@ -126,8 +126,8 @@ let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_di
   self.maintainers <- maintainers ();
   self.revdeps <- revdeps ();
   self.logdirs <- logdirs ();
-  self.compilers <- self.logdirs >|= List.map (fun logdir -> (logdir, compilers logdir));
-  self.pkgs <- self.logdirs >>= call_pkgs ~pkgs;
+  self.compilers <- self.logdirs >>= Lwt_list.map_s (fun logdir -> compilers logdir >|= fun c -> (logdir, c));
+  self.pkgs <- self.compilers >>= call_pkgs ~pkgs;
   self.pkgs_diff <- self.pkgs >|= Oca_lib.list_map_cube call_generate_diff;
   self.html_diff <- self.pkgs_diff >|= List.map (call_html_diff ~html_diff);
   self.html_diff_list <- self.pkgs_diff >|= call_html_diff_list;
@@ -168,13 +168,10 @@ let get_logdirs self =
 let get_pkgs ~logdir self =
   self.pkgs >>= List.assoc ~eq:Server_workdirs.logdir_equal logdir
 
-let get_compilers ~logdir self =
-  self.compilers >>= List.assoc ~eq:Server_workdirs.logdir_equal logdir
-
 let get_latest_compilers self =
-  self.compilers >>= function
+  self.compilers >|= function
   | (_, compilers)::_ -> compilers
-  | [] -> Lwt.return_nil
+  | [] -> []
 
 let get_maintainers self k =
   self.maintainers >|= fun maintainers ->

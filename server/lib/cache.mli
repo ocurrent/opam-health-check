@@ -7,7 +7,7 @@ val create : unit -> t
 
 val clear_and_init :
   t ->
-  pkgs:(old:bool -> Server_workdirs.logdir -> Intf.Pkg.t list Lwt.t) ->
+  pkgs:(old:bool -> compilers:Intf.Compiler.t list -> Server_workdirs.logdir -> Intf.Pkg.t list Lwt.t) ->
   compilers:(Server_workdirs.logdir -> Intf.Compiler.t list Lwt.t) ->
   logdirs:(unit -> Server_workdirs.logdir list Lwt.t) ->
   maintainers:(unit -> string list Maintainers_cache.t Lwt.t) ->
@@ -19,7 +19,6 @@ val get_html : t -> Html.query -> Server_workdirs.logdir -> string Lwt.t
 val get_latest_html : t -> Html.query -> string Lwt.t
 val get_logdirs : t -> Server_workdirs.logdir list Lwt.t
 val get_pkgs : logdir:Server_workdirs.logdir -> t -> Intf.Pkg.t list Lwt.t
-val get_compilers : logdir:Server_workdirs.logdir -> t -> Intf.Compiler.t list Lwt.t
 val get_latest_compilers : t -> Intf.Compiler.t list Lwt.t
 val get_maintainers : t -> string -> string list Lwt.t
 val get_revdeps : t -> string -> int Lwt.t
