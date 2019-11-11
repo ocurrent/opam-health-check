@@ -117,16 +117,31 @@ let cache_clear_and_init workdir =
 let run_action_loop ~conf ~run_trigger f =
   let rec loop () =
     Lwt.catch begin fun () ->
-      let regular_run =
-        let run_interval = Server_configfile.auto_run_interval conf * 60 * 60 in
+      let get_regular_run check =
+        let run_interval = Server_configfile.auto_run_interval check * 60 * 60 in
         if run_interval > 0 then
           Lwt_unix.sleep (float_of_int run_interval) >>= fun () ->
-          Check.wait_current_run_to_finish () >|= fun () -> false
+          Check.wait_current_run_to_finish () >|= fun () ->
+          Admin.Regular check
         else
           fst (Lwt.wait ())
       in
+      let regular_runs = List.map get_regular_run (Server_configfile.checks conf) in
       let manual_run = Lwt_mvar.take run_trigger in
-      Lwt.pick [regular_run; manual_run] >>= fun is_retry -> f ~is_retry
+      Lwt.npick (manual_run::regular_runs) >>= fun actions ->
+      let rec pick_action best = function
+        | [] -> (best, false)
+        | Admin.Manual x :: _ -> x
+        | Admin.Regular check :: actions ->
+            if Server_configfile.priority best >= Server_configfile.priority check then
+              pick_action best actions
+            else
+              pick_action check actions
+      in
+      let best, actions = List.hd_tl actions in
+      let best = match best with Admin.Regular check -> check | Admin.Manual (check, _) -> check in
+      let (action, is_retry) = pick_action best actions in
+      f ~action ~is_retry
     end begin fun e ->
       let msg = Printexc.to_string e in
       Lwt_io.write_line Lwt_io.stderr ("Exception raised in action loop: "^msg)
@@ -145,7 +160,7 @@ let start conf workdir =
   let task () =
     Lwt.join [
       tcp_server port callback;
-      run_action_loop ~conf ~run_trigger (fun ~is_retry -> Check.run ~on_finished ~is_retry ~conf cache workdir);
+      run_action_loop ~conf ~run_trigger (fun ~action ~is_retry -> Check.run ~on_finished ~action ~is_retry ~conf cache workdir);
     ]
   in
   (workdir, task)

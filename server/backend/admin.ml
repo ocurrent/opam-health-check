@@ -1,5 +1,11 @@
 open Lwt.Infix
 
+type is_retry = bool
+
+type action =
+  | Manual of (Server_configfile.check * is_retry)
+  | Regular of Server_configfile.check
+
 let with_file_out ~flags file f =
   let flags = Unix.O_WRONLY::Unix.O_CREAT::Unix.O_TRUNC::Unix.O_NONBLOCK::flags in
   Lwt_io.with_file ~flags ~mode:Lwt_io.Output file f
@@ -73,21 +79,24 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
         Server_configfile.set_processes conf i >|= fun () ->
         (fun () -> Lwt.return_none)
   | ["add-ocaml-switch";name;switch] ->
+      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
       let switch = Intf.Switch.create ~name ~switch in
-      let switches = switch :: Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
+      let switches = switch :: Option.get_or ~default:[] (Server_configfile.ocaml_switches check) in
       let switches = List.sort Intf.Switch.compare switches in
       Server_configfile.set_ocaml_switches conf switches >|= fun () ->
       (fun () -> Lwt.return_none)
   | ["set-ocaml-switch";name;switch] ->
+      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
       let switch = Intf.Switch.create ~name ~switch in
-      let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
+      let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches check) in
       let idx, _ = Option.get_exn (List.find_idx (Intf.Switch.equal switch) switches) in
       let switches = List.set_at_idx idx switch switches in
       Server_configfile.set_ocaml_switches conf switches >|= fun () ->
       (fun () -> Lwt.return_none)
   | ["rm-ocaml-switch";name] ->
+      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
       let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
-      let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
+      let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches check) in
       let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
       Server_configfile.set_ocaml_switches conf switches >|= fun () ->
       (fun () -> Lwt.return_none)
@@ -99,10 +108,12 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
       Server_configfile.set_list_command conf cmd >|= fun () ->
       (fun () -> Lwt.return_none)
   | ["run"] ->
-      Lwt_mvar.put run_trigger false >|= fun () ->
+      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
+      Lwt_mvar.put run_trigger (Manual (check, false)) >|= fun () ->
       (fun () -> Lwt.return_none)
   | ["retry"] ->
-      Lwt_mvar.put run_trigger true >|= fun () ->
+      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
+      Lwt_mvar.put run_trigger (Manual (check, true)) >|= fun () ->
       (fun () -> Lwt.return_none)
   | ["add-user";username] ->
       create_userkey workdir username >|= fun () ->

@@ -184,11 +184,11 @@ let add_user_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "add-user" in
   (term, info)
 
-let init ~confdir ~conffile = function
+let init ~confdir ~conffile profilename = function
   | Some local_workdir ->
       let local_workdir = Server_workdirs.create ~workdir:local_workdir in
       let server_conf = Server_configfile.from_workdir local_workdir in
-      let profilename = Server_configfile.name server_conf in
+      let profilename = Option.get_or ~default:Oca_lib.default_server_name profilename in
       let hostname = Oca_lib.localhost in
       let port = Server_configfile.admin_port server_conf in
       let username = Oca_lib.default_admin_name in
@@ -201,6 +201,7 @@ let init_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (init ~confdir ~conffile) $
+    Cmdliner.Arg.(value & opt (some string) None & info ["profile-name"]) $
     Cmdliner.Arg.(value & opt (some dir) None & info ["from-local-workdir"])
   in
   let info = Cmdliner.Term.info "init" in

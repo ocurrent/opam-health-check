@@ -59,6 +59,8 @@ let check_is_docker_compatible name =
 let set_check check = function
   | _, `Null ->
       ()
+  | "priority" as field, `Float priority ->
+      set_field ~field (fun () -> check.priority <- Some (int_of_float priority)) check.priority
   | "auto-run-interval" as field, `Float auto_run_interval ->
       set_field ~field (fun () -> check.auto_run_interval <- Some (int_of_float auto_run_interval)) check.auto_run_interval
   | "list-command" as field, `String list_command ->
@@ -96,6 +98,7 @@ let set_config conf = function
 
 let yaml_of_check check =
   let obj = `O [
+    "priority", `Float (float_of_int (Option.get_exn check.priority));
     "auto-run-interval", `Float (float_of_int (Option.get_exn check.auto_run_interval));
     "list-command", `String (Option.get_exn check.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) check.extra_command;
@@ -114,7 +117,7 @@ let yaml_of_conf conf =
 
 let set_check_defaults check =
   if Option.is_none check.priority then
-    check.priority <- Some 1;
+    check.priority <- Some 100;
   if Option.is_none check.auto_run_interval then
     check.auto_run_interval <- Some Oca_lib.default_auto_run_interval;
   if Option.is_none check.list_command then
@@ -203,10 +206,12 @@ let from_workdir workdir =
 let port {port; _} = Option.get_exn port
 let admin_port {admin_port; _} = Option.get_exn admin_port
 let processes {processes; _} = Option.get_exn processes
+let checks {checks; _} = Option.get_exn checks
 
-let name conf = (get_check ~name:Oca_lib.default_server_name conf).name
-let auto_run_interval conf = Option.get_exn (get_check ~name:Oca_lib.default_server_name conf).auto_run_interval
-let list_command conf = Option.get_exn (get_check ~name:Oca_lib.default_server_name conf).list_command
-let extra_command conf = (get_check ~name:Oca_lib.default_server_name conf).extra_command
-let ocaml_switches conf = (get_check ~name:Oca_lib.default_server_name conf).ocaml_switches
-let slack_webhooks conf = Option.get_exn (get_check ~name:Oca_lib.default_server_name conf).slack_webhooks
+let name {name; _} = name
+let priority {priority; _} = Option.get_exn priority
+let auto_run_interval {auto_run_interval; _} = Option.get_exn auto_run_interval
+let list_command {list_command; _} = Option.get_exn list_command
+let extra_command {extra_command; _} = extra_command
+let ocaml_switches {ocaml_switches; _} = ocaml_switches
+let slack_webhooks {slack_webhooks; _} = Option.get_exn slack_webhooks

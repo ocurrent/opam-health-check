@@ -4,12 +4,12 @@ let get_prefix conf =
   let server_name = Server_configfile.name conf in
   "opam-health-check-"^server_name
 
-let docker_build ~conf ~cached ~stderr ~img_name dockerfile =
+let docker_build ~action ~cached ~stderr ~img_name dockerfile =
   let cache = if cached then [] else ["--pull";"--no-cache"] in
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
   Lwt_unix.set_close_on_exec fd;
-  let label = get_prefix conf in
+  let label = get_prefix action in
   begin
     if not cached then
       Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"system";"prune";"-af";"--volumes";("--filter=label="^label)]
@@ -47,7 +47,7 @@ let docker_run_to_str ~stderr ~img_name cmd =
   proc >|= fun () ->
   pkgs
 
-let get_img_name ~conf switch =
+let get_img_name ~action switch =
   let switch = Intf.Switch.switch switch in
   let switch =
     let rec normalize_docker_tag_name = function
@@ -58,10 +58,10 @@ let get_img_name ~conf switch =
     in
     String.of_list (normalize_docker_tag_name (String.to_list switch))
   in
-  get_prefix conf^"-"^switch
+  get_prefix action^"-"^switch
 
-let get_pkgs ~conf ~stderr switch =
-  let img_name = get_img_name ~conf switch in
+let get_pkgs ~action ~stderr switch =
+  let img_name = get_img_name ~action switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   docker_run_to_str ~stderr ~img_name [] >>= fun pkgs ->
   let rgen = Random.int_range (-1) 1 in
@@ -101,8 +101,8 @@ fi
 exit $res
 |}
 
-let run_job ~conf ~pool ~stderr ~switch ~num logdir pkg =
-  let img_name = get_img_name ~conf switch in
+let run_job ~action ~pool ~stderr ~switch ~num logdir pkg =
+  let img_name = get_img_name ~action switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
     let switch = Intf.Switch.name switch in
@@ -143,7 +143,7 @@ let () =
     prerr_endline ("Async exception raised: "^msg);
   end
 
-let get_dockerfile ~conf switch =
+let get_dockerfile ~action switch =
   let open Dockerfile in
   from ("ocaml/opam2:"^distribution_used^" AS base") @@
   workdir "opam-repository" @@
@@ -170,8 +170,8 @@ let get_dockerfile ~conf switch =
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
   run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
   run "opam install -y opam-depext" @@
-  Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
-  cmd "%s" (Server_configfile.list_command conf)
+  Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command action) @@
+  cmd "%s" (Server_configfile.list_command action)
 
 let with_stderr ~start_time workdir f =
   Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) >>= fun () ->
@@ -179,10 +179,10 @@ let with_stderr ~start_time workdir f =
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
   Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
-let build_switch ~stderr ~cached conf switch =
-  let img_name = get_img_name ~conf switch in
-  docker_build ~conf ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
-  get_pkgs ~conf ~stderr switch >|= fun pkgs ->
+let build_switch ~stderr ~cached action switch =
+  let img_name = get_img_name ~action switch in
+  docker_build ~action ~stderr ~cached ~img_name (get_dockerfile ~action switch) >>= fun () ->
+  get_pkgs ~action ~stderr switch >|= fun pkgs ->
   (switch, pkgs)
 
 module Pkg_set = Set.Make (String)
@@ -213,8 +213,8 @@ wait
 exit 0
 |}
 
-let get_metadata ~conf ~pool ~stderr switch logdir pkgs =
-  let img_name = get_img_name ~conf switch in
+let get_metadata ~action ~conf ~pool ~stderr switch logdir pkgs =
+  let img_name = get_img_name ~action switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("Getting all the metadata...") >>= fun () ->
     Lwt_unix.getcwd () >>= fun cwd ->
@@ -225,8 +225,8 @@ let get_metadata ~conf ~pool ~stderr switch logdir pkgs =
     docker_run_with_stdin_and_volume ~stdin_content ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["bash";"-c";metadata_script;max_thread]
   end
 
-let get_git_hash ~stderr switch conf =
-  let img_name = get_img_name ~conf switch in
+let get_git_hash ~stderr switch action =
+  let img_name = get_img_name ~action switch in
   Oca_lib.write_line_unix stderr "Getting current git hash..." >>= fun () ->
   docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= function
   | [hash] ->
@@ -247,13 +247,13 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~conf ~pool ~stderr logdir pkgs =
+let run_and_get_pkgs ~action ~pool ~stderr logdir pkgs =
   let len_suffix = "/"^string_of_int (List.fold_left (fun n (_, pkgs) -> n + List.length pkgs) 0 pkgs) in
   List.fold_left begin fun (i, jobs, full_pkgs_set) (switch, pkgs) ->
     List.fold_left begin fun (i, jobs, full_pkgs_set) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job () = run_job ~conf ~pool ~stderr ~switch ~num logdir full_name in
+      let job () = run_job ~action ~pool ~stderr ~switch ~num logdir full_name in
       (i, (fun () -> job () :: jobs ()), Pkg_set.add full_name full_pkgs_set)
     end (i, jobs, full_pkgs_set) pkgs
   end (0, (fun () -> []), Pkg_set.empty) pkgs
@@ -293,8 +293,8 @@ let wait_current_run_to_finish =
   in
   loop
 
-let run ~on_finished ~is_retry ~conf cache workdir =
-  let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
+let run ~on_finished ~action ~is_retry ~conf cache workdir =
+  let switches = Option.get_exn (Server_configfile.ocaml_switches action) in
   if !run_locked then
     failwith "operation locked";
   run_locked := true;
@@ -303,23 +303,23 @@ let run ~on_finished ~is_retry ~conf cache workdir =
     with_stderr ~start_time workdir begin fun ~stderr ->
       begin match switches with
       | switch::switches ->
-          build_switch ~stderr ~cached:is_retry conf switch >>= fun hd_pkgs ->
-          get_git_hash ~stderr switch conf >>= fun hash ->
+          build_switch ~stderr ~cached:is_retry action switch >>= fun hd_pkgs ->
+          get_git_hash ~stderr switch action >>= fun hash ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
           let old_logdir = List.head_opt old_logdir in
           let new_logdir = Server_workdirs.new_logdir ~hash ~start_time workdir in
           Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
-          Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
-          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr new_logdir (hd_pkgs :: tl_pkgs) in
-          let metadata_job = get_metadata ~conf ~pool ~stderr switch new_logdir pkgs in
+          Lwt_list.map_p (build_switch ~stderr ~cached:true action) switches >>= fun tl_pkgs ->
+          let (_, jobs, pkgs) = run_and_get_pkgs ~action ~pool ~stderr new_logdir (hd_pkgs :: tl_pkgs) in
+          let metadata_job = get_metadata ~action ~conf ~pool ~stderr switch new_logdir pkgs in
           let metadata_timeout = Lwt_unix.sleep (48. *. 60. *. 60.) in
           Lwt.join (jobs ()) >>= fun () ->
           Lwt.pick [metadata_job; metadata_timeout] >>= fun () ->
           Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
           move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
           on_finished workdir;
-          trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
+          trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir action >>= fun () ->
           let end_time = Unix.time () in
           let time_span = end_time -. start_time in
           Oca_lib.write_line_unix stderr ("Done. Operation took: "^string_of_float time_span^" seconds")

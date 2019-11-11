@@ -1,5 +1,6 @@
 val run :
   on_finished:(Server_workdirs.t -> unit) ->
+  action:Server_configfile.check ->
   is_retry:bool ->
   conf:Server_configfile.t ->
   Oca_server.Cache.t ->
