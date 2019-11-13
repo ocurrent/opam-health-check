@@ -171,6 +171,7 @@ let get_dockerfile ~action switch =
   run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
   run "opam install -y opam-depext" @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command action) @@
+  Option.map_or ~default:empty env (Server_configfile.extra_env action) @@
   cmd "%s" (Server_configfile.list_command action)
 
 let with_stderr ~start_time workdir f =

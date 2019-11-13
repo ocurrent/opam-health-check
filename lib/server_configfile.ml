@@ -6,6 +6,7 @@ type check = {
   mutable auto_run_interval : int option;
   mutable list_command : string option;
   mutable extra_command : string option;
+  mutable extra_env : (string * string) list option;
   mutable ocaml_switches : Intf.Switch.t list option;
   mutable slack_webhooks : Uri.t list option;
 }
@@ -24,6 +25,7 @@ let create_check ~name = {
   auto_run_interval = None;
   list_command = None;
   extra_command = None;
+  extra_env = None;
   ocaml_switches = None;
   slack_webhooks = None;
 }
@@ -52,6 +54,10 @@ let get_obj = function
   | `O obj -> obj
   | _ -> failwith "object expected"
 
+let get_env = function
+  | (k, `String v) -> (k, v)
+  | _ -> failwith "string expected"
+
 let check_is_docker_compatible name =
   if not (String.for_all Oca_lib.char_is_docker_compatible name) then
     failwith "name field has to contain only alphanumerical characters and '.'"
@@ -67,6 +73,9 @@ let set_check check = function
       set_field ~field (fun () -> check.list_command <- Some list_command) check.list_command
   | "extra-command" as field, `String extra_command ->
       set_field ~field (fun () -> check.extra_command <- Some extra_command) check.extra_command
+  | "extra-env" as field, `O extra_env ->
+      let extra_env = List.map get_env extra_env in
+      set_field ~field (fun () -> check.extra_env <- Some extra_env) check.extra_env
   | "ocaml-switches" as field, `A switches ->
       let switches = List.map get_comp switches in
       set_field ~field (fun () -> check.ocaml_switches <- Some switches) check.ocaml_switches
@@ -102,6 +111,7 @@ let yaml_of_check check =
     "auto-run-interval", `Float (float_of_int (Option.get_exn check.auto_run_interval));
     "list-command", `String (Option.get_exn check.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) check.extra_command;
+    "extra-env", Option.map_or ~default:`Null (fun l -> `O (List.map (fun (k, v) -> (k, `String v)) l)) check.extra_env;
     "ocaml-switches", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `O [Intf.(Compiler.to_string (Switch.name s)), `String (Intf.Switch.switch s)]) l)) check.ocaml_switches;
     "slack-webhooks", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Uri.to_string s)) l)) check.slack_webhooks;
   ] in
@@ -203,6 +213,7 @@ let priority {priority; _} = Option.get_exn priority
 let auto_run_interval {auto_run_interval; _} = Option.get_exn auto_run_interval
 let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
+let extra_env {extra_env; _} = extra_env
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let slack_webhooks {slack_webhooks; _} = Option.get_exn slack_webhooks
 

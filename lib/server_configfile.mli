@@ -13,6 +13,7 @@ val priority : check -> int
 val auto_run_interval : check -> int
 val list_command : check -> string
 val extra_command : check -> string option
+val extra_env : check -> (string * string) list option
 val ocaml_switches : check -> Intf.Switch.t list option
 val slack_webhooks : check -> Uri.t list
 
