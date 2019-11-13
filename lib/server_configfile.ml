@@ -143,48 +143,38 @@ let set_processes conf i =
   set_defaults conf;
   Lwt.return_unit
 
-let get_check ~name conf =
-  List.find (fun x -> String.equal name x.name) (Option.get_exn conf.checks)
+let set_priority conf check i =
+  check.priority <- Some i;
+  set_defaults conf;
+  Lwt.return_unit
 
-let set_auto_run_interval conf i =
-  let name = Oca_lib.default_server_name in (* TODO: Remove (almost) every use of this value in this file *)
-  let check = get_check ~name conf in
+let set_auto_run_interval conf check i =
   check.auto_run_interval <- Some i;
   set_defaults conf;
   Lwt.return_unit
 
-let set_ocaml_switches conf switches =
-  let name = Oca_lib.default_server_name in
-  let check = get_check ~name conf in
+let set_ocaml_switches conf check switches =
   check.ocaml_switches <- Some switches;
   set_defaults conf;
   Lwt.return_unit
 
-let set_default_ocaml_switches conf f =
-  let name = Oca_lib.default_server_name in
-  let check = get_check ~name conf in
+let set_default_ocaml_switches conf check f =
   if Option.is_none check.ocaml_switches then
-    f () >>= set_ocaml_switches conf
+    f () >>= set_ocaml_switches conf check
   else
     Lwt.return_unit
 
-let set_list_command conf cmd =
-  let name = Oca_lib.default_server_name in
-  let check = get_check ~name conf in
+let set_list_command conf check cmd =
   check.list_command <- Some cmd;
   set_defaults conf;
   Lwt.return_unit
 
-let set_extra_command conf cmd =
-  let name = Oca_lib.default_server_name in
-  let check = get_check ~name conf in
+let set_extra_command conf check cmd =
   check.extra_command <- cmd;
   set_defaults conf;
   Lwt.return_unit
 
-let set_slack_webhooks conf webhooks =
-  let name = Oca_lib.default_server_name in
-  let check = get_check ~name conf in
+let set_slack_webhooks conf check webhooks =
   check.slack_webhooks <- Some webhooks;
   set_defaults conf;
   Lwt.return_unit
@@ -215,3 +205,6 @@ let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let slack_webhooks {slack_webhooks; _} = Option.get_exn slack_webhooks
+
+let get_check conf ~check_name =
+  List.find (fun x -> String.equal check_name x.name) (Option.get_exn conf.checks)

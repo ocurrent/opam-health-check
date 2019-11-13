@@ -51,14 +51,15 @@ let send_msg ~profilename ~confdir ~conffile msg =
     process_response
   end
 
-let set_auto_run_interval ~confdir ~conffile profilename i =
-  send_msg ~profilename ~confdir ~conffile ["set-auto-run-interval"; i]
+let set_auto_run_interval ~confdir ~conffile profilename check_name i =
+  send_msg ~profilename ~confdir ~conffile ["set-auto-run-interval";check_name;i]
 
 let set_auto_run_interval_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (set_auto_run_interval ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $ (* TODO: Replace all the "default" by Configfile.default_name or something *)
+    Cmdliner.Arg.(value & opt string Oca_lib.default_server_name & info ~docv:"CHECK_NAME" ["check"; "c"]) $
     Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"HOURS" [])
   in
   let info = Cmdliner.Term.info "set-auto-run-interval" in
@@ -77,95 +78,102 @@ let set_processes_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "set-processes" in
   (term, info)
 
-let add_ocaml_switch ~confdir ~conffile profilename name switch =
-  send_msg ~profilename ~confdir ~conffile ["add-ocaml-switch";name;switch]
+let add_ocaml_switch ~confdir ~conffile profilename check_name name switch =
+  send_msg ~profilename ~confdir ~conffile ["add-ocaml-switch";check_name;name;switch]
 
 let add_ocaml_switch_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (add_ocaml_switch ~confdir ~conffile) $
     Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(value & opt string Oca_lib.default_server_name & info ~docv:"CHECK_NAME" ["check"; "c"]) $
     Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" []) $
     Cmdliner.Arg.(required & pos 1 (some string) None & info ~docv:"SWITCH" [])
   in
   let info = Cmdliner.Term.info "add-ocaml-switch" in
   (term, info)
 
-let set_ocaml_switch ~confdir ~conffile profilename name switch =
-  send_msg ~profilename ~confdir ~conffile ["set-ocaml-switch";name;switch]
+let set_ocaml_switch ~confdir ~conffile profilename check_name name switch =
+  send_msg ~profilename ~confdir ~conffile ["set-ocaml-switch";check_name;name;switch]
 
 let set_ocaml_switch_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (set_ocaml_switch ~confdir ~conffile) $
     Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(value & opt string Oca_lib.default_server_name & info ~docv:"CHECK_NAME" ["check"; "c"]) $
     Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" []) $
     Cmdliner.Arg.(required & pos 1 (some string) None & info ~docv:"SWITCH" [])
   in
   let info = Cmdliner.Term.info "set-ocaml-switch" in
   (term, info)
 
-let rm_ocaml_switch ~confdir ~conffile profilename name =
-  send_msg ~profilename ~confdir ~conffile ["rm-ocaml-switches";name]
+let rm_ocaml_switch ~confdir ~conffile profilename check_name name =
+  send_msg ~profilename ~confdir ~conffile ["rm-ocaml-switches";check_name;name]
 
 let rm_ocaml_switch_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (rm_ocaml_switch ~confdir ~conffile) $
     Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(value & opt string Oca_lib.default_server_name & info ~docv:"CHECK_NAME" ["check"; "c"]) $
     Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" [])
   in
   let info = Cmdliner.Term.info "rm-ocaml-switch" in
   (term, info)
 
-let set_slack_webhooks ~confdir ~conffile profilename webhooks =
-  send_msg ~profilename ~confdir ~conffile ("set-slack-webhooks"::webhooks)
+let set_slack_webhooks ~confdir ~conffile profilename check_name webhooks =
+  send_msg ~profilename ~confdir ~conffile ("set-slack-webhooks"::check_name::webhooks)
 
 let set_slack_webhooks_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (set_slack_webhooks ~confdir ~conffile) $
     Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(value & opt string Oca_lib.default_server_name & info ~docv:"CHECK_NAME" ["check"; "c"]) $
     Cmdliner.Arg.(value & pos_all string [] & info ~docv:"WEBHOOKS" [])
   in
   let info = Cmdliner.Term.info "set-slack-webhooks" in
   (term, info)
 
-let set_list_command ~confdir ~conffile profilename cmd =
-  send_msg ~profilename ~confdir ~conffile ["set-list-command";cmd]
+let set_list_command ~confdir ~conffile profilename check_name cmd =
+  send_msg ~profilename ~confdir ~conffile ["set-list-command";check_name;cmd]
 
 let set_list_command_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (set_list_command ~confdir ~conffile) $
     Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(value & opt string Oca_lib.default_server_name & info ~docv:"CHECK_NAME" ["check"; "c"]) $
     Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"CMD" [])
   in
   let info = Cmdliner.Term.info "set-list-command" in
   (term, info)
 
-let run ~confdir ~conffile profilename () =
+let run ~confdir ~conffile profilename check_name () =
   (* TODO: Catch the exception if the config file doesn't exist *)
-  send_msg ~profilename ~confdir ~conffile ["run"]
+  send_msg ~profilename ~confdir ~conffile ["run";check_name]
 
 let run_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (run ~confdir ~conffile) $
     Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(value & opt string Oca_lib.default_server_name & info ~docv:"CHECK_NAME" ["check"; "c"]) $
     Cmdliner.Term.const ()
   in
   let info = Cmdliner.Term.info "run" in
   (term, info)
 
-let retry ~confdir ~conffile profilename () =
-  send_msg ~profilename ~confdir ~conffile ["retry"]
+let retry ~confdir ~conffile profilename check_name () =
+  send_msg ~profilename ~confdir ~conffile ["retry";check_name]
 
 let retry_cmd ~confdir ~conffile =
   let term =
     let ($) = Cmdliner.Term.($) in
     Cmdliner.Term.const (retry ~confdir ~conffile) $
     Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Cmdliner.Arg.(value & opt string Oca_lib.default_server_name & info ~docv:"CHECK_NAME" ["check"; "c"]) $
     Cmdliner.Term.const ()
   in
   let info = Cmdliner.Term.info "retry" in

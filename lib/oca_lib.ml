@@ -93,7 +93,7 @@ let exec ?(timeout=5) ~stdin ~stdout ~stderr cmd =
   in
   Lwt.pick [timeout; proc]
 
-let protocol_version = "2"
+let protocol_version = "3"
 let default_server_name = "default" (* TODO: Just make it random instead?! *)
 let default_html_port = "8080"
 let default_admin_port = "9999"

@@ -68,51 +68,54 @@ let get_log workdir =
 
 let admin_action ~on_finished ~conf ~run_trigger workdir body =
   begin match String.split_on_char '\n' body with
-  | ["set-auto-run-interval"; i] ->
-      Server_configfile.set_auto_run_interval conf (int_of_string i) >|= fun () ->
+  | ["set-auto-run-interval";check_name;i] ->
+      let check = Server_configfile.get_check conf ~check_name in
+      Server_configfile.set_auto_run_interval conf check (int_of_string i) >|= fun () ->
       (fun () -> Lwt.return_none)
-  | ["set-processes"; i] ->
+  | ["set-processes";i] ->
       let i = int_of_string i in
       if i < 0 then
         Lwt.fail_with "Cannot set the number of processes to a negative value."
       else
         Server_configfile.set_processes conf i >|= fun () ->
         (fun () -> Lwt.return_none)
-  | ["add-ocaml-switch";name;switch] ->
-      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
+  | ["add-ocaml-switch";check_name;name;switch] ->
+      let check = Server_configfile.get_check conf ~check_name in
       let switch = Intf.Switch.create ~name ~switch in
       let switches = switch :: Option.get_or ~default:[] (Server_configfile.ocaml_switches check) in
       let switches = List.sort Intf.Switch.compare switches in
-      Server_configfile.set_ocaml_switches conf switches >|= fun () ->
+      Server_configfile.set_ocaml_switches conf check switches >|= fun () ->
       (fun () -> Lwt.return_none)
-  | ["set-ocaml-switch";name;switch] ->
-      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
+  | ["set-ocaml-switch";check_name;name;switch] ->
+      let check = Server_configfile.get_check conf ~check_name in
       let switch = Intf.Switch.create ~name ~switch in
       let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches check) in
       let idx, _ = Option.get_exn (List.find_idx (Intf.Switch.equal switch) switches) in
       let switches = List.set_at_idx idx switch switches in
-      Server_configfile.set_ocaml_switches conf switches >|= fun () ->
+      Server_configfile.set_ocaml_switches conf check switches >|= fun () ->
       (fun () -> Lwt.return_none)
-  | ["rm-ocaml-switch";name] ->
-      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
+  | ["rm-ocaml-switch";check_name;name] ->
+      let check = Server_configfile.get_check conf ~check_name in
       let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
       let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches check) in
       let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
-      Server_configfile.set_ocaml_switches conf switches >|= fun () ->
+      Server_configfile.set_ocaml_switches conf check switches >|= fun () ->
       (fun () -> Lwt.return_none)
-  | "set-slack-webhooks"::webhooks ->
+  | "set-slack-webhooks"::check_name::webhooks ->
+      let check = Server_configfile.get_check conf ~check_name in
       let webhooks = List.map Uri.of_string webhooks in
-      Server_configfile.set_slack_webhooks conf webhooks >|= fun () ->
+      Server_configfile.set_slack_webhooks conf check webhooks >|= fun () ->
       (fun () -> Lwt.return_none)
-  | ["set-list-command";cmd] ->
-      Server_configfile.set_list_command conf cmd >|= fun () ->
+  | ["set-list-command";check_name;cmd] ->
+      let check = Server_configfile.get_check conf ~check_name in
+      Server_configfile.set_list_command conf check cmd >|= fun () ->
       (fun () -> Lwt.return_none)
-  | ["run"] ->
-      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
+  | ["run";check_name] ->
+      let check = Server_configfile.get_check conf ~check_name in
       Lwt_mvar.put run_trigger (Manual (check, false)) >|= fun () ->
       (fun () -> Lwt.return_none)
-  | ["retry"] ->
-      let check = List.hd (Server_configfile.checks conf) in (* TODO: Remove this *)
+  | ["retry";check_name] ->
+      let check = Server_configfile.get_check conf ~check_name in
       Lwt_mvar.put run_trigger (Manual (check, true)) >|= fun () ->
       (fun () -> Lwt.return_none)
   | ["add-user";username] ->
