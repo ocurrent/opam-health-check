@@ -21,9 +21,13 @@ let docker_build ~conf ~cached ~stderr ~img_name dockerfile =
   Lwt_unix.close fd >>= fun () ->
   proc
 
-let docker_run ~stdout ~stderr img cmd =
-  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::img::cmd)
+let docker_run ?(extra_args=[]) ~stdout ~stderr img cmd =
+  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::extra_args@img::cmd)
 
+let docker_run_with_volume ~volume:(name, dir) = (* TODO: Merge with the function above *)
+  docker_run ~extra_args:["-v";name^":"^dir]
+
+(* TODO: Replace volumes here by docker cp *)
 let docker_run_with_stdin_and_volume ~stdin_content ~stdout ~stderr ~volume:(local_dir, docker_dir) img cmd =
   let stdin, fd = Lwt_unix.pipe () in
   let stdin = `FD_move stdin in
@@ -32,6 +36,27 @@ let docker_run_with_stdin_and_volume ~stdin_content ~stdout ~stderr ~volume:(loc
   Lwt_list.iter_s (Oca_lib.write_line_unix fd) stdin_content >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
   proc
+
+let get_img_name ~conf switch =
+  let switch = Intf.Switch.switch switch in
+  let switch =
+    let rec normalize_docker_tag_name = function
+      | ('a'..'z' | 'A'..'Z' | '0'..'9' | '-' | '.') as c::cs -> c::normalize_docker_tag_name cs
+      | '_'::'_'::_ -> assert false
+      | _::cs -> '_'::'_'::normalize_docker_tag_name cs
+      | [] -> []
+    in
+    String.of_list (normalize_docker_tag_name (String.to_list switch))
+  in
+  get_prefix conf^"-"^switch
+
+let docker_create_volume ~stderr ~conf switch (name, dir) =
+  let img_name = get_img_name ~conf switch in
+  let label = get_prefix conf in
+  let name = label^"-"^name in
+  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"volume";"create";"--label";label;name] >>= fun () ->
+  docker_run_with_volume ~volume:(name, dir) ~stdout:stderr ~stderr img_name ["sudo";"chown";"opam:opam";dir] >|= fun () ->
+  (name, dir)
 
 let rec read_lines fd =
   Lwt_io.read_line_opt fd >>= function
@@ -46,19 +71,6 @@ let docker_run_to_str ~stderr ~img_name cmd =
   Lwt_unix.close fd >>= fun () ->
   proc >|= fun () ->
   pkgs
-
-let get_img_name ~conf switch =
-  let switch = Intf.Switch.switch switch in
-  let switch =
-    let rec normalize_docker_tag_name = function
-      | ('a'..'z' | 'A'..'Z' | '0'..'9' | '-' | '.') as c::cs -> c::normalize_docker_tag_name cs
-      | '_'::'_'::_ -> assert false
-      | _::cs -> '_'::'_'::normalize_docker_tag_name cs
-      | [] -> []
-    in
-    String.of_list (normalize_docker_tag_name (String.to_list switch))
-  in
-  get_prefix conf^"-"^switch
 
 let get_pkgs ~conf ~stderr switch =
   let img_name = get_img_name ~conf switch in
@@ -101,7 +113,7 @@ fi
 exit $res
 |}
 
-let run_job ~conf ~pool ~stderr ~switch ~num logdir pkg =
+let run_job ~conf ~pool ~stderr ~volume ~switch ~num logdir pkg =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
@@ -110,7 +122,7 @@ let run_job ~conf ~pool ~stderr ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        docker_run ~stdout ~stderr:stdout img_name ["bash";"-c";run_script;pkg]
+        docker_run_with_volume ~volume ~stdout ~stderr:stdout img_name ["bash";"-c";run_script;pkg]
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
@@ -171,6 +183,7 @@ let get_dockerfile ~conf switch =
   run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
   run "opam install -y opam-depext" @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
+  env ["DUNE_CACHE","enabled"] @@
   cmd "%s" (Server_configfile.list_command conf)
 
 let with_stderr ~start_time workdir f =
@@ -247,13 +260,13 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~conf ~pool ~stderr logdir pkgs =
+let run_and_get_pkgs ~conf ~pool ~stderr ~volume logdir pkgs =
   let len_suffix = "/"^string_of_int (List.fold_left (fun n (_, pkgs) -> n + List.length pkgs) 0 pkgs) in
   List.fold_left begin fun (i, jobs, full_pkgs_set) (switch, pkgs) ->
     List.fold_left begin fun (i, jobs, full_pkgs_set) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job () = run_job ~conf ~pool ~stderr ~switch ~num logdir full_name in
+      let job () = run_job ~conf ~pool ~stderr ~volume ~switch ~num logdir full_name in
       (i, (fun () -> job () :: jobs ()), Pkg_set.add full_name full_pkgs_set)
     end (i, jobs, full_pkgs_set) pkgs
   end (0, (fun () -> []), Pkg_set.empty) pkgs
@@ -311,7 +324,8 @@ let run ~on_finished ~is_retry ~conf cache workdir =
           Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
-          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr new_logdir (hd_pkgs :: tl_pkgs) in
+          docker_create_volume ~stderr ~conf switch ("dune-cache", "/home/opam/.cache/dune") >>= fun volume ->
+          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr ~volume new_logdir (hd_pkgs :: tl_pkgs) in
           let metadata_job = get_metadata ~conf ~pool ~stderr switch new_logdir pkgs in
           let metadata_timeout = Lwt_unix.sleep (48. *. 60. *. 60.) in
           Lwt.join (jobs ()) >>= fun () ->
