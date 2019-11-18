@@ -21,21 +21,20 @@ let docker_build ~conf ~cached ~stderr ~img_name dockerfile =
   Lwt_unix.close fd >>= fun () ->
   proc
 
-let docker_run ?(extra_args=[]) ~stdout ~stderr img cmd =
-  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ("docker"::"run"::"--rm"::extra_args@img::cmd)
-
-let docker_run_with_volume ~volume:(name, dir) = (* TODO: Merge with the function above *)
-  docker_run ~extra_args:["-v";name^":"^dir]
-
-(* TODO: Replace volumes here by docker cp *)
-let docker_run_with_stdin_and_volume ~stdin_content ~stdout ~stderr ~volume:(local_dir, docker_dir) img cmd =
-  let stdin, fd = Lwt_unix.pipe () in
-  let stdin = `FD_move stdin in
-  Lwt_unix.set_close_on_exec fd;
-  let proc = Oca_lib.exec ~timeout:48 ~stdin ~stdout ~stderr ("docker"::"run"::"--rm"::"-i"::"-v"::(local_dir^":"^docker_dir)::img::cmd) in
-  Lwt_list.iter_s (Oca_lib.write_line_unix fd) stdin_content >>= fun () ->
-  Lwt_unix.close fd >>= fun () ->
-  proc
+let docker_run ?timeout ~volumes ~stdout ~stderr img cmd =
+  let volumes = List.fold_left (fun acc (name, dir) -> acc @ ["-v";name^":"^dir]) [] volumes in
+  let get_proc ~stdin cmd = Oca_lib.exec ?timeout ~stdin ~stdout ~stderr ("docker"::"run"::"--rm"::"-i"::volumes@img::cmd) in
+  match cmd with
+  | `Script script ->
+      let stdin, fd = Lwt_unix.pipe () in
+      let stdin = `FD_move stdin in
+      Lwt_unix.set_close_on_exec fd;
+      let proc = get_proc ~stdin ["bash"] in
+      Lwt_list.iter_s (Oca_lib.write_line_unix fd) (String.split_on_char '\n' script) >>= fun () ->
+      Lwt_unix.close fd >>= fun () ->
+      proc
+  | `Cmd cmd ->
+      get_proc ~stdin:`Close cmd
 
 let get_img_name ~conf switch =
   let switch = Intf.Switch.switch switch in
@@ -55,7 +54,7 @@ let docker_create_volume ~stderr ~conf switch (name, dir) =
   let label = get_prefix conf in
   let name = label^"-"^name in
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"volume";"create";"--label";label;name] >>= fun () ->
-  docker_run_with_volume ~volume:(name, dir) ~stdout:stderr ~stderr img_name ["sudo";"chown";"opam:opam";dir] >|= fun () ->
+  docker_run ~volumes:[(name, dir)] ~stdout:stderr ~stderr img_name (`Cmd ["sudo";"chown";"opam:opam";dir]) >|= fun () ->
   (name, dir)
 
 let rec read_lines fd =
@@ -65,7 +64,7 @@ let rec read_lines fd =
 
 let docker_run_to_str ~stderr ~img_name cmd =
   let fd, stdout = Lwt_unix.pipe () in
-  let proc = docker_run ~stderr ~stdout img_name cmd in
+  let proc = docker_run ~volumes:[] ~stderr ~stdout img_name (`Cmd cmd) in
   Lwt_unix.close stdout >>= fun () ->
   read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
   Lwt_unix.close fd >>= fun () ->
@@ -101,11 +100,11 @@ let is_partial_failure logfile =
 
 let distribution_used = "debian-unstable"
 
-let run_script = {|
-opam depext -ivy "$0"
+let run_script pkg = {|
+opam depext -ivy "|}^pkg^{|"
 res=$?
 if [ $res = 31 ]; then
-    if opam show -f x-ci-accept-failures: "$0" | grep -q '"|}^distribution_used^{|"'; then
+    if opam show -f x-ci-accept-failures: "|}^pkg^{|" | grep -q '"|}^distribution_used^{|"'; then
         echo "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field."
         exit 69
     fi
@@ -113,7 +112,7 @@ fi
 exit $res
 |}
 
-let run_job ~conf ~pool ~stderr ~volume ~switch ~num logdir pkg =
+let run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir pkg =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
@@ -122,7 +121,7 @@ let run_job ~conf ~pool ~stderr ~volume ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        docker_run_with_volume ~volume ~stdout ~stderr:stdout img_name ["bash";"-c";run_script;pkg]
+        docker_run ~volumes ~stdout ~stderr:stdout img_name (`Script (run_script pkg))
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
@@ -200,7 +199,7 @@ let build_switch ~stderr ~cached conf switch =
 
 module Pkg_set = Set.Make (String)
 
-let metadata_script = {|
+let metadata_script ~max_thread pkgs = {|
 sudo apt-get -qq install bc &> /dev/null
 
 root=/metadata
@@ -213,15 +212,17 @@ sudo="sudo -u #$user -g #$group"
 
 $sudo mkdir $revdeps_dir $maintainers_dir
 prev_pkg=
-while read pkg; do
+get_metadata () {
+    local pkg="$1"
     echo $(opam list -s --recursive --depopts --depends-on "$pkg" | wc -l) - 1 | bc | $sudo tee "$revdeps_dir/$pkg" > /dev/null &
     pkg_name=$(echo "$pkg" | sed -E 's/^([^.]*).*$/\1/')
     if [ "$pkg_name" != "$prev_pkg" ]; then
         opam show -f maintainer: "$pkg_name" | sed -E 's/^"(.*)"$/\1/' | $sudo tee "$maintainers_dir/$pkg_name" > /dev/null
         prev_pkg=$pkg_name
     fi
-    [ $(jobs | wc -l) -gt $0 ] && wait
-done
+    [ $(jobs | wc -l) -gt |}^max_thread^{| ] && wait
+}
+|}^List.fold_left (fun acc pkg -> acc^"get_metadata "^pkg^"\n") "" (Pkg_set.elements pkgs)^{|
 wait
 exit 0
 |}
@@ -233,9 +234,9 @@ let get_metadata ~conf ~pool ~stderr switch logdir pkgs =
     Lwt_unix.getcwd () >>= fun cwd ->
     let metadatadir = Server_workdirs.tmpmetadatadir logdir in
     let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
-    let stdin_content = Pkg_set.elements pkgs in
     let max_thread = string_of_int (Server_configfile.processes conf) in
-    docker_run_with_stdin_and_volume ~stdin_content ~stderr ~stdout:stderr ~volume:(metadatadir, "/metadata") img_name ["bash";"-c";metadata_script;max_thread]
+    let cmd = metadata_script ~max_thread pkgs in
+    docker_run ~timeout:48 ~stderr ~stdout:stderr ~volumes:[(metadatadir, "/metadata")] img_name (`Script cmd)
   end
 
 let get_git_hash ~stderr switch conf =
@@ -260,13 +261,13 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~conf ~pool ~stderr ~volume logdir pkgs =
+let run_and_get_pkgs ~conf ~pool ~stderr ~volumes logdir pkgs =
   let len_suffix = "/"^string_of_int (List.fold_left (fun n (_, pkgs) -> n + List.length pkgs) 0 pkgs) in
   List.fold_left begin fun (i, jobs, full_pkgs_set) (switch, pkgs) ->
     List.fold_left begin fun (i, jobs, full_pkgs_set) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job () = run_job ~conf ~pool ~stderr ~volume ~switch ~num logdir full_name in
+      let job () = run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir full_name in
       (i, (fun () -> job () :: jobs ()), Pkg_set.add full_name full_pkgs_set)
     end (i, jobs, full_pkgs_set) pkgs
   end (0, (fun () -> []), Pkg_set.empty) pkgs
@@ -324,8 +325,8 @@ let run ~on_finished ~is_retry ~conf cache workdir =
           Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
-          docker_create_volume ~stderr ~conf switch ("dune-cache", "/home/opam/.cache/dune") >>= fun volume ->
-          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr ~volume new_logdir (hd_pkgs :: tl_pkgs) in
+          docker_create_volume ~stderr ~conf switch ("dune-cache", "/home/opam/.cache/dune") >>= fun dune_cache ->
+          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes:[dune_cache] new_logdir (hd_pkgs :: tl_pkgs) in
           let metadata_job = get_metadata ~conf ~pool ~stderr switch new_logdir pkgs in
           let metadata_timeout = Lwt_unix.sleep (48. *. 60. *. 60.) in
           Lwt.join (jobs ()) >>= fun () ->
