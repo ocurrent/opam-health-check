@@ -182,6 +182,7 @@ let get_dockerfile ~conf switch =
   run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
   run "opam install -y opam-depext" @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
+  run "mkdir -p ~/.cache" @@
   env ["DUNE_CACHE","enabled"] @@
   cmd "%s" (Server_configfile.list_command conf)
 
