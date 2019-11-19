@@ -23,7 +23,10 @@ let docker_build ~conf ~cached ~stderr ~img_name dockerfile =
 
 let docker_run ?timeout ~volumes ~stdout ~stderr img cmd =
   let volumes = List.fold_left (fun acc (name, dir) -> acc @ ["-v";name^":"^dir]) [] volumes in
-  let get_proc ~stdin cmd = Oca_lib.exec ?timeout ~stdin ~stdout ~stderr ("docker"::"run"::"--rm"::"-i"::volumes@img::cmd) in
+  let get_proc ~stdin cmd =
+    let opts = match stdin with `Close -> volumes | _ -> "-i"::volumes in
+    Oca_lib.exec ?timeout ~stdin ~stdout ~stderr ("docker"::"run"::"--rm"::opts@img::cmd)
+  in
   match cmd with
   | `Script script ->
       let stdin, fd = Lwt_unix.pipe () in
@@ -221,7 +224,7 @@ get_metadata () {
         opam show -f maintainer: "$pkg_name" | sed -E 's/^"(.*)"$/\1/' | $sudo tee "$maintainers_dir/$pkg_name" > /dev/null
         prev_pkg=$pkg_name
     fi
-    [ $(jobs | wc -l) -gt |}^max_thread^{| ] && wait
+    [ $(jobs | wc -l) -gt |}^string_of_int max_thread^{| ] && wait
 }
 |}^List.fold_left (fun acc pkg -> acc^"get_metadata "^pkg^"\n") "" (Pkg_set.elements pkgs)^{|
 wait
@@ -235,7 +238,7 @@ let get_metadata ~conf ~pool ~stderr switch logdir pkgs =
     Lwt_unix.getcwd () >>= fun cwd ->
     let metadatadir = Server_workdirs.tmpmetadatadir logdir in
     let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
-    let max_thread = string_of_int (Server_configfile.processes conf) in
+    let max_thread = Server_configfile.processes conf in
     let cmd = metadata_script ~max_thread pkgs in
     docker_run ~timeout:48 ~stderr ~stdout:stderr ~volumes:[(metadatadir, "/metadata")] img_name (`Script cmd)
   end
