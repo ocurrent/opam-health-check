@@ -178,6 +178,7 @@ let get_dockerfile ~conf switch =
   run "sudo apt-get update" @@
   workdir "opam-repository" @@
   run "git pull origin master" @@
+  run "git pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check" @@
   run "opam admin cache" @@
   run "opam init -ya --bare --disable-sandboxing ." @@
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
@@ -186,7 +187,11 @@ let get_dockerfile ~conf switch =
   run "opam install -y opam-depext" @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
   run "mkdir -p ~/.cache" @@
-  env ["DUNE_CACHE","enabled"] @@
+  env [
+    "DUNE_CACHE","enabled";
+    "DUNE_CACHE_TRANSPORT","direct";
+    "DUNE_CACHE_DUPLICATION","copy";
+  ] @@
   cmd "%s" (Server_configfile.list_command conf)
 
 let with_stderr ~start_time workdir f =
