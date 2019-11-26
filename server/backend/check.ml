@@ -184,7 +184,10 @@ let get_dockerfile ~conf switch =
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
   run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
-  run "opam install -y opam-depext" @@
+  run "opam install -y opam-depext%s"
+    (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.06" < 0
+     then " ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404 *)
+     else "") @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
   run "mkdir -p ~/.cache" @@
   env [
