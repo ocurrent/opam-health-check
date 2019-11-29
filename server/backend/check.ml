@@ -254,7 +254,7 @@ let get_metadata ~conf ~pool ~stderr switch logdir pkgs =
 let get_git_hash ~stderr switch conf =
   let img_name = get_img_name ~conf switch in
   Oca_lib.write_line_unix stderr "Getting current git hash..." >>= fun () ->
-  docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"HEAD"] >>= function
+  docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"origin/master"] >>= function
   | [hash] ->
       Oca_lib.write_line_unix stderr ("Current git hash: "^hash) >|= fun () ->
       hash
