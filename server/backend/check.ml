@@ -178,7 +178,11 @@ let get_dockerfile ~conf switch =
   run "sudo apt-get update" @@
   workdir "opam-repository" @@
   run "git pull origin master" @@
-  run "git pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check" @@
+  (if Server_configfile.enable_dune_cache conf then
+     run "git pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"
+   else
+     empty
+  ) @@
   run "opam admin cache" @@
   run "opam init -ya --bare --disable-sandboxing ." @@
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
@@ -189,12 +193,16 @@ let get_dockerfile ~conf switch =
      then " ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404 *)
      else "") @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
-  run "mkdir -p ~/.cache" @@
-  env [
-    "DUNE_CACHE","enabled";
-    "DUNE_CACHE_TRANSPORT","direct";
-    "DUNE_CACHE_DUPLICATION","copy";
-  ] @@
+  (if Server_configfile.enable_dune_cache conf then
+     run "mkdir -p ~/.cache" @@
+     env [
+       "DUNE_CACHE","enabled";
+       "DUNE_CACHE_TRANSPORT","direct";
+       "DUNE_CACHE_DUPLICATION","copy";
+     ]
+   else
+     empty
+  ) @@
   cmd "%s" (Server_configfile.list_command conf)
 
 let with_stderr ~start_time workdir f =
@@ -337,8 +345,13 @@ let run ~on_finished ~is_retry ~conf cache workdir =
           Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
-          docker_create_volume ~stderr ~conf switch ("dune-cache", "/home/opam/.cache/dune") >>= fun dune_cache ->
-          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes:[dune_cache] new_logdir (hd_pkgs :: tl_pkgs) in
+          (if Server_configfile.enable_dune_cache conf then
+             docker_create_volume ~stderr ~conf switch ("dune-cache", "/home/opam/.cache/dune") >|= fun dune_cache ->
+             [dune_cache]
+           else
+             Lwt.return_nil
+          ) >>= fun volumes ->
+          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes new_logdir (hd_pkgs :: tl_pkgs) in
           let metadata_job = get_metadata ~conf ~pool ~stderr switch new_logdir pkgs in
           let metadata_timeout = Lwt_unix.sleep (48. *. 60. *. 60.) in
           Lwt.join (jobs ()) >>= fun () ->

@@ -7,6 +7,7 @@ val port : t -> int
 val admin_port : t -> int
 val auto_run_interval : t -> int
 val processes : t -> int
+val enable_dune_cache : t -> bool
 val list_command : t -> string
 val extra_command : t -> string option
 val ocaml_switches : t -> Intf.Switch.t list option
