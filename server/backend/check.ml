@@ -82,7 +82,7 @@ let get_pkgs ~conf ~stderr switch =
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
-    | "ocaml" | "ocaml-base-compiler" | "ocaml-variants" -> false
+    | "ocaml" | "ocaml-base-compiler" | "ocaml-variants" | "ocaml-beta" | "ocaml-config" -> false
     | _ -> true
   end pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
