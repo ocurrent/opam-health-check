@@ -101,8 +101,14 @@ module Pkg = struct
     in
     {full_name; name; version; maintainers; instances; revdeps}
 
-  let equal x y = OpamVersionCompare.equal x.full_name y.full_name
-  let compare x y = OpamVersionCompare.compare x.full_name y.full_name
+  let equal x y =
+    String.equal x.name y.name &&
+    OpamVersionCompare.equal x.version y.version
+
+  let compare x y =
+    match String.compare x.name y.name with
+    | 0 -> OpamVersionCompare.compare x.version y.version
+    | cmp -> cmp
 
   let full_name x = x.full_name
   let name x = x.name
