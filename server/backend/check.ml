@@ -215,8 +215,7 @@ let with_stderr ~start_time workdir f =
 let build_switch ~stderr ~cached conf switch =
   let img_name = get_img_name ~conf switch in
   docker_build ~conf ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
-  get_pkgs ~conf ~stderr switch >|= fun pkgs ->
-  (switch, pkgs)
+  get_pkgs ~conf ~stderr switch
 
 module Pkg_set = Set.Make (String)
 
@@ -282,16 +281,16 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~conf ~pool ~stderr ~volumes logdir pkgs =
-  let len_suffix = "/"^string_of_int (List.fold_left (fun n (_, pkgs) -> n + List.length pkgs) 0 pkgs) in
-  List.fold_left begin fun (i, jobs, full_pkgs_set) (switch, pkgs) ->
+let run_and_get_pkgs ~conf ~pool ~stderr ~volumes logdir switches pkgs =
+  let len_suffix = "/"^string_of_int (List.length pkgs) in
+  List.fold_left begin fun (i, jobs, full_pkgs_set) switch ->
     List.fold_left begin fun (i, jobs, full_pkgs_set) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
       let job () = run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir full_name in
       (i, (fun () -> job () :: jobs ()), Pkg_set.add full_name full_pkgs_set)
     end (i, jobs, full_pkgs_set) pkgs
-  end (0, (fun () -> []), Pkg_set.empty) pkgs
+  end (0, (fun () -> []), Pkg_set.empty) switches
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   let body = match old_logdir with
@@ -352,7 +351,8 @@ let run ~on_finished ~is_retry ~conf cache workdir =
            else
              Lwt.return_nil
           ) >>= fun volumes ->
-          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes new_logdir (hd_pkgs :: tl_pkgs) in
+          let pkgs = List.concat (hd_pkgs :: tl_pkgs) in
+          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes new_logdir (switch :: switches) pkgs in
           let metadata_job = get_metadata ~conf ~pool ~stderr switch new_logdir pkgs in
           let metadata_timeout = Lwt_unix.sleep (48. *. 60. *. 60.) in
           Lwt.join (jobs ()) >>= fun () ->
