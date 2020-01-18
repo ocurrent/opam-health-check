@@ -52,12 +52,18 @@ let get_img_name ~conf switch =
   in
   get_prefix conf^"-"^switch
 
+let volume_setup_script ~dir = {|
+  sudo chown opam:opam '|}^dir^{|'
+  opam install -y dune
+  dune cache trim --size=100000000000
+|}
+
 let docker_create_volume ~stderr ~conf switch (name, dir) =
   let img_name = get_img_name ~conf switch in
   let label = get_prefix conf in
   let name = label^"-"^name in
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"volume";"create";"--label";label;name] >>= fun () ->
-  docker_run ~volumes:[(name, dir)] ~stdout:stderr ~stderr img_name (`Cmd ["sudo";"chown";"opam:opam";dir]) >|= fun () ->
+  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"volume";"create";name] >>= fun () ->
+  docker_run ~volumes:[(name, dir)] ~stdout:stderr ~stderr img_name (`Script (volume_setup_script dir)) >|= fun () ->
   (name, dir)
 
 let rec read_lines fd =
