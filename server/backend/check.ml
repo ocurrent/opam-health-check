@@ -288,7 +288,7 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
 let run_and_get_pkgs ~conf ~pool ~stderr ~volumes logdir switches pkgs =
-  let len_suffix = "/"^string_of_int (List.length pkgs) in
+  let len_suffix = "/"^string_of_int (List.length pkgs * List.length switches) in
   List.fold_left begin fun (i, jobs, full_pkgs_set) switch ->
     List.fold_left begin fun (i, jobs, full_pkgs_set) full_name ->
       let i = succ i in
