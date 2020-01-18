@@ -194,7 +194,7 @@ let get_dockerfile ~conf switch =
   env ["OPAMPRECISETRACKING","1"] @@ (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
-  run "echo 'archive-mirrors: [\"file:///home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
+  run "echo 'archive-mirrors: [\"/home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
   run "opam install -y opam-depext%s"
     (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.07" < 0
      then " ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
