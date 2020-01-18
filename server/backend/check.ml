@@ -228,15 +228,16 @@ maintainers_dir=$root/maintainers
 
 user=$(stat -c '%u' $root)
 group=$(stat -c '%g' $root)
-sudo="sudo -u '#$user' -g '#$group'"
+sudo="sudo -u #$user -g #$group"
 
 $sudo mkdir $revdeps_dir $maintainers_dir
 
 echo "pkg=\"\$1\"" >> metadata.sh
-echo "echo \$(opam list -s --recursive --depopts --depends-on \"\$pkg\" | wc -l) - 1 | bc | $sudo tee \"$revdeps_dir/\$pkg\" > /dev/null" >> metadata.sh
+echo "sudo=\"sudo -u #$user -g #$group\"" >> metadata.sh
+echo "echo \$(opam list -s --recursive --depopts --depends-on \"\$pkg\" | wc -l) - 1 | bc | \$sudo tee \"$revdeps_dir/\$pkg\" > /dev/null" >> metadata.sh
 echo "pkg_name=\$(echo \"\$pkg\" | sed -E 's/^([^.]*).*\$/\1/')" >> metadata.sh
 echo "[ -f \"$maintainers_dir/\$pkg_name\" ] && exit 0" >> metadata.sh
-echo "opam show -f maintainer: \"\$pkg_name\" | sed -E 's/^\"(.*)\"\$/\1/' | $sudo tee \"$maintainers_dir/\$pkg_name\" > /dev/null" >> metadata.sh
+echo "opam show -f maintainer: \"\$pkg_name\" | sed -E 's/^\"(.*)\"\$/\1/' | \$sudo tee \"$maintainers_dir/\$pkg_name\" > /dev/null" >> metadata.sh
 
 |}^List.fold_left (fun acc pkg -> acc^"echo "^pkg^" >> pkgs.txt\n") "" (Pkg_set.elements pkgs)^{|
 cat pkgs.txt | xargs -P |}^string_of_int max_thread^{| -n 1 bash metadata.sh
