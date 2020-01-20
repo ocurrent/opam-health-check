@@ -191,7 +191,6 @@ let get_dockerfile ~conf switch =
   ) @@
   run "opam admin cache" @@
   run "opam init -ya --bare --disable-sandboxing ." @@
-  env ["OPAMPRECISETRACKING","1"] @@ (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
   run "echo 'archive-mirrors: [\"/home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
