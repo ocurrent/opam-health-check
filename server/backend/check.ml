@@ -52,10 +52,11 @@ let get_img_name ~conf switch =
   in
   get_prefix conf^"-"^switch
 
+(* TODO: Uncomment when dune cache trim does not crash anymore *)
 let volume_setup_script ~dir = {|
   sudo chown opam:opam '|}^dir^{|'
-  opam install -y dune
-  dune cache trim --size=100000000000
+#  opam install -y dune
+#  dune cache trim --size=100GB
 |}
 
 let docker_create_volume ~stderr ~conf switch (name, dir) =
