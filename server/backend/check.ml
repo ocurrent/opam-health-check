@@ -56,7 +56,7 @@ let get_img_name ~conf switch =
 let volume_setup_script ~dir = {|
   sudo chown opam:opam '|}^dir^{|'
 #  opam install -y dune
-#  dune cache trim --size=100GB
+#  opam exec -- dune cache trim --size=100GB
 |}
 
 let docker_create_volume ~stderr ~conf switch (name, dir) =
