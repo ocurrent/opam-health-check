@@ -30,7 +30,7 @@ module CUD_pallette = struct
 end
 
 let log_url logdir pkg instance =
-  let logdir = Server_workdirs.get_logdir_name (Option.get_exn logdir) in
+  let logdir = Server_workdirs.get_logdir_name logdir in
   let comp = Instance.compiler instance in
   let comp = Compiler.to_string comp in
   let state = State.to_string (Instance.state instance) in
@@ -145,12 +145,8 @@ let gen_table_form ~logdir l =
   let legend = legend [b [txt "Filter form:"]] in
   let opam_repo_uri =
     let content = b [txt "🔗 opam-repository commit hash"] in
-    match logdir with
-    | Some new_logdir ->
-        let hash = Server_workdirs.get_logdir_hash new_logdir in
-        get_opam_repository_commit_url ~hash ~content
-    | None ->
-        content
+    let hash = Server_workdirs.get_logdir_hash logdir in
+    get_opam_repository_commit_url ~hash ~content
   in
   let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last checks"]] in
   let opam_previous_runs_uri = a ~a:[a_href "/run"] [b [txt "🔗 Previous runs"]] in

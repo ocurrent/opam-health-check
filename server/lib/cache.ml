@@ -3,10 +3,10 @@ open Lwt.Infix
 open Intf
 
 module Html_cache = Hashtbl.Make (struct
-    type t = (Server_workdirs.logdir option * Html.query)
+    type t = (Server_workdirs.logdir * Html.query)
     let hash = Hashtbl.hash (* TODO: WRONG!! *)
     let equal (logdir1, {Html.available_compilers; compilers; show_available; show_failures_only; show_diff_only; show_latest_only; sort_by_revdeps; maintainers; logsearch}) (logdir2, y) =
-      Option.equal Server_workdirs.logdir_equal logdir1 logdir2 &&
+      Server_workdirs.logdir_equal logdir1 logdir2 &&
       List.equal Compiler.equal available_compilers y.Html.available_compilers &&
       List.equal Compiler.equal compilers y.Html.compilers &&
       List.equal Compiler.equal show_available y.Html.show_available &&
@@ -113,7 +113,7 @@ let call_generate_diff (new_logdir, new_pkgs) (old_logdir, old_pkgs) =
   ((old_logdir, new_logdir), diff)
 
 let call_html_diff ~html_diff ((old_logdir, new_logdir), diff) =
-  let html_diff = diff >|=html_diff ~old_logdir ~new_logdir in
+  let html_diff = diff >|= html_diff ~old_logdir ~new_logdir in
   ((old_logdir, new_logdir), html_diff)
 
 let call_html_diff_list diff =
@@ -142,25 +142,18 @@ let get_html self query logdir =
     Lwt.return html
   in
   self.pkgs >>= fun pkgs ->
-  match logdir with
-  | Some logdir ->
-      let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
-      aux ~logdir:(Some logdir) pkgs
-  | None ->
-      aux ~logdir:None Lwt.return_nil
+  let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
+  aux ~logdir pkgs
+
+let get_latest_logdir self =
+  self.logdirs >>= function
+  | [] -> Lwt.fail Not_found
+  | logdir::_ -> Lwt.return logdir
 
 let get_html self query logdir =
   match Html_cache.find_opt self.html_tbl (logdir, query) with
   | Some html -> Lwt.return html
   | None -> get_html self query logdir
-
-let get_latest_html self query =
-  self.pkgs >>= function
-  | (logdir, _)::_ -> get_html self query (Some logdir)
-  | [] -> get_html self query None
-
-let get_html self query logdir =
-  get_html self query (Some logdir)
 
 let get_logdirs self =
   self.logdirs
@@ -168,10 +161,8 @@ let get_logdirs self =
 let get_pkgs ~logdir self =
   self.pkgs >>= List.assoc ~eq:Server_workdirs.logdir_equal logdir
 
-let get_latest_compilers self =
-  self.compilers >|= function
-  | (_, compilers)::_ -> compilers
-  | [] -> []
+let get_compilers ~logdir self =
+  self.compilers >|= List.assoc ~eq:Server_workdirs.logdir_equal logdir
 
 let get_maintainers self k =
   self.maintainers >|= fun maintainers ->

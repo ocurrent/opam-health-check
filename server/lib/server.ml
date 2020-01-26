@@ -16,7 +16,7 @@ module Make (Backend : Backend_intf.S) = struct
     end [] |>
     List.rev
 
-  let parse_raw_query uri =
+  let parse_raw_query logdir uri =
     let checkbox_default def = if List.is_empty (Uri.query uri) then def else false in
     let compilers = get_query_param_list uri "comp" in
     let show_available = get_query_param_list uri "available" in
@@ -39,7 +39,7 @@ module Make (Backend : Backend_intf.S) = struct
       end logsearch (Uri.get_query_param uri "logsearch_comp")
     in
     let logsearch = (option_to_string logsearch, logsearch') in
-    Cache.get_latest_compilers Backend.cache >>= fun available_compilers ->
+    Cache.get_compilers ~logdir Backend.cache >>= fun available_compilers ->
     let compilers = match compilers with
       | [] -> available_compilers
       | compilers -> List.map Intf.Compiler.from_string compilers
@@ -82,15 +82,16 @@ module Make (Backend : Backend_intf.S) = struct
     in
     match path_from_uri uri with
     | [] ->
-        parse_raw_query uri >>= fun query ->
-        Cache.get_latest_html Backend.cache query >>= fun html ->
+        Cache.get_latest_logdir Backend.cache >>= fun logdir ->
+        parse_raw_query logdir uri >>= fun query ->
+        Cache.get_html Backend.cache query logdir >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["run"] ->
         Cache.get_html_run_list Backend.cache >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["run";logdir] ->
         let logdir = Server_workdirs.logdir_from_string workdir logdir in
-        parse_raw_query uri >>= fun query ->
+        parse_raw_query logdir uri >>= fun query ->
         Cache.get_html Backend.cache query logdir >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["diff"] ->
