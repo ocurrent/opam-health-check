@@ -52,11 +52,10 @@ let get_img_name ~conf switch =
   in
   get_prefix conf^"-"^switch
 
-(* TODO: Uncomment when dune cache trim does not crash anymore *)
 let volume_setup_script ~dir = {|
   sudo chown opam:opam '|}^dir^{|'
-#  opam install -y dune
-#  opam exec -- dune cache trim --size=100GB
+  opam install -y dune
+  opam exec -- dune cache trim --size=100GB
 |}
 
 let docker_create_volume ~stderr ~conf switch (name, dir) =
@@ -64,7 +63,7 @@ let docker_create_volume ~stderr ~conf switch (name, dir) =
   let label = get_prefix conf in
   let name = label^"-"^name in
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"volume";"create";name] >>= fun () ->
-  docker_run ~volumes:[(name, dir)] ~stdout:stderr ~stderr img_name (`Script (volume_setup_script dir)) >|= fun () ->
+  docker_run ~volumes:[(name, dir)] ~stdout:stderr ~stderr img_name (`Script (volume_setup_script ~dir)) >|= fun () ->
   (name, dir)
 
 let rec read_lines fd =
