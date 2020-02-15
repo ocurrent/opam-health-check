@@ -167,20 +167,22 @@ let get_dockerfile ~conf switch =
   let open Dockerfile in
   from ("ocaml/opam2:"^distribution_used^" AS base") @@
   workdir "opam-repository" @@
-  run "opam switch 4.07" @@
+  run "opam switch 4.09" @@
   run "git pull origin master" @@
   run "opam update" @@
-  run "opam depext -yui z3" @@
   workdir "/tmp" @@
   run "git clone git://github.com/kit-ty-kate/opam.git" @@
   workdir "/tmp/opam" @@
-  run "git checkout opam-health-check" @@
-  run "eval $(opam config env) && ./configure" @@
-  run "eval $(opam config env) && make lib-ext" @@
-  run "eval $(opam config env) && make" @@
+  run "git checkout opam-health-check2" @@
+  run "git clone git://github.com/kit-ty-kate/opam-0install-solver.git" @@
+  run "git -C opam-0install-solver checkout tmp-opam" @@
+  run "opam update" @@
+  run "sudo apt-get install -yy m4" @@
+  run "opam pin add -yn opam-0install-solver" @@
+  run "opam pin add -y ." @@
   from ("ocaml/opam2:"^distribution_used^"-opam") @@
-  copy ~from:"base" ~src:["/tmp/opam/opam"] ~dst:"/usr/bin/opam" () @@
-  copy ~from:"base" ~src:["/tmp/opam/opam-installer"] ~dst:"/usr/bin/opam-installer" () @@
+  copy ~from:"base" ~src:["/home/opam/.opam/4.09/lib/opam-devel/opam"] ~dst:"/usr/bin/opam" () @@
+  copy ~from:"base" ~src:["/home/opam/.opam/4.09/bin/opam-installer"] ~dst:"/usr/bin/opam-installer" () @@
   run "sudo apt-get update" @@
   workdir "opam-repository" @@
   run "git pull origin master" @@
