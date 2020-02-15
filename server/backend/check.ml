@@ -52,18 +52,12 @@ let get_img_name ~conf switch =
   in
   get_prefix conf^"-"^switch
 
-let volume_setup_script ~dir = {|
-  sudo chown opam:opam '|}^dir^{|'
-  opam install -y dune
-  opam exec -- dune cache trim --size=100GB
-|}
-
-let docker_create_volume ~stderr ~conf switch (name, dir) =
+let docker_create_volume ~stderr ~conf switch (name, dir, script) =
   let img_name = get_img_name ~conf switch in
   let label = get_prefix conf in
   let name = label^"-"^name in
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"volume";"create";name] >>= fun () ->
-  docker_run ~volumes:[(name, dir)] ~stdout:stderr ~stderr img_name (`Script (volume_setup_script ~dir)) >|= fun () ->
+  docker_run ~volumes:[(name, dir)] ~stdout:stderr ~stderr img_name (`Script (script ~dir)) >|= fun () ->
   (name, dir)
 
 let rec read_lines fd =
@@ -191,12 +185,10 @@ let get_dockerfile ~conf switch =
    else
      empty
   ) @@
-  run "opam admin cache" @@
   run "opam init -ya --bare --disable-sandboxing ." @@
   env ["OPAMPRECISETRACKING","1"] @@ (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
-  run "echo 'archive-mirrors: [\"/home/opam/opam-repository/cache\"]' >> /home/opam/.opam/config" @@
   run "opam install -y opam-depext%s"
     (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.07" < 0
      then " ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
@@ -204,7 +196,6 @@ let get_dockerfile ~conf switch =
      else "") @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
   (if Server_configfile.enable_dune_cache conf then
-     run "mkdir -p ~/.cache" @@
      env [
        "DUNE_CACHE","enabled";
        "DUNE_CACHE_TRANSPORT","direct";
@@ -213,6 +204,7 @@ let get_dockerfile ~conf switch =
    else
      empty
   ) @@
+  run "echo 'archive-mirrors: [\"/home/opam/.cache/opam\"]' >> /home/opam/.opam/config" @@
   cmd "%s" (Server_configfile.list_command conf)
 
 let with_stderr ~start_time workdir f =
@@ -335,6 +327,17 @@ let wait_current_run_to_finish =
   in
   loop
 
+let cache_setup_script ~dir = {|
+  sudo chown opam:opam '|}^dir^{|'
+
+  mkdir -p '|}^dir^{|/opam'
+  opam admin cache '|}^dir^{|/opam'
+
+  mkdir -p '|}^dir^{|/dune'
+  opam install -y dune
+  opam exec -- dune cache trim --size=100GB
+|}
+
 let run ~on_finished ~is_retry ~conf cache workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   if !run_locked then
@@ -353,12 +356,8 @@ let run ~on_finished ~is_retry ~conf cache workdir =
           Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
-          (if Server_configfile.enable_dune_cache conf then
-             docker_create_volume ~stderr ~conf switch ("dune-cache", "/home/opam/.cache/dune") >|= fun dune_cache ->
-             [dune_cache]
-           else
-             Lwt.return_nil
-          ) >>= fun volumes ->
+          docker_create_volume ~stderr ~conf switch ("cache", "/home/opam/.cache", cache_setup_script) >>= fun cache ->
+          let volumes = [cache] in
           let pkgs = List.concat (hd_pkgs :: tl_pkgs) in
           let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes new_logdir (switch :: switches) pkgs in
           let metadata_job = get_metadata ~conf ~pool ~stderr switch new_logdir pkgs in
