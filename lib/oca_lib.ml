@@ -93,12 +93,24 @@ let exec ?(timeout=5) ~stdin ~stdout ~stderr cmd =
   in
   Lwt.pick [timeout; proc]
 
+type timer = float ref
+
+let timer_start () =
+  ref (Unix.time ())
+
+let timer_log timer fd msg =
+  let start_time = !timer in
+  let end_time = Unix.time () in
+  let time_span = end_time -. start_time in
+  write_line_unix fd ("Done. "^msg^" took: "^string_of_float time_span^" seconds") >|= fun () ->
+  timer := Unix.time ()
+
 let protocol_version = "2"
 let default_server_name = "default" (* TODO: Just make it random instead?! *)
 let default_html_port = "8080"
 let default_admin_port = "9999"
 let default_admin_name = "admin"
 let default_auto_run_interval = 48 (* 48 hours *)
-let default_processes = 48
+let default_processes = 72
 let default_list_command = "opam list --available --installable --short --all-versions"
 let localhost = "localhost"

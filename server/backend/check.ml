@@ -241,7 +241,7 @@ echo "pkg=\"\$1\"" >> maintainers.sh
 echo "sudo=\"sudo -u #$user -g #$group\"" >> maintainers.sh
 echo "opam show -f maintainer: \"\$pkg\" | sed -E 's/^\"(.*)\"\$/\1/' | \$sudo tee \"$maintainers_dir/\$pkg\" > /dev/null" >> maintainers.sh
 
-|}^List.fold_left (fun acc pkg -> acc^"echo "^pkg^" >> pkgs.txt\n") "" (Pkg_set.elements pkgs)^{|
+|}^Pkg_set.fold (fun pkg acc -> acc^"echo "^pkg^" >> pkgs.txt\n") pkgs ""^{|
 cat pkgs.txt | xargs -P |}^string_of_int max_thread^{| -n 1 bash revdeps.sh
 cat pkgs.txt | sed -E 's/^([^.]*).*$/\1/' | sort -u | xargs -P |}^string_of_int max_thread^{| -n 1 bash maintainers.sh
 exit 0
@@ -282,15 +282,15 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
 let run_and_get_pkgs ~conf ~pool ~stderr ~volumes logdir switches pkgs =
-  let len_suffix = "/"^string_of_int (List.length pkgs * List.length switches) in
-  List.fold_left begin fun (i, jobs, full_pkgs_set) switch ->
-    List.fold_left begin fun (i, jobs, full_pkgs_set) full_name ->
+  let len_suffix = "/"^string_of_int (Pkg_set.cardinal pkgs * List.length switches) in
+  List.fold_left begin fun (i, jobs) switch ->
+    Pkg_set.fold begin fun full_name (i, jobs) ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job () = run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir full_name in
-      (i, (fun () -> job () :: jobs ()), Pkg_set.add full_name full_pkgs_set)
-    end (i, jobs, full_pkgs_set) pkgs
-  end (0, (fun () -> []), Pkg_set.empty) switches
+      let job = run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir full_name in
+      (i, job :: jobs)
+    end pkgs (i, jobs)
+  end (0, []) switches
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   let body = match old_logdir with
@@ -348,29 +348,28 @@ let run ~on_finished ~is_retry ~conf cache workdir =
     with_stderr ~start_time workdir begin fun ~stderr ->
       begin match switches with
       | switch::switches ->
+          let timer = Oca_lib.timer_start () in
           build_switch ~stderr ~cached:is_retry conf switch >>= fun hd_pkgs ->
           get_git_hash ~stderr switch conf >>= fun hash ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
           let old_logdir = List.head_opt old_logdir in
           let new_logdir = Server_workdirs.new_logdir ~hash ~start_time workdir in
           Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
-          let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
+          let pool = Lwt_pool.create (Server_configfile.processes conf / 3 * 2) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
           docker_create_volume ~stderr ~conf switch ("cache", "/home/opam/.cache", cache_setup_script) >>= fun cache ->
           let volumes = [cache] in
-          let pkgs = List.concat (hd_pkgs :: tl_pkgs) in
-          let (_, jobs, pkgs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes new_logdir (switch :: switches) pkgs in
-          let metadata_job = get_metadata ~conf ~pool ~stderr switch new_logdir pkgs in
-          let metadata_timeout = Lwt_unix.sleep (48. *. 60. *. 60.) in
-          Lwt.join (jobs ()) >>= fun () ->
-          Lwt.pick [metadata_job; metadata_timeout] >>= fun () ->
+          let pkgs = Pkg_set.of_list (List.concat (hd_pkgs :: tl_pkgs)) in
+          Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
+          get_metadata ~conf ~pool ~stderr switch new_logdir pkgs >>= fun () ->
+          Oca_lib.timer_log timer stderr "Metadata collection" >>= fun () ->
+          let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes new_logdir (switch :: switches) pkgs in
+          Lwt.join jobs >>= fun () ->
           Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
           move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
           on_finished workdir;
           trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
-          let end_time = Unix.time () in
-          let time_span = end_time -. start_time in
-          Oca_lib.write_line_unix stderr ("Done. Operation took: "^string_of_float time_span^" seconds")
+          Oca_lib.timer_log timer stderr "Operation"
       | [] ->
           Oca_lib.write_line_unix stderr "No switches."
       end

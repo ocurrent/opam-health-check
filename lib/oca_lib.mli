@@ -23,6 +23,11 @@ val exec :
   string list ->
   unit Lwt.t
 
+type timer
+
+val timer_start : unit -> timer
+val timer_log : timer -> Lwt_unix.file_descr -> string -> unit Lwt.t
+
 val protocol_version : string
 val default_server_name : string
 val default_html_port : string
