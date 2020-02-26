@@ -334,7 +334,7 @@ let cache_setup_script ~dir = {|
   opam admin cache '|}^dir^{|/opam'
 
   mkdir -p '|}^dir^{|/dune'
-  opam install -y dune
+  opam depext -iy dune
   opam exec -- dune cache trim --size=100GB
 |}
 
