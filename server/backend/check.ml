@@ -167,7 +167,7 @@ let get_dockerfile ~conf switch =
   workdir "/tmp" @@
   run "git clone git://github.com/kit-ty-kate/opam.git" @@
   workdir "/tmp/opam" @@
-  run "git checkout opam-health-check2" @@
+  run "git checkout opam-health-check3" @@
   run "git clone git://github.com/kit-ty-kate/opam-0install-solver.git" @@
   run "git -C opam-0install-solver checkout tmp-opam" @@
   run "opam update" @@
