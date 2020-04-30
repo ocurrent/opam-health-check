@@ -189,11 +189,10 @@ let get_dockerfile ~conf switch =
   env ["OPAMPRECISETRACKING","1"] @@ (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
-  run "opam install -y %s"
-    (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.07" < 0
-     then " ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
-                                         and https://github.com/ocaml/opam-repository/pull/15642 *)
-     else "") @@
+  (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.07" < 0
+   then run "opam install -y ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
+                                                          and https://github.com/ocaml/opam-repository/pull/15642 *)
+   else empty) @@
   Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
   (if Server_configfile.enable_dune_cache conf then
      env [
