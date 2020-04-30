@@ -104,7 +104,7 @@ let is_partial_failure logfile =
 let distribution_used = "debian-unstable"
 
 let run_script pkg = {|
-opam depext -ivy "|}^pkg^{|"
+opam install -vy "|}^pkg^{|"
 res=$?
 if [ $res = 31 ]; then
     if opam show -f x-ci-accept-failures: "|}^pkg^{|" | grep -q '"|}^distribution_used^{|"'; then
@@ -189,7 +189,7 @@ let get_dockerfile ~conf switch =
   env ["OPAMPRECISETRACKING","1"] @@ (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
-  run "opam install -y opam-depext%s"
+  run "opam install -y %s"
     (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.07" < 0
      then " ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
                                          and https://github.com/ocaml/opam-repository/pull/15642 *)
@@ -334,7 +334,7 @@ let cache_setup_script ~dir = {|
   opam admin cache '|}^dir^{|/opam'
 
   mkdir -p '|}^dir^{|/dune'
-  opam depext -iy dune
+  opam install -y dune
   opam exec -- dune cache trim --size=100GB
 |}
 
