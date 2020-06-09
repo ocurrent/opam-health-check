@@ -228,21 +228,22 @@ maintainers_dir=$root/maintainers
 
 user=$(stat -c '%u' $root)
 group=$(stat -c '%g' $root)
-sudo="sudo -u #$user -g #$group"
 
-$sudo mkdir $revdeps_dir $maintainers_dir
+sudo chown opam:opam $root
+mkdir $revdeps_dir $maintainers_dir
 
-echo "pkg=\"\$1\"" >> revdeps.sh
-echo "sudo=\"sudo -u #$user -g #$group\"" >> revdeps.sh
-echo "echo \$(opam list -s --recursive --depopts --depends-on \"\$pkg\" | wc -l) - 1 | bc | \$sudo tee \"$revdeps_dir/\$pkg\" > /dev/null" >> revdeps.sh
+echo "pkg=\"\$1\"" > revdeps.sh
+echo "echo \"Getting revdeps for \$pkg\"" >> revdeps.sh
+echo "echo \$(opam list -s --recursive --depopts --depends-on \"\$pkg\" | wc -l) - 1 | bc > \"$revdeps_dir/\$pkg\"" >> revdeps.sh
 
-echo "pkg=\"\$1\"" >> maintainers.sh
-echo "sudo=\"sudo -u #$user -g #$group\"" >> maintainers.sh
-echo "opam show -f maintainer: \"\$pkg\" | sed -E 's/^\"(.*)\"\$/\1/' | \$sudo tee \"$maintainers_dir/\$pkg\" > /dev/null" >> maintainers.sh
+echo "pkg=\"\$1\"" > maintainers.sh
+echo "echo \"Getting maintainers for \$pkg\"" >> maintainers.sh
+echo "opam show -f maintainer: \"\$pkg\" | sed -E 's/^\"(.*)\"\$/\1/' > \"$maintainers_dir/\$pkg\"" >> maintainers.sh
 
 |}^Pkg_set.fold (fun pkg acc -> acc^"echo "^pkg^" >> pkgs.txt\n") pkgs ""^{|
 cat pkgs.txt | xargs -P |}^string_of_int max_thread^{| -n 1 bash revdeps.sh
 cat pkgs.txt | sed -E 's/^([^.]*).*$/\1/' | sort -u | xargs -P |}^string_of_int max_thread^{| -n 1 bash maintainers.sh
+sudo chown -R $user:$group $root
 exit 0
 |}
 
