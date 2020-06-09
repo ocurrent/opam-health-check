@@ -169,7 +169,7 @@ let get_dockerfile ~conf switch =
   workdir "/tmp/opam" @@
   run "git checkout opam-health-check3" @@
   run "git clone git://github.com/kit-ty-kate/opam-0install-solver.git" @@
-  run "git -C opam-0install-solver checkout tmp-opam" @@
+  run "git -C opam-0install-solver checkout cudf" @@
   run "opam update" @@
   run "sudo apt-get install -yy m4" @@
   run "opam pin add -yn opam-0install-solver" @@
