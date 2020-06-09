@@ -334,6 +334,9 @@ let cache_setup_script ~dir = {|
   opam admin cache '|}^dir^{|/opam'
 
   mkdir -p '|}^dir^{|/dune'
+  export DUNE_CACHE=enabled
+  export DUNE_CACHE_TRANSPORT=direct
+  export DUNE_CACHE_DUPLICATION=copy
   opam install -y dune
   opam exec -- dune cache trim --size=100GB
 |}
