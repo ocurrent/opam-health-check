@@ -175,7 +175,7 @@ let get_dockerfile ~conf switch =
   run "opam pin add -yn opam-0install-solver" @@
   run "opam pin add -y ." @@
   from ("ocaml/opam2:"^distribution_used^"-opam") @@
-  copy ~from:"base" ~src:["/home/opam/.opam/4.09/lib/opam-devel/opam"] ~dst:"/usr/bin/opam" () @@
+  copy ~from:"base" ~src:["/home/opam/.opam/4.09/lib/opam-devel/opam.exe"] ~dst:"/usr/bin/opam" () @@
   copy ~from:"base" ~src:["/home/opam/.opam/4.09/bin/opam-installer"] ~dst:"/usr/bin/opam-installer" () @@
   run "sudo apt-get update" @@
   workdir "opam-repository" @@
