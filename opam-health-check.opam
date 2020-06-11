@@ -9,7 +9,8 @@ bug-reports: "https://github.com/kit-ty-kate/opam-health-check/issues"
 tags: ["opam" "check"]
 build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
-  "dune" {build}
+  "ocaml"
+  "dune" {>= "1.0"}
   "tyxml" {>= "4.3.0"}
   "cohttp-lwt-unix"
   "containers" {>= "2.2"}
