@@ -78,14 +78,12 @@ let get_pkgs ~conf ~stderr switch =
   let img_name = get_img_name ~conf switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
   docker_run_to_str ~stderr ~img_name [] >>= fun pkgs ->
-  let rgen = Random.int_range (-1) 1 in
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
     | "ocaml" | "ocaml-base-compiler" | "ocaml-variants" | "ocaml-beta" | "ocaml-config" -> false
     | _ -> true
   end pkgs in
-  let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
   let nelts = string_of_int (List.length pkgs) in
   Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
   pkgs
@@ -282,14 +280,17 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
 let run_and_get_pkgs ~conf ~pool ~stderr ~volumes logdir switches pkgs =
-  let len_suffix = "/"^string_of_int (Pkg_set.cardinal pkgs * List.length switches) in
+  let rgen = Random.int_range (-1) 1 in
+  let pkgs = Pkg_set.to_list pkgs in
+  let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
+  let len_suffix = "/"^string_of_int (List.length pkgs * List.length switches) in
   List.fold_left begin fun (i, jobs) switch ->
-    Pkg_set.fold begin fun full_name (i, jobs) ->
+    List.fold_left begin fun (i, jobs) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
       let job = run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir full_name in
       (i, job :: jobs)
-    end pkgs (i, jobs)
+    end (i, jobs) pkgs
   end (0, []) switches
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
