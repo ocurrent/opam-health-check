@@ -167,10 +167,10 @@ let get_dockerfile ~conf switch =
   workdir "/tmp/opam" @@
   run "git checkout opam-health-check3" @@
   run "git clone git://github.com/kit-ty-kate/opam-0install-solver.git" @@
-  run "git -C opam-0install-solver checkout cudf" @@
+  run "git -C opam-0install-solver checkout allow-recommended-restricted-deps" @@
   run "opam update" @@
   run "sudo apt-get install -yy m4" @@
-  run "opam pin add -yn opam-0install-solver" @@
+  run "opam pin add -y opam-0install-cudf.0.3 opam-0install-solver" @@
   run "opam pin add -y ." @@
   from ("ocaml/opam2:"^distribution_used^"-opam") @@
   copy ~from:"base" ~src:["/home/opam/.opam/4.09/lib/opam-devel/opam"] ~dst:"/usr/bin/opam" () @@
@@ -184,7 +184,10 @@ let get_dockerfile ~conf switch =
      empty
   ) @@
   run "opam init -ya --bare --disable-sandboxing ." @@
-  env ["OPAMPRECISETRACKING","1"] @@ (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
+  env [
+    "OPAMPRECISETRACKING","1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
+    "OPAMEXTERNALSOLVER","builtin-0install";
+  ] @@
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
   (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.07" < 0
