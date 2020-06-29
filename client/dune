@@ -3,7 +3,7 @@
   (public_name opam-health-check)
   (flags :standard -safe-string -w A-44-33-4 -open Containers)
   (libraries
-    nocrypto
+    mirage-crypto-pk
     cohttp-lwt-unix
     containers
     xdg-basedir

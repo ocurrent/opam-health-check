@@ -2,14 +2,14 @@ open Lwt.Infix
 
 let parse_key key =
   let key = IO.with_in (Fpath.to_string key) (IO.read_all ?size:None) in
-  let key = Nocrypto.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key) in
-  Nocrypto.Rsa.pub_of_priv key
+  let key = Mirage_crypto_pk.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key) in
+  Mirage_crypto_pk.Rsa.pub_of_priv key
 
 let partial_encrypt key msg =
-  Cstruct.to_string (Nocrypto.Rsa.encrypt ~key (Cstruct.of_string msg))
+  Cstruct.to_string (Mirage_crypto_pk.Rsa.encrypt ~key (Cstruct.of_string msg))
 
 let rec encrypt_msg ~key msg =
-  let max_size = Nocrypto.Rsa.pub_bits key / 8 in
+  let max_size = Mirage_crypto_pk.Rsa.pub_bits key / 8 in
   if String.length msg <= max_size then
     partial_encrypt key msg
   else

@@ -7,4 +7,5 @@
     containers
     oca_server
     dockerfile
-    nocrypto.lwt))
+    mirage-crypto-pk
+    mirage-crypto-rng.lwt))

@@ -140,7 +140,7 @@ let start conf workdir =
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
   cache_clear_and_init workdir;
-  Nocrypto_entropy_lwt.initialize () >>= fun () ->
+  Mirage_crypto_rng_lwt.initialize ();
   Admin.create_admin_key workdir >|= fun () ->
   let task () =
     Lwt.join [

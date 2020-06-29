@@ -17,8 +17,8 @@ let get_keyfile workdir username =
 
 let create_userkey workdir username =
   let keyfile = get_keyfile workdir username in
-  let key = Nocrypto.Rsa.generate 2048 in
-  let key = Nocrypto.Rsa.sexp_of_priv key in
+  let key = Mirage_crypto_pk.Rsa.generate ~bits:2048 () in
+  let key = Mirage_crypto_pk.Rsa.sexp_of_priv key in
   let key = Sexplib.Sexp.to_string key in
   with_file_out ~flags:[Unix.O_EXCL] (Fpath.to_string keyfile) begin fun chan ->
     Lwt_io.write_line chan key
@@ -125,13 +125,13 @@ let is_bzero = function
 let get_user_key workdir user =
   let keyfile = get_keyfile workdir user in
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) (Lwt_io.read ?count:None) >|= fun key ->
-  Nocrypto.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key)
+  Mirage_crypto_pk.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key)
 
 let partial_decrypt key msg =
-  Cstruct.to_string (Nocrypto.Rsa.decrypt ~key (Cstruct.of_string msg))
+  Cstruct.to_string (Mirage_crypto_pk.Rsa.decrypt ~key (Cstruct.of_string msg))
 
 let rec decrypt key msg =
-  let key_size = Nocrypto.Rsa.priv_bits key / 8 in
+  let key_size = Mirage_crypto_pk.Rsa.priv_bits key / 8 in
   if String.length msg <= key_size then
     String.drop_while is_bzero (partial_decrypt key msg)
   else
