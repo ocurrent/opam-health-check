@@ -187,6 +187,7 @@ let get_dockerfile ~conf switch =
   env [
     "OPAMPRECISETRACKING","1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
     "OPAMEXTERNALSOLVER","builtin-0install";
+    "OPAMDEPEXTYES","1";
   ] @@
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
