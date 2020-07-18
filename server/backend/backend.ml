@@ -18,7 +18,7 @@ let get_compilers logdir =
 
 module Pkg_tbl = Hashtbl.Make (String)
 
-let pkg_update ~old ~pool pkg_tbl logdir comp state pkg =
+let pkg_update ~conf ~old ~pool pkg_tbl logdir comp state pkg =
   let file =
     let comp = Intf.Compiler.to_string comp in
     let state = Intf.State.to_string state in
@@ -29,7 +29,7 @@ let pkg_update ~old ~pool pkg_tbl logdir comp state pkg =
     Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
   end in
   let content =
-    if old then Intf.Log.unstored get_content else Intf.Log.compressed (get_content ())
+    if old || not (Server_configfile.enable_in_memory_logs conf) then Intf.Log.unstored get_content else Intf.Log.compressed (get_content ())
   in
   let instances =
     match Pkg_tbl.find_opt pkg_tbl pkg with
@@ -38,17 +38,17 @@ let pkg_update ~old ~pool pkg_tbl logdir comp state pkg =
   in
   Pkg_tbl.replace pkg_tbl pkg instances
 
-let fill_pkgs_from_dir ~old ~pool pkg_tbl logdir comp =
+let fill_pkgs_from_dir ~conf ~old ~pool pkg_tbl logdir comp =
   Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.gooddir ~switch:comp logdir)) >>= fun good_files ->
   Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.partialdir ~switch:comp logdir)) >>= fun partial_files ->
   Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.baddir ~switch:comp logdir)) >>= fun bad_files ->
   Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.notavailabledir ~switch:comp logdir)) >>= fun notavailable_files ->
   Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.internalfailuredir ~switch:comp logdir)) >|= fun internalfailure_files ->
-  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.Good) good_files;
-  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.Partial) partial_files;
-  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.Bad) bad_files;
-  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.NotAvailable) notavailable_files;
-  List.iter (pkg_update ~old ~pool pkg_tbl logdir comp Intf.State.InternalFailure) internalfailure_files
+  List.iter (pkg_update ~conf ~old ~pool pkg_tbl logdir comp Intf.State.Good) good_files;
+  List.iter (pkg_update ~conf ~old ~pool pkg_tbl logdir comp Intf.State.Partial) partial_files;
+  List.iter (pkg_update ~conf ~old ~pool pkg_tbl logdir comp Intf.State.Bad) bad_files;
+  List.iter (pkg_update ~conf ~old ~pool pkg_tbl logdir comp Intf.State.NotAvailable) notavailable_files;
+  List.iter (pkg_update ~conf ~old ~pool pkg_tbl logdir comp Intf.State.InternalFailure) internalfailure_files
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
@@ -57,9 +57,9 @@ let add_pkg full_name instances acc =
   Oca_server.Cache.get_revdeps cache full_name >|= fun revdeps ->
   Intf.Pkg.create ~full_name ~instances ~maintainers ~revdeps :: acc
 
-let get_pkgs ~pool ~old ~compilers logdir =
+let get_pkgs ~conf ~pool ~old ~compilers logdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
-  Lwt_list.iter_p (fill_pkgs_from_dir ~old ~pool pkg_tbl logdir) compilers >>= fun () ->
+  Lwt_list.iter_p (fill_pkgs_from_dir ~conf ~old ~pool pkg_tbl logdir) compilers >>= fun () ->
   Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
   List.sort Intf.Pkg.compare
 
@@ -103,11 +103,11 @@ let tcp_server port callback =
     ~mode:(`TCP (`Port port))
     (Cohttp_lwt_unix.Server.make ~callback ())
 
-let cache_clear_and_init workdir =
+let cache_clear_and_init conf workdir =
   let pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit) in
   Oca_server.Cache.clear_and_init
     cache
-    ~pkgs:(fun ~old ~compilers logdir -> get_pkgs ~pool ~old ~compilers logdir)
+    ~pkgs:(fun ~old ~compilers logdir -> get_pkgs ~conf ~pool ~old ~compilers logdir)
     ~compilers:(fun logdir -> get_compilers logdir)
     ~logdirs:(fun () -> Server_workdirs.logdirs workdir)
     ~maintainers:(fun () -> get_maintainers workdir)
@@ -136,10 +136,10 @@ let run_action_loop ~conf ~run_trigger f =
 
 let start conf workdir =
   let port = Server_configfile.admin_port conf in
-  let on_finished = cache_clear_and_init in
+  let on_finished = cache_clear_and_init conf in
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
-  cache_clear_and_init workdir;
+  cache_clear_and_init conf workdir;
   Mirage_crypto_rng_lwt.initialize ();
   Admin.create_admin_key workdir >|= fun () ->
   let task () =
