@@ -101,7 +101,22 @@ let is_partial_failure logfile =
 
 let distribution_used = "debian-unstable"
 
-let run_script pkg = {|
+let with_test pkg = {|
+elif [ $res = 0 ]; then
+    opam install -vty "|}^pkg^{|"
+    res=$?
+    if [ $res = 20 ]; then
+        res=0
+    fi
+|}
+
+let with_test ~conf pkg =
+  if Server_configfile.with_test conf then
+    with_test pkg
+  else
+    ""
+
+let run_script ~conf pkg = {|
 opam install -vy "|}^pkg^{|"
 res=$?
 if [ $res = 31 ]; then
@@ -109,6 +124,7 @@ if [ $res = 31 ]; then
         echo "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field."
         exit 69
     fi
+|}^with_test ~conf pkg^{|
 fi
 exit $res
 |}
@@ -122,7 +138,7 @@ let run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        docker_run ~volumes ~stdout ~stderr:stdout img_name (`Script (run_script pkg))
+        docker_run ~volumes ~stdout ~stderr:stdout img_name (`Script (run_script ~conf pkg))
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
@@ -188,6 +204,7 @@ let get_dockerfile ~conf switch =
     "OPAMPRECISETRACKING","1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
     "OPAMEXTERNALSOLVER","builtin-0install";
     "OPAMDEPEXTYES","1";
+    "OPAMDROPINSTALLEDPACKAGES","1";
   ] @@
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@

@@ -9,6 +9,7 @@ type t = {
   mutable processes : int option;
   mutable enable_dune_cache : bool option;
   mutable enable_in_memory_logs : bool option;
+  mutable with_test : bool option;
   mutable list_command : string option;
   mutable extra_command : string option;
   mutable ocaml_switches : Intf.Switch.t list option;
@@ -24,6 +25,7 @@ let create_conf yamlfile = {
   processes = None;
   enable_dune_cache = None;
   enable_in_memory_logs = None;
+  with_test = None;
   list_command = None;
   extra_command = None;
   ocaml_switches = None;
@@ -62,6 +64,8 @@ let set_config conf = function
       set_field ~field (fun () -> conf.enable_dune_cache <- Some dune_cache) conf.enable_dune_cache
   | "enable-in-memory-logs" as field, `Bool in_memory_logs ->
       set_field ~field (fun () -> conf.enable_in_memory_logs <- Some in_memory_logs) conf.enable_in_memory_logs
+  | "with-test" as field, `Bool with_test ->
+      set_field ~field (fun () -> conf.with_test <- Some with_test) conf.with_test
   | "processes" as field, `Float processes ->
       set_field ~field (fun () -> conf.processes <- Some (int_of_float processes)) conf.processes
   | "list-command" as field, `String list_command ->
@@ -86,6 +90,7 @@ let yaml_of_conf conf =
     "processes", `Float (float_of_int (Option.get_exn conf.processes));
     "enable-dune-cache", `Bool (Option.get_exn conf.enable_dune_cache);
     "enable-in-memory-logs", `Bool (Option.get_exn conf.enable_in_memory_logs);
+    "with-test", `Bool (Option.get_exn conf.with_test);
     "list-command", `String (Option.get_exn conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
     "ocaml-switches", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `O [Intf.(Compiler.to_string (Switch.name s)), `String (Intf.Switch.switch s)]) l)) conf.ocaml_switches;
@@ -107,6 +112,8 @@ let set_defaults conf =
     conf.enable_in_memory_logs <- Some false; (* NOTE: Requires too much memory for regular users *)
   if Option.is_none conf.enable_dune_cache then
     conf.enable_dune_cache <- Some false; (* NOTE: Too unstable to enable by default *)
+  if Option.is_none conf.with_test then
+    conf.with_test <- Some false; (* TODO: Enable by default in the future (takes 1.5x the time) *)
   if Option.is_none conf.list_command then
     conf.list_command <- Some Oca_lib.default_list_command;
   if Option.is_none conf.slack_webhooks then
@@ -171,6 +178,7 @@ let auto_run_interval {auto_run_interval; _} = Option.get_exn auto_run_interval
 let processes {processes; _} = Option.get_exn processes
 let enable_dune_cache {enable_dune_cache; _} = Option.get_exn enable_dune_cache
 let enable_in_memory_logs {enable_in_memory_logs; _} = Option.get_exn enable_in_memory_logs
+let with_test {with_test; _} = Option.get_exn with_test
 let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
