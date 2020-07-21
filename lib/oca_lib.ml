@@ -80,7 +80,9 @@ let exec ?(timeout=5) ~stdin ~stdout ~stderr cmd =
         let cmd = String.concat " " cmd in
         write_line_unix stderr_lwt ("Command '"^cmd^"' failed.") >>= fun () ->
         Lwt.fail (Process_failure e)
-    | Unix.WSIGNALED _ | Unix.WSTOPPED _ ->
+    | Unix.WSIGNALED n | Unix.WSTOPPED n ->
+        let cmd = String.concat " " cmd in
+        write_line_unix stderr_lwt ("Command '"^cmd^"' killed by a signal (n°"^string_of_int n^")") >>= fun () ->
         Lwt.fail Internal_failure
   in
   (* NOTE: any processes shouldn't take more than 5 hours *)
