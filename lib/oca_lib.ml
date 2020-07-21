@@ -67,7 +67,7 @@ let proc_fd_of_unix = function
 exception Process_failure of int
 exception Internal_failure
 
-let exec ?(timeout=5) ~stdin ~stdout ~stderr cmd =
+let exec ?(timeout=2) ~stdin ~stdout ~stderr cmd =
   let stdin = proc_fd_of_unix stdin in
   let stdout = proc_fd_of_unix (`FD_copy stdout) in
   let stderr_lwt = stderr in
@@ -85,7 +85,7 @@ let exec ?(timeout=5) ~stdin ~stdout ~stderr cmd =
         write_line_unix stderr_lwt ("Command '"^cmd^"' killed by a signal (n°"^string_of_int n^")") >>= fun () ->
         Lwt.fail Internal_failure
   in
-  (* NOTE: any processes shouldn't take more than 5 hours *)
+  (* NOTE: any processes shouldn't take more than 2 hours *)
   let timeout =
     let hours = timeout in
     Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
