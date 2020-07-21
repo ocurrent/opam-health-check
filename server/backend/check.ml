@@ -145,7 +145,7 @@ let run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir pkg =
       Oca_lib.write_line_unix stderr ("["^num^"] succeeded.") >>= fun () ->
       Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
     end begin function
-    | Oca_lib.Process_failure 31 | Oca_lib.Internal_failure ->
+    | Oca_lib.Process_failure 31 | Oca_lib.Internal_failure -> (* TODO: It might be worth distinguishing between "killed by signal" failures and timeouts, in the future *)
         is_partial_failure logfile >>= begin function
         | true ->
             Oca_lib.write_line_unix stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
