@@ -253,7 +253,7 @@ mkdir $revdeps_dir $maintainers_dir
 
 echo "pkg=\"\$1\"" > revdeps.sh
 echo "echo \"Getting revdeps for \$pkg\"" >> revdeps.sh
-echo "echo \$(opam list -s --recursive --depopts --depends-on \"\$pkg\" | wc -l) - 1 | bc > \"$revdeps_dir/\$pkg\"" >> revdeps.sh
+echo "echo \$(opam list -s --recursive --depopts --with-test --with-doc --depends-on \"\$pkg\" | wc -l) - 1 | bc > \"$revdeps_dir/\$pkg\"" >> revdeps.sh
 
 echo "pkg=\"\$1\"" > maintainers.sh
 echo "echo \"Getting maintainers for \$pkg\"" >> maintainers.sh
