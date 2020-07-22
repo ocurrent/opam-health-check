@@ -103,7 +103,7 @@ let distribution_used = "debian-unstable"
 
 let with_test pkg = {|
 elif [ $res = 0 ]; then
-    opam install -vty "|}^pkg^{|"
+    opam reinstall -vty "|}^pkg^{|"
     res=$?
     if [ $res = 20 ]; then
         res=0
