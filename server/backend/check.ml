@@ -173,24 +173,16 @@ let () =
 
 let get_dockerfile ~conf switch =
   let open Dockerfile in
-  from ("ocaml/opam2:"^distribution_used^" AS base") @@
-  workdir "opam-repository" @@
-  run "opam switch 4.09" @@
-  run "git pull origin master" @@
+  from ("ocurrent/opam:"^distribution_used^" AS base") @@
+  run "git -C opam-repository pull origin master" @@
   run "opam update" @@
-  workdir "/tmp" @@
-  run "git clone git://github.com/kit-ty-kate/opam.git" @@
-  workdir "/tmp/opam" @@
-  run "git checkout opam-health-check3" @@
-  run "git clone git://github.com/kit-ty-kate/opam-0install-solver.git" @@
-  run "git -C opam-0install-solver checkout allow-recommended-restricted-deps" @@
-  run "opam update" @@
+  run "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam" @@
+  run "git -C /tmp/opam checkout opam-health-check3" @@
   run "sudo apt-get install -yy m4" @@
-  run "opam pin add -y opam-0install-cudf.0.3 opam-0install-solver" @@
   run "opam pin add -y ." @@
-  from ("ocaml/opam2:"^distribution_used^"-opam") @@
-  copy ~from:"base" ~src:["/home/opam/.opam/4.09/lib/opam-devel/opam"] ~dst:"/usr/bin/opam" () @@
-  copy ~from:"base" ~src:["/home/opam/.opam/4.09/bin/opam-installer"] ~dst:"/usr/bin/opam-installer" () @@
+  run {|mv "$(opam var opam-devel:lib)/opam" opam.exe|} @@
+  from ("ocurrent/opam:"^distribution_used^"-opam") @@
+  copy ~from:"base" ~src:["/home/opam/opam.exe"] ~dst:"/usr/bin/opam" () @@
   run "sudo apt-get update" @@
   workdir "opam-repository" @@
   run "git pull origin master" @@
