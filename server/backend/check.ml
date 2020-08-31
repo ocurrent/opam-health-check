@@ -179,7 +179,8 @@ let get_dockerfile ~conf switch =
   run "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam" @@
   run "git -C /tmp/opam checkout opam-health-check3" @@
   run "sudo apt-get install -yy m4" @@
-  run "opam pin add -y /tmp/opam" @@
+  run "opam pin add -yn /tmp/opam" @@
+  run "opam install -y opam-devel opam-0install-cudf" @@
   run {|mv "$(opam var opam-devel:lib)/opam" opam.exe|} @@
   from ("ocurrent/opam:"^distribution_used^"-opam") @@
   copy ~from:"base" ~src:["/home/opam/opam.exe"] ~dst:"/usr/bin/opam" () @@
