@@ -201,7 +201,12 @@ let get_dockerfile ~conf switch =
     "OPAMDROPINSTALLEDPACKAGES","1";
   ] @@
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
-  run "opam switch create --repositories=default,beta %s" (Intf.Switch.switch switch) @@
+  (if Server_configfile.enable_opam_alpha_repository conf
+   then run "opam repository add --dont-select alpha git://github.com/kit-ty-kate/opam-alpha-repository.git"
+   else empty) @@
+  run "opam switch create --repositories=default,beta%s %s"
+    (if Server_configfile.enable_opam_alpha_repository conf then ",alpha" else "")
+    (Intf.Switch.switch switch) @@
   (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.07" < 0
    then run "opam install -y ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
                                                           and https://github.com/ocaml/opam-repository/pull/15642 *)

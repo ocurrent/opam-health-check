@@ -9,6 +9,7 @@ type t = {
   mutable processes : int option;
   mutable enable_dune_cache : bool option;
   mutable enable_in_memory_logs : bool option;
+  mutable enable_opam_alpha_repository : bool option;
   mutable with_test : bool option;
   mutable list_command : string option;
   mutable extra_command : string option;
@@ -25,6 +26,7 @@ let create_conf yamlfile = {
   processes = None;
   enable_dune_cache = None;
   enable_in_memory_logs = None;
+  enable_opam_alpha_repository = None;
   with_test = None;
   list_command = None;
   extra_command = None;
@@ -64,6 +66,8 @@ let set_config conf = function
       set_field ~field (fun () -> conf.enable_dune_cache <- Some dune_cache) conf.enable_dune_cache
   | "enable-in-memory-logs" as field, `Bool in_memory_logs ->
       set_field ~field (fun () -> conf.enable_in_memory_logs <- Some in_memory_logs) conf.enable_in_memory_logs
+  | "enable-opam-alpha-repository" as field, `Bool opam_alpha_repository ->
+      set_field ~field (fun () -> conf.enable_opam_alpha_repository <- Some opam_alpha_repository) conf.enable_opam_alpha_repository
   | "with-test" as field, `Bool with_test ->
       set_field ~field (fun () -> conf.with_test <- Some with_test) conf.with_test
   | "processes" as field, `Float processes ->
@@ -90,6 +94,7 @@ let yaml_of_conf conf =
     "processes", `Float (float_of_int (Option.get_exn conf.processes));
     "enable-dune-cache", `Bool (Option.get_exn conf.enable_dune_cache);
     "enable-in-memory-logs", `Bool (Option.get_exn conf.enable_in_memory_logs);
+    "enable-opam-alpha-repository", `Bool (Option.get_exn conf.enable_opam_alpha_repository);
     "with-test", `Bool (Option.get_exn conf.with_test);
     "list-command", `String (Option.get_exn conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
@@ -108,10 +113,12 @@ let set_defaults conf =
     conf.auto_run_interval <- Some Oca_lib.default_auto_run_interval;
   if Option.is_none conf.processes then
     conf.processes <- Some Oca_lib.default_processes;
-  if Option.is_none conf.enable_in_memory_logs then
-    conf.enable_in_memory_logs <- Some false; (* NOTE: Requires too much memory for regular users *)
   if Option.is_none conf.enable_dune_cache then
     conf.enable_dune_cache <- Some false; (* NOTE: Too unstable to enable by default *)
+  if Option.is_none conf.enable_in_memory_logs then
+    conf.enable_in_memory_logs <- Some false; (* NOTE: Requires too much memory for regular users *)
+  if Option.is_none conf.enable_opam_alpha_repository then
+    conf.enable_opam_alpha_repository <- Some false;
   if Option.is_none conf.with_test then
     conf.with_test <- Some false; (* TODO: Enable by default in the future (takes 1.5x the time) *)
   if Option.is_none conf.list_command then
@@ -178,6 +185,7 @@ let auto_run_interval {auto_run_interval; _} = Option.get_exn auto_run_interval
 let processes {processes; _} = Option.get_exn processes
 let enable_dune_cache {enable_dune_cache; _} = Option.get_exn enable_dune_cache
 let enable_in_memory_logs {enable_in_memory_logs; _} = Option.get_exn enable_in_memory_logs
+let enable_opam_alpha_repository {enable_opam_alpha_repository; _} = Option.get_exn enable_opam_alpha_repository
 let with_test {with_test; _} = Option.get_exn with_test
 let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
