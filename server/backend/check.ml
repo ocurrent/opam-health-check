@@ -265,17 +265,22 @@ sudo chown -R $user:$group $root
 exit 0
 |}
 
-let get_metadata ~conf ~pool ~stderr switch logdir pkgs =
-  let img_name = get_img_name ~conf switch in
-  Lwt_pool.use pool begin fun () ->
-    Oca_lib.write_line_unix stderr ("Getting all the metadata...") >>= fun () ->
-    Lwt_unix.getcwd () >>= fun cwd ->
-    let metadatadir = Server_workdirs.tmpmetadatadir logdir in
-    let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
-    let max_thread = Server_configfile.processes conf in
-    let cmd = metadata_script ~max_thread pkgs in
-    docker_run ~timeout:48 ~stderr ~stdout:stderr ~volumes:[(metadatadir, "/metadata")] img_name (`Script cmd)
-  end
+let get_metadata ~conf ~pool ~stderr ~workdir ~is_retry switch logdir pkgs =
+  Oca_lib.write_line_unix stderr ("Getting all the metadata...") >>= fun () ->
+  let metadatadir = Server_workdirs.tmpmetadatadir logdir in
+  if is_retry then
+    let src_metadatadir = Server_workdirs.metadatadir workdir in
+    (* TODO: This is very fragile.. Do better *)
+    Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["cp";"-r";Fpath.to_string src_metadatadir;Fpath.to_string metadatadir]
+  else
+    let img_name = get_img_name ~conf switch in
+    Lwt_pool.use pool begin fun () ->
+      Lwt_unix.getcwd () >>= fun cwd ->
+      let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
+      let max_thread = Server_configfile.processes conf in
+      let cmd = metadata_script ~max_thread pkgs in
+      docker_run ~timeout:48 ~stderr ~stdout:stderr ~volumes:[(metadatadir, "/metadata")] img_name (`Script cmd)
+    end
 
 let get_git_hash ~stderr switch conf =
   let img_name = get_img_name ~conf switch in
@@ -385,7 +390,7 @@ let run ~on_finished ~is_retry ~conf cache workdir =
           let volumes = [cache] in
           let pkgs = Pkg_set.of_list (List.concat (hd_pkgs :: tl_pkgs)) in
           Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          get_metadata ~conf ~pool ~stderr switch new_logdir pkgs >>= fun () ->
+          get_metadata ~conf ~pool ~stderr ~workdir ~is_retry switch new_logdir pkgs >>= fun () ->
           Oca_lib.timer_log timer stderr "Metadata collection" >>= fun () ->
           let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes new_logdir (switch :: switches) pkgs in
           Lwt.join jobs >>= fun () ->
