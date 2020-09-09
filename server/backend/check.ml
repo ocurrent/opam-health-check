@@ -207,7 +207,7 @@ let get_dockerfile ~conf switch =
   run "opam switch create --repositories=%sbeta,default %s"
     (if Server_configfile.enable_opam_alpha_repository conf then "alpha," else "")
     (Intf.Switch.switch switch) @@
-  (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.07" < 0
+  (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0
    then run "opam install -y ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
                                                           and https://github.com/ocaml/opam-repository/pull/15642 *)
    else empty) @@
