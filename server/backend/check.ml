@@ -271,7 +271,7 @@ let get_metadata ~conf ~pool ~stderr ~workdir ~is_retry switch logdir pkgs =
   if is_retry then
     let src_metadatadir = Server_workdirs.metadatadir workdir in
     (* TODO: This is very fragile.. Do better *)
-    Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["cp";"-r";Fpath.to_string src_metadatadir;Fpath.to_string metadatadir]
+    Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["cp";"-rT";Fpath.to_string src_metadatadir;Fpath.to_string metadatadir]
   else
     let img_name = get_img_name ~conf switch in
     Lwt_pool.use pool begin fun () ->
