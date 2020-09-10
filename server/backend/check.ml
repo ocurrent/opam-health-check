@@ -179,7 +179,7 @@ let get_dockerfile ~conf switch =
   run "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam" @@
   run "git -C /tmp/opam checkout opam-health-check3" @@
   run "sudo apt-get install -yy m4" @@
-  run "opam pin add -yn opam-0install-cudf.0.3 git://github.com/ocaml-opam/opam-0install-solver.git" @@
+  run "opam pin add -yn opam-0install-cudf.0.3 git://github.com/kit-ty-kate/opam-0install-solver.git#cudf-fix-conflicts" @@
   run "opam pin add -yn /tmp/opam" @@
   run "opam install -y opam-devel opam-0install-cudf" @@
   run {|mv "$(opam var opam-devel:lib)/opam" opam.exe|} @@
