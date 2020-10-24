@@ -15,8 +15,8 @@ depends: [
   "cohttp-lwt-unix"
   "containers" {>= "2.2"}
   "opam-core"
-  "mirage-crypto-pk"
-  "mirage-crypto-rng"
+  "mirage-crypto-pk" {>= "0.7.0"}
+  "mirage-crypto-rng" {>= "0.7.0"}
   "cmdliner"
   "fpath"
   "re" {>= "1.7.2"}
