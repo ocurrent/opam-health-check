@@ -192,7 +192,7 @@ let get_dockerfile ~conf switch =
    else
      empty
   ) @@
-  run "opam init -ya --bare --disable-sandboxing ." @@
+  run "rm -rf /home/opam/.opam && opam init -ya --bare --disable-sandboxing ." @@
   env [
     "OPAMPRECISETRACKING","1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
     "OPAMEXTERNALSOLVER","builtin-0install";
