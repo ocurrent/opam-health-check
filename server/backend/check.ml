@@ -17,7 +17,7 @@ let network = ["host"]
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string (Obuilder_spec.sexp_of_stage spec)
 
-let docker_build ~conf ~base_obuilder ~stdout ~stderr ~img c =
+let ocluster_build ~conf ~base_obuilder ~stdout ~stderr ~img c =
   let home = Sys.getenv "HOME" in
   let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
   let obuilder_content =
@@ -30,19 +30,19 @@ let docker_build ~conf ~base_obuilder ~stdout ~stderr ~img c =
     Lwt_io.write c obuilder_content >>= fun () ->
     Lwt_io.flush c >>= fun () ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr
-      ["ocluster-client"; "submit-docker"; cap_file; "--cache-hint"; img; "--pool=linux-x86_64"; "--local-file"; obuilder]
+      ["ocluster-client"; "submit-obuilder"; cap_file; "--cache-hint"; img; "--pool=linux-x86_64"; "--local-file"; obuilder]
   )
 
 let get_img_name ~conf switch =
   let switch = Intf.Switch.switch switch in
   let switch =
-    let rec normalize_docker_tag_name = function
-      | ('a'..'z' | 'A'..'Z' | '0'..'9' | '-' | '.') as c::cs -> c::normalize_docker_tag_name cs
+    let rec normalize_ocluster_tag_name = function
+      | ('a'..'z' | 'A'..'Z' | '0'..'9' | '-' | '.') as c::cs -> c::normalize_ocluster_tag_name cs
       | '_'::'_'::_ -> assert false
-      | _::cs -> '_'::'_'::normalize_docker_tag_name cs
+      | _::cs -> '_'::'_'::normalize_ocluster_tag_name cs
       | [] -> []
     in
-    String.of_list (normalize_docker_tag_name (String.to_list switch))
+    String.of_list (normalize_ocluster_tag_name (String.to_list switch))
   in
   get_prefix conf^"-"^switch
 
@@ -59,9 +59,9 @@ let exec_out ~fexec ~fout =
   proc >|= fun () ->
   res
 
-let docker_build_str ~conf ~base_obuilder ~stderr ~img c =
+let ocluster_build_str ~conf ~base_obuilder ~stderr ~img c =
   exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
-    docker_build ~conf ~base_obuilder ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@"))
+    ocluster_build ~conf ~base_obuilder ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@"))
   >|= fun lines ->
   let rec aux ~is_in acc = function
     | "@@@"::_ when is_in -> List.rev acc
@@ -75,7 +75,7 @@ let docker_build_str ~conf ~base_obuilder ~stderr ~img c =
 let get_pkgs ~base_obuilder ~conf ~stderr switch =
   let img_name = get_img_name ~conf switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
-  docker_build_str ~conf ~base_obuilder ~stderr ~img:img_name (Server_configfile.list_command conf) >>= fun pkgs ->
+  ocluster_build_str ~conf ~base_obuilder ~stderr ~img:img_name (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
@@ -139,7 +139,7 @@ let run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        docker_build ~conf ~base_obuilder ~stdout:(`FD_copy stdout) ~stderr:stdout ~img:img_name (run_script ~conf pkg)
+        ocluster_build ~conf ~base_obuilder ~stdout:(`FD_copy stdout) ~stderr:stdout ~img:img_name (run_script ~conf pkg)
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
