@@ -11,10 +11,10 @@ let docker_build ~base_dockerfile ~stdout ~stderr ~img c =
     base_dockerfile @@
     run "%s" c
   in
-  Lwt_io.with_temp_file (fun (file, c) ->
-    Lwt_io.write c (Dockerfile.string_of_t dockerfile_content) >|= fun () ->
-    file) >>= fun dockerfile ->
-  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ["ocluster-client"; "submit-docker"; cap_file; "--hint"; img; "--pool=linux-x86_64"; dockerfile]
+  Lwt_io.with_temp_file (fun (dockerfile, c) ->
+    Lwt_io.write c (Dockerfile.string_of_t dockerfile_content) >>= fun () ->
+    Oca_lib.exec ~stdin:`Close ~stdout ~stderr ["ocluster-client"; "submit-docker"; cap_file; "--hint"; img; "--pool=linux-x86_64"; dockerfile]
+  )
 
 let get_img_name ~conf switch =
   let switch = Intf.Switch.switch switch in
