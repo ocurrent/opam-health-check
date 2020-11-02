@@ -5,7 +5,8 @@ let get_prefix conf =
   "opam-health-check-"^server_name
 
 let docker_build ~base_dockerfile ~stdout ~stderr ~img c =
-  let cap_file = "~/ocluster.cap" in (* TODO: fix that *)
+  let home = Sys.getenv "HOME" in
+  let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
   let dockerfile_content =
     let open Dockerfile in
     base_dockerfile @@
