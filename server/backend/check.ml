@@ -16,7 +16,6 @@ let docker_build ~base_dockerfile ~stdout ~stderr ~img c =
     let dockerfile_content = Dockerfile.string_of_t dockerfile_content in
     Lwt_io.write c dockerfile_content >>= fun () ->
     Lwt_io.flush c >>= fun () ->
-    Oca_lib.write_line_unix stderr dockerfile_content >>= fun () ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr
       ["ocluster-client"; "submit-docker"; cap_file; "--cache-hint"; img; "--pool=linux-x86_64"; "--local-dockerfile"; dockerfile]
   )
@@ -337,6 +336,7 @@ let run ~on_finished ~conf cache workdir =
               get_repo ~stderr ~dir:opam_repo_dir ~repo:"ocaml/opam-repository" >>= fun hash ->
               get_repo ~stderr ~dir:alpha_repo_dir ~repo:"kit-ty-kate/opam-alpha-repository" >>= fun alpha_hash ->
               let base_dockerfile = get_dockerfile ~conf ~opam_repo_commit:hash ~opam_alpha_commit:alpha_hash switch in
+              Oca_lib.write_line_unix stderr (Dockerfile.string_of_t base_dockerfile) >>= fun () ->
               get_pkgs ~base_dockerfile ~conf ~stderr switch >>= fun hd_pkgs ->
               Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
               let old_logdir = List.head_opt old_logdir in
