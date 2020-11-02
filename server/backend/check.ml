@@ -37,8 +37,7 @@ let rec read_lines fd =
 
 let exec_out ~fexec ~fout =
   let fd, stdout = Lwt_unix.pipe () in
-  let proc = fexec ~stdout in
-  Lwt_unix.close stdout >>= fun () ->
+  let proc = fexec ~stdout:(`FD_move stdout) in
   fout (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun res ->
   Lwt_unix.close fd >>= fun () ->
   proc >|= fun () ->
@@ -124,7 +123,7 @@ let run_job ~conf ~pool ~stderr ~base_dockerfile ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        docker_build ~base_dockerfile ~stdout ~stderr:stdout ~img:img_name (run_script ~conf pkg)
+        docker_build ~base_dockerfile ~stdout:(`FD_copy stdout) ~stderr:stdout ~img:img_name (run_script ~conf pkg)
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
@@ -221,7 +220,7 @@ module Pkg_set = Set.Make (String)
 let get_repo ~stderr ~start_time ~repo = (* TODO: Find better than ~start_time to differenciate *)
   let dirname = Filename.basename repo in
   let dirname = Filename.concat (Filename.get_temp_dir_name ()) (dirname^string_of_int (int_of_float start_time)) in
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
+  Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr
     ["git";"clone";"git://github.com/"^repo^".git";dirname] >>= fun () ->
   exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr
@@ -242,7 +241,7 @@ let get_metadata ~stderr ~logdir ~start_time ~repo = (* TODO: Find better (see a
         let pkg = List.nth (String.split_on_char '/' pkgfile) 2 in
         let revdep_file = Server_workdirs.tmprevdepsfile ~pkg logdir in
         let revdep_file = Fpath.to_string revdep_file in
-        Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
+        Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr
           ["sh";"-c";"cd "^dirname^" && echo $(opam admin list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg^" | wc -l) - 1 | bc > "^Filename.quote revdep_file]
         >>= fun () ->
         let pkgname = List.nth (String.split_on_char '.' pkg) 0 in
@@ -251,7 +250,7 @@ let get_metadata ~stderr ~logdir ~start_time ~repo = (* TODO: Find better (see a
         else
           let maintainers_file = Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir in
           let maintainers_file = Fpath.to_string maintainers_file in
-          Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
+          Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr
             ["sh";"-c";"opam show -f maintainer: "^Filename.quote pkgfile^{| | sed -E 's/^\"(.*)\"\$/\1/' > |}^Filename.quote maintainers_file]
           >>= fun () ->
           aux (Pkg_set.add pkgname done_pkgnames) pkgs
@@ -267,7 +266,7 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
   Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir_path) >>= fun () ->
   (* TODO: replace by Oca_lib.rm_rf *)
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
+  Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
 let run_and_get_pkgs ~conf ~pool ~stderr ~base_dockerfile logdir switches pkgs =

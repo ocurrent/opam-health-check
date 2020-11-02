@@ -57,6 +57,14 @@ let write_line_unix fd s =
   Lwt_io.write_line fd s >>= fun () ->
   Lwt_io.flush fd
 
+type redirection = [
+  | `Close
+  | `Dev_null
+  | `FD_copy of Lwt_unix.file_descr
+  | `FD_move of Lwt_unix.file_descr
+  | `Keep
+]
+
 let proc_fd_of_unix = function
   | `Close -> `Close
   | `Dev_null -> `Dev_null
@@ -69,7 +77,7 @@ exception Internal_failure
 
 let exec ?(timeout=2) ~stdin ~stdout ~stderr cmd =
   let stdin = proc_fd_of_unix stdin in
-  let stdout = proc_fd_of_unix (`FD_copy stdout) in
+  let stdout = proc_fd_of_unix stdout in
   let stderr_lwt = stderr in
   let stderr = proc_fd_of_unix (`FD_copy stderr) in
   let proc =

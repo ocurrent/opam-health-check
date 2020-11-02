@@ -11,14 +11,18 @@ val write_line_unix : Lwt_unix.file_descr -> string -> unit Lwt.t
 exception Process_failure of int
 exception Internal_failure
 
+type redirection = [
+  | `Close
+  | `Dev_null
+  | `FD_copy of Lwt_unix.file_descr
+  | `FD_move of Lwt_unix.file_descr
+  | `Keep
+]
+
 val exec :
   ?timeout:int ->
-  stdin:[< `Close
-        | `Dev_null
-        | `FD_copy of Lwt_unix.file_descr
-        | `FD_move of Lwt_unix.file_descr
-        | `Keep ] ->
-  stdout:Lwt_unix.file_descr ->
+  stdin:redirection ->
+  stdout:redirection ->
   stderr:Lwt_unix.file_descr ->
   string list ->
   unit Lwt.t
