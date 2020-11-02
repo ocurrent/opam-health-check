@@ -261,7 +261,7 @@ let get_metadata ~stderr ~logdir ~dir =
         let revdep_file = Server_workdirs.tmprevdepsfile ~pkg logdir in
         let revdep_file = Fpath.to_string revdep_file in
         Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr
-          ["sh";"-c";"cd "^dir^" && echo $(opam admin list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg^" | wc -l) - 1 | bc > "^Filename.quote revdep_file]
+          ["sh";"-c";"cd "^Filename.quote dir^" && echo $(opam admin list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg^" | wc -l) - 1 | bc > "^Filename.quote revdep_file]
         >>= fun () ->
         let pkgname = List.nth (String.split_on_char '.' pkg) 0 in
         if Pkg_set.mem pkgname done_pkgnames then
