@@ -180,7 +180,7 @@ let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
       run "git -C /tmp/opam checkout opam-health-check3";
       run ~network "sudo apt-get update";
       run ~network "sudo apt-get install -yy m4";
-      run "opam pin add -yn /tmp/opam";
+      run ~network "opam pin add -yn /tmp/opam";
       run ~network "opam install -y opam-devel opam-0install-cudf";
       run "sudo apt-get purge --autoremove -yy m4";
       run {|sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam|};
