@@ -17,20 +17,20 @@ let network = ["host"]
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string (Obuilder_spec.sexp_of_stage spec)
 
-let docker_build ~conf ~base_dockerfile ~stdout ~stderr ~img c =
+let docker_build ~conf ~base_obuilder ~stdout ~stderr ~img c =
   let home = Sys.getenv "HOME" in
   let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
-  let dockerfile_content =
+  let obuilder_content =
     let open Obuilder_spec in
-    { base_dockerfile with
-      ops = base_dockerfile.ops @ [run ~cache:(cache ~conf) ~network "%s" c] }
+    { base_obuilder with
+      ops = base_obuilder.ops @ [run ~cache:(cache ~conf) ~network "%s" c] }
   in
-  Lwt_io.with_temp_file (fun (dockerfile, c) ->
-    let dockerfile_content = obuilder_to_string dockerfile_content in
-    Lwt_io.write c dockerfile_content >>= fun () ->
+  Lwt_io.with_temp_file (fun (obuilder, c) ->
+    let obuilder_content = obuilder_to_string obuilder_content in
+    Lwt_io.write c obuilder_content >>= fun () ->
     Lwt_io.flush c >>= fun () ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr
-      ["ocluster-client"; "submit-docker"; cap_file; "--cache-hint"; img; "--pool=linux-x86_64"; "--local-dockerfile"; dockerfile]
+      ["ocluster-client"; "submit-docker"; cap_file; "--cache-hint"; img; "--pool=linux-x86_64"; "--local-file"; obuilder]
   )
 
 let get_img_name ~conf switch =
@@ -59,9 +59,9 @@ let exec_out ~fexec ~fout =
   proc >|= fun () ->
   res
 
-let docker_build_str ~conf ~base_dockerfile ~stderr ~img c =
+let docker_build_str ~conf ~base_obuilder ~stderr ~img c =
   exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
-    docker_build ~conf ~base_dockerfile ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@"))
+    docker_build ~conf ~base_obuilder ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@"))
   >|= fun lines ->
   let rec aux ~is_in acc = function
     | "@@@"::_ when is_in -> List.rev acc
@@ -72,10 +72,10 @@ let docker_build_str ~conf ~base_dockerfile ~stderr ~img c =
   in
   aux ~is_in:false [] lines
 
-let get_pkgs ~base_dockerfile ~conf ~stderr switch =
+let get_pkgs ~base_obuilder ~conf ~stderr switch =
   let img_name = get_img_name ~conf switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
-  docker_build_str ~conf ~base_dockerfile ~stderr ~img:img_name (Server_configfile.list_command conf) >>= fun pkgs ->
+  docker_build_str ~conf ~base_obuilder ~stderr ~img:img_name (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
@@ -130,7 +130,7 @@ fi
 exit $res
 |}
 
-let run_job ~conf ~pool ~stderr ~base_dockerfile ~switch ~num logdir pkg =
+let run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
@@ -139,7 +139,7 @@ let run_job ~conf ~pool ~stderr ~base_dockerfile ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        docker_build ~conf ~base_dockerfile ~stdout:(`FD_copy stdout) ~stderr:stdout ~img:img_name (run_script ~conf pkg)
+        docker_build ~conf ~base_obuilder ~stdout:(`FD_copy stdout) ~stderr:stdout ~img:img_name (run_script ~conf pkg)
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
@@ -172,7 +172,7 @@ let () =
     prerr_endline ("Async exception raised: "^msg);
   end
 
-let get_dockerfile ~conf ~opam_repo_commit ~opam_alpha_commit switch =
+let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
   let open Obuilder_spec in
   let cache = cache ~conf in
   stage ~from:("ocurrent/opam:"^distribution_used) begin
@@ -288,7 +288,7 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~conf ~pool ~stderr ~base_dockerfile logdir switches pkgs =
+let run_and_get_pkgs ~conf ~pool ~stderr ~base_obuilder logdir switches pkgs =
   let rgen = Random.int_range (-1) 1 in
   let pkgs = Pkg_set.to_list pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
@@ -297,7 +297,7 @@ let run_and_get_pkgs ~conf ~pool ~stderr ~base_dockerfile logdir switches pkgs =
     List.fold_left begin fun (i, jobs) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job = run_job ~conf ~pool ~stderr ~base_dockerfile ~switch ~num logdir full_name in
+      let job = run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
       (i, job :: jobs)
     end (i, jobs) pkgs
   end (0, []) switches
@@ -354,21 +354,21 @@ let run ~on_finished ~conf cache workdir =
               let timer = Oca_lib.timer_start () in
               get_repo ~stderr ~dir:opam_repo_dir ~repo:"ocaml/opam-repository" >>= fun hash ->
               get_repo ~stderr ~dir:alpha_repo_dir ~repo:"kit-ty-kate/opam-alpha-repository" >>= fun alpha_hash ->
-              let base_dockerfile = get_dockerfile ~conf ~opam_repo_commit:hash ~opam_alpha_commit:alpha_hash switch in
-              Oca_lib.write_line_unix stderr (obuilder_to_string base_dockerfile) >>= fun () ->
-              get_pkgs ~base_dockerfile ~conf ~stderr switch >>= fun hd_pkgs ->
+              let base_obuilder = get_obuilder ~conf ~opam_repo_commit:hash ~opam_alpha_commit:alpha_hash switch in
+              Oca_lib.write_line_unix stderr (obuilder_to_string base_obuilder) >>= fun () ->
+              get_pkgs ~base_obuilder ~conf ~stderr switch >>= fun hd_pkgs ->
               Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
               let old_logdir = List.head_opt old_logdir in
               let new_logdir = Server_workdirs.new_logdir ~hash ~start_time workdir in
               Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
               let pool = Lwt_pool.create (Server_configfile.processes conf / 3 * 2) (fun () -> Lwt.return_unit) in
-              Lwt_list.map_p (get_pkgs ~base_dockerfile ~stderr ~conf) switches >>= fun tl_pkgs ->
+              Lwt_list.map_p (get_pkgs ~base_obuilder ~stderr ~conf) switches >>= fun tl_pkgs ->
               let pkgs = Pkg_set.of_list (List.concat (hd_pkgs :: tl_pkgs)) in
               Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
               get_metadata ~stderr ~logdir:new_logdir ~dir:opam_repo_dir >>= fun () ->
               get_metadata ~stderr ~logdir:new_logdir ~dir:alpha_repo_dir >>= fun () ->
               Oca_lib.timer_log timer stderr "Metadata collection" >>= fun () ->
-              let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~base_dockerfile new_logdir (switch :: switches) pkgs in
+              let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~base_obuilder new_logdir (switch :: switches) pkgs in
               Lwt.join jobs >>= fun () ->
               Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
               move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
