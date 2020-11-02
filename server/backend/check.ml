@@ -176,7 +176,8 @@ let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
   let open Obuilder_spec in
   let cache = cache ~conf in
   stage ~from:("ocurrent/opam:"^distribution_used) begin
-    [ workdir "/home/opam";
+    [ user ~uid:1000 ~gid:1000;
+      workdir "/home/opam";
       run ~network "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam";
       run "git -C /tmp/opam checkout opam-health-check3";
       run ~network "sudo apt-get update";
