@@ -4,16 +4,29 @@ let get_prefix conf =
   let server_name = Server_configfile.name conf in
   "opam-health-check-"^server_name
 
-let docker_build ~base_dockerfile ~stdout ~stderr ~img c =
+let cache ~conf =
+  let opam_cache = Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache" in
+  if Server_configfile.enable_dune_cache conf then
+    let dune_cache = Obuilder_spec.Cache.v "dune-cache" ~target:"/home/opam/.config/dune" in
+    [opam_cache; dune_cache]
+  else
+    [opam_cache]
+
+let network = ["host"]
+
+let obuilder_to_string spec =
+  Sexplib0.Sexp.to_string (Obuilder_spec.sexp_of_stage spec)
+
+let docker_build ~conf ~base_dockerfile ~stdout ~stderr ~img c =
   let home = Sys.getenv "HOME" in
   let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
   let dockerfile_content =
-    let open Dockerfile in
-    base_dockerfile @@
-    run "%s" c
+    let open Obuilder_spec in
+    { base_dockerfile with
+      ops = base_dockerfile.ops @ [run ~cache:(cache ~conf) ~network "%s" c] }
   in
   Lwt_io.with_temp_file (fun (dockerfile, c) ->
-    let dockerfile_content = Dockerfile.string_of_t dockerfile_content in
+    let dockerfile_content = obuilder_to_string dockerfile_content in
     Lwt_io.write c dockerfile_content >>= fun () ->
     Lwt_io.flush c >>= fun () ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr
@@ -46,9 +59,9 @@ let exec_out ~fexec ~fout =
   proc >|= fun () ->
   res
 
-let docker_build_str ~base_dockerfile ~stderr ~img c =
+let docker_build_str ~conf ~base_dockerfile ~stderr ~img c =
   exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
-    docker_build ~base_dockerfile ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@"))
+    docker_build ~conf ~base_dockerfile ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@"))
   >|= fun lines ->
   let rec aux ~is_in acc = function
     | "@@@"::_ when is_in -> List.rev acc
@@ -62,7 +75,7 @@ let docker_build_str ~base_dockerfile ~stderr ~img c =
 let get_pkgs ~base_dockerfile ~conf ~stderr switch =
   let img_name = get_img_name ~conf switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
-  docker_build_str ~base_dockerfile ~stderr ~img:img_name (Server_configfile.list_command conf) >>= fun pkgs ->
+  docker_build_str ~conf ~base_dockerfile ~stderr ~img:img_name (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
@@ -126,7 +139,7 @@ let run_job ~conf ~pool ~stderr ~base_dockerfile ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        docker_build ~base_dockerfile ~stdout:(`FD_copy stdout) ~stderr:stdout ~img:img_name (run_script ~conf pkg)
+        docker_build ~conf ~base_dockerfile ~stdout:(`FD_copy stdout) ~stderr:stdout ~img:img_name (run_script ~conf pkg)
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
@@ -160,57 +173,63 @@ let () =
   end
 
 let get_dockerfile ~conf ~opam_repo_commit ~opam_alpha_commit switch =
-  let open Dockerfile in
-  from ("ocurrent/opam:"^distribution_used^" AS base") @@
-  run "git -C opam-repository pull origin master && git -C opam-repository checkout %s" (Filename.quote opam_repo_commit) @@
-  run "opam update" @@
-  run "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam" @@
-  run "git -C /tmp/opam checkout opam-health-check3" @@
-  run "sudo apt-get install -yy m4" @@
-  run "opam pin add -yn /tmp/opam" @@
-  run "opam install -y opam-devel opam-0install-cudf" @@
-  run {|mv "$(opam var opam-devel:lib)/opam" opam.exe|} @@
-  from ("ocurrent/opam:"^distribution_used^"-opam") @@
-  copy ~from:"base" ~src:["/home/opam/opam.exe"] ~dst:"/usr/bin/opam" () @@
-  run "sudo apt-get update" @@
-  run "git -C opam-repository pull origin master && git -C opam-repository checkout %s" (Filename.quote opam_repo_commit) @@
-  (if Server_configfile.enable_dune_cache conf then
-     run "git pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"
-   else
-     empty
-  ) @@
-  run "rm -rf /home/opam/.opam && opam init -ya --bare --disable-sandboxing opam-repository" @@
-  env [
-    "OPAMPRECISETRACKING","1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
-    "OPAMEXTERNALSOLVER","builtin-0install";
-    "OPAMDEPEXTYES","1";
-    "OPAMDROPINSTALLEDPACKAGES","1";
-  ] @@
-  run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
-  (if Server_configfile.enable_opam_alpha_repository conf
-   then
-     run "git clone git://github.com/kit-ty-kate/opam-alpha-repository.git && git -C opam-alpha-repository checkout %s" (Filename.quote opam_alpha_commit) @@
-     run "opam repository add --dont-select alpha opam-alpha-repository"
-   else empty) @@
-  run "opam switch create --repositories=%sbeta,default %s"
-    (if Server_configfile.enable_opam_alpha_repository conf then "alpha," else "")
-    (Intf.Switch.switch switch) @@
-  (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0
-   then run "opam install -y ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
-                                                          and https://github.com/ocaml/opam-repository/pull/15642 *)
-   else empty) @@
-  Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
-  (if Server_configfile.enable_dune_cache conf then
-     env [
-       "DUNE_CACHE","enabled";
-       "DUNE_CACHE_TRANSPORT","direct";
-       "DUNE_CACHE_DUPLICATION","copy";
-     ]
-   else
-     empty
-  ) @@
-  run "cd opam-repository && opam admin cache /home/opam/.cache/opam" @@
-  run "echo 'archive-mirrors: [\"/home/opam/.cache/opam\"]' >> /home/opam/.opam/config"
+  let open Obuilder_spec in
+  let cache = cache ~conf in
+  stage ~from:("ocurrent/opam:"^distribution_used) begin
+    [ run ~network "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam";
+      run "git -C /tmp/opam checkout opam-health-check3";
+      run ~network "sudo apt-get update";
+      run ~network "sudo apt-get install -yy m4";
+      run "opam pin add -yn /tmp/opam";
+      run ~network "opam install -y opam-devel opam-0install-cudf";
+      run "sudo apt-get purge --autoremove -yy m4";
+      run {|sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam|};
+      run "rm -rf /tmp/opam";
+      run ~network "git -C opam-repository pull origin master && git -C opam-repository checkout %s" (Filename.quote opam_repo_commit);
+    ] @
+    (if Server_configfile.enable_dune_cache conf then
+       [run ~network "git -C opam-repository pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
+     else
+       []
+    ) @ [
+      env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
+      env "OPAMEXTERNALSOLVER" "builtin-0install";
+      env "OPAMDEPEXTYES" "1";
+      env "OPAMDROPINSTALLEDPACKAGES" "1";
+      run "rm -rf /home/opam/.opam && opam init -ya --bare --disable-sandboxing opam-repository";
+      run ~network "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git";
+    ] @
+    (if Server_configfile.enable_opam_alpha_repository conf then
+       [ run "git clone git://github.com/kit-ty-kate/opam-alpha-repository.git && git -C opam-alpha-repository checkout %s" (Filename.quote opam_alpha_commit);
+         run "opam repository add --dont-select alpha opam-alpha-repository";
+       ]
+     else
+       []
+    ) @ [
+      run ~cache ~network "opam switch create --repositories=%sbeta,default %s"
+        (if Server_configfile.enable_opam_alpha_repository conf then "alpha," else "")
+        (Intf.Switch.switch switch);
+    ] @
+    (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
+       [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
+       (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
+                and https://github.com/ocaml/opam-repository/pull/15642 *)
+     else
+       []
+    ) @
+    (match Server_configfile.extra_command conf with
+     | Some c -> [run ~cache ~network "%s" c]
+     | None -> []
+    ) @
+    (if Server_configfile.enable_dune_cache conf then
+       [ env "DUNE_CACHE" "enabled";
+         env "DUNE_CACHE_TRANSPORT" "direct";
+         env "DUNE_CACHE_DUPLICATION" "copy";
+       ]
+     else
+       []
+    )
+  end
 
 let with_stderr ~start_time workdir f =
   Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) >>= fun () ->
@@ -336,7 +355,7 @@ let run ~on_finished ~conf cache workdir =
               get_repo ~stderr ~dir:opam_repo_dir ~repo:"ocaml/opam-repository" >>= fun hash ->
               get_repo ~stderr ~dir:alpha_repo_dir ~repo:"kit-ty-kate/opam-alpha-repository" >>= fun alpha_hash ->
               let base_dockerfile = get_dockerfile ~conf ~opam_repo_commit:hash ~opam_alpha_commit:alpha_hash switch in
-              Oca_lib.write_line_unix stderr (Dockerfile.string_of_t base_dockerfile) >>= fun () ->
+              Oca_lib.write_line_unix stderr (obuilder_to_string base_dockerfile) >>= fun () ->
               get_pkgs ~base_dockerfile ~conf ~stderr switch >>= fun hd_pkgs ->
               Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
               let old_logdir = List.head_opt old_logdir in
