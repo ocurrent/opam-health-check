@@ -40,6 +40,7 @@ let exec_out ~fexec ~fout =
   let proc = fexec ~stdout in
   Lwt_unix.close stdout >>= fun () ->
   fout (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun res ->
+  Lwt_unix.close fd >>= fun () ->
   proc >|= fun () ->
   res
 
