@@ -221,22 +221,19 @@ let with_stderr ~start_time workdir f =
 
 module Pkg_set = Set.Make (String)
 
-let get_repo ~stderr ~start_time ~repo = (* TODO: Find better than ~start_time to differenciate *)
-  let dirname = Filename.basename repo in
-  let dirname = Filename.concat (Filename.get_temp_dir_name ()) (dirname^string_of_int (int_of_float start_time)) in
+let get_repo ~stderr ~dir ~repo =
   Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr
-    ["git";"clone";"git://github.com/"^repo^".git";dirname] >>= fun () ->
+    ["git";"clone";"git://github.com/"^repo^".git";dir] >>= fun () ->
   exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr
-      ["git";"-C";dirname;"rev-parse";"origin/master"])
+      ["git";"-C";dir;"rev-parse";"origin/master"])
   >|= fun git_hash ->
   List.hd git_hash
 
-let get_metadata ~stderr ~logdir ~start_time ~repo = (* TODO: Find better (see above) *)
-  let dirname = Filename.concat (Filename.get_temp_dir_name ()) (repo^string_of_int (int_of_float start_time)) in
+let get_metadata ~stderr ~logdir ~dir =
   exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr
-      ["sh";"-c";"cd "^Filename.quote dirname^" && ls -d packages/*/*"])
+      ["sh";"-c";"cd "^Filename.quote dir^" && ls -d packages/*/*"])
   >>= fun pkgs ->
   Oca_lib.mkdir_p (Server_workdirs.tmprevdepsdir logdir) >>= fun () ->
   Oca_lib.mkdir_p (Server_workdirs.tmpmaintainersdir logdir) >>= fun () ->
@@ -246,7 +243,7 @@ let get_metadata ~stderr ~logdir ~start_time ~repo = (* TODO: Find better (see a
         let revdep_file = Server_workdirs.tmprevdepsfile ~pkg logdir in
         let revdep_file = Fpath.to_string revdep_file in
         Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr
-          ["sh";"-c";"cd "^dirname^" && echo $(opam admin list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg^" | wc -l) - 1 | bc > "^Filename.quote revdep_file]
+          ["sh";"-c";"cd "^dir^" && echo $(opam admin list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg^" | wc -l) - 1 | bc > "^Filename.quote revdep_file]
         >>= fun () ->
         let pkgname = List.nth (String.split_on_char '.' pkg) 0 in
         if Pkg_set.mem pkgname done_pkgnames then
@@ -332,33 +329,37 @@ let run ~on_finished ~conf cache workdir =
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     let start_time = Unix.time () in
     with_stderr ~start_time workdir begin fun ~stderr ->
-      begin match switches with
-      | switch::switches ->
-          let timer = Oca_lib.timer_start () in
-          get_repo ~stderr ~start_time ~repo:"ocaml/opam-repository" >>= fun hash ->
-          get_repo ~stderr ~start_time ~repo:"kit-ty-kate/opam-alpha-repository" >>= fun alpha_hash ->
-          let base_dockerfile = get_dockerfile ~conf ~opam_repo_commit:hash ~opam_alpha_commit:alpha_hash switch in
-          get_pkgs ~base_dockerfile ~conf ~stderr switch >>= fun hd_pkgs ->
-          Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
-          let old_logdir = List.head_opt old_logdir in
-          let new_logdir = Server_workdirs.new_logdir ~hash ~start_time workdir in
-          Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
-          let pool = Lwt_pool.create (Server_configfile.processes conf / 3 * 2) (fun () -> Lwt.return_unit) in
-          Lwt_list.map_p (get_pkgs ~base_dockerfile ~stderr ~conf) switches >>= fun tl_pkgs ->
-          let pkgs = Pkg_set.of_list (List.concat (hd_pkgs :: tl_pkgs)) in
-          Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          get_metadata ~stderr ~logdir:new_logdir ~start_time ~repo:"opam-repository" >>= fun () ->
-          get_metadata ~stderr ~logdir:new_logdir ~start_time ~repo:"opam-alpha-repository" >>= fun () ->
-          Oca_lib.timer_log timer stderr "Metadata collection" >>= fun () ->
-          let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~base_dockerfile new_logdir (switch :: switches) pkgs in
-          Lwt.join jobs >>= fun () ->
-          Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
-          move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
-          on_finished workdir;
-          trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
-          Oca_lib.timer_log timer stderr "Operation"
-      | [] ->
-          Oca_lib.write_line_unix stderr "No switches."
+      Lwt_io.with_temp_dir ~prefix:"opam-repo" begin fun opam_repo_dir ->
+        Lwt_io.with_temp_dir ~prefix:"alpha-repo" begin fun alpha_repo_dir ->
+          begin match switches with
+          | switch::switches ->
+              let timer = Oca_lib.timer_start () in
+              get_repo ~stderr ~dir:opam_repo_dir ~repo:"ocaml/opam-repository" >>= fun hash ->
+              get_repo ~stderr ~dir:alpha_repo_dir ~repo:"kit-ty-kate/opam-alpha-repository" >>= fun alpha_hash ->
+              let base_dockerfile = get_dockerfile ~conf ~opam_repo_commit:hash ~opam_alpha_commit:alpha_hash switch in
+              get_pkgs ~base_dockerfile ~conf ~stderr switch >>= fun hd_pkgs ->
+              Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
+              let old_logdir = List.head_opt old_logdir in
+              let new_logdir = Server_workdirs.new_logdir ~hash ~start_time workdir in
+              Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
+              let pool = Lwt_pool.create (Server_configfile.processes conf / 3 * 2) (fun () -> Lwt.return_unit) in
+              Lwt_list.map_p (get_pkgs ~base_dockerfile ~stderr ~conf) switches >>= fun tl_pkgs ->
+              let pkgs = Pkg_set.of_list (List.concat (hd_pkgs :: tl_pkgs)) in
+              Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
+              get_metadata ~stderr ~logdir:new_logdir ~dir:opam_repo_dir >>= fun () ->
+              get_metadata ~stderr ~logdir:new_logdir ~dir:alpha_repo_dir >>= fun () ->
+              Oca_lib.timer_log timer stderr "Metadata collection" >>= fun () ->
+              let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~base_dockerfile new_logdir (switch :: switches) pkgs in
+              Lwt.join jobs >>= fun () ->
+              Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
+              move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
+              on_finished workdir;
+              trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
+              Oca_lib.timer_log timer stderr "Operation"
+          | [] ->
+              Oca_lib.write_line_unix stderr "No switches."
+          end
+        end
       end
     end
   end (fun () -> run_locked := false; Lwt.return_unit) end;
