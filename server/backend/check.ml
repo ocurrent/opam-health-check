@@ -35,13 +35,18 @@ let rec read_lines fd =
   | Some line -> read_lines fd >|= List.cons line
   | None -> Lwt.return_nil
 
-let docker_build_str ~base_dockerfile ~stderr ~img c =
+let exec_out ~fexec ~fout =
   let fd, stdout = Lwt_unix.pipe () in
-  let proc = docker_build ~base_dockerfile ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@") in
+  let proc = fexec ~stdout in
   Lwt_unix.close stdout >>= fun () ->
-  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun lines ->
-  Lwt_unix.close fd >>= fun () ->
+  fout (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun res ->
   proc >|= fun () ->
+  res
+
+let docker_build_str ~base_dockerfile ~stderr ~img c =
+  exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
+    docker_build ~base_dockerfile ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@"))
+  >|= fun lines ->
   let rec aux ~is_in acc = function
     | "@@@"::_ when is_in -> List.rev acc
     | "@@@"::xs -> aux ~is_in:true [] xs
@@ -217,28 +222,18 @@ let get_repo ~stderr ~start_time ~repo = (* TODO: Find better than ~start_time t
   let dirname = Filename.concat (Filename.get_temp_dir_name ()) (dirname^string_of_int (int_of_float start_time)) in
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
     ["git";"clone";"git://github.com/"^repo^".git";dirname] >>= fun () ->
-  let fd, stdout = Lwt_unix.pipe () in
-  let proc =
+  exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr
-      ["git";"-C";dirname;"rev-parse";"origin/master"]
-  in
-  Lwt_unix.close stdout >>= fun () ->
-  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun git_hash ->
-  Lwt_unix.close fd >>= fun () ->
-  proc >|= fun () ->
+      ["git";"-C";dirname;"rev-parse";"origin/master"])
+  >|= fun git_hash ->
   List.hd git_hash
 
 let get_metadata ~stderr ~logdir ~start_time ~repo = (* TODO: Find better (see above) *)
   let dirname = Filename.concat (Filename.get_temp_dir_name ()) (repo^string_of_int (int_of_float start_time)) in
-  let fd, stdout = Lwt_unix.pipe () in
-  let proc =
-    Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
-      ["sh";"-c";"cd "^Filename.quote dirname^" && ls -d packages/*/*"]
-  in
-  Lwt_unix.close stdout >>= fun () ->
-  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
-  Lwt_unix.close fd >>= fun () ->
-  proc >>= fun () ->
+  exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
+    Oca_lib.exec ~stdin:`Close ~stdout ~stderr
+      ["sh";"-c";"cd "^Filename.quote dirname^" && ls -d packages/*/*"])
+  >>= fun pkgs ->
   Oca_lib.mkdir_p (Server_workdirs.tmprevdepsdir logdir) >>= fun () ->
   Oca_lib.mkdir_p (Server_workdirs.tmpmaintainersdir logdir) >>= fun () ->
   let rec aux done_pkgnames = function
