@@ -210,7 +210,7 @@ let get_dockerfile ~conf ~opam_repo_commit ~opam_alpha_commit switch =
    else
      empty
   ) @@
-  run "opam admin cache /home/opam/.cache/opam" @@
+  run "cd opam-repository && opam admin cache /home/opam/.cache/opam" @@
   run "echo 'archive-mirrors: [\"/home/opam/.cache/opam\"]' >> /home/opam/.opam/config"
 
 let with_stderr ~start_time workdir f =
