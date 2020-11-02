@@ -201,7 +201,7 @@ let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
       run ~network "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git";
     ] @
     (if Server_configfile.enable_opam_alpha_repository conf then
-       [ run "git clone git://github.com/kit-ty-kate/opam-alpha-repository.git && git -C opam-alpha-repository checkout %s" (Filename.quote opam_alpha_commit);
+       [ run ~network "git clone git://github.com/kit-ty-kate/opam-alpha-repository.git && git -C opam-alpha-repository checkout %s" (Filename.quote opam_alpha_commit);
          run "opam repository add --dont-select alpha opam-alpha-repository";
        ]
      else
