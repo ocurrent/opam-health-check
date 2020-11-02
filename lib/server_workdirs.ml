@@ -72,6 +72,10 @@ let revdepsdir workdir = metadatadir workdir/"revdeps"
 let revdepsfile ~pkg workdir = revdepsdir workdir/pkg
 
 let tmpmetadatadir (Logdir (_, _, workdir) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"metadata"
+let tmpmaintainersdir logdir = tmpmetadatadir logdir/"maintainers"
+let tmpmaintainersfile ~pkg logdir = tmpmaintainersdir logdir/pkg
+let tmprevdepsdir logdir = tmpmetadatadir logdir/"revdeps"
+let tmprevdepsfile ~pkg logdir = tmprevdepsdir logdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
 let file_from_logdir ~file logdir =

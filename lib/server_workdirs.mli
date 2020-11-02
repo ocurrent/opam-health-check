@@ -44,6 +44,10 @@ val revdepsdir : t -> Fpath.t
 val revdepsfile : pkg:string -> t -> Fpath.t
 
 val tmpmetadatadir : logdir -> Fpath.t
+val tmpmaintainersdir : logdir -> Fpath.t
+val tmpmaintainersfile : pkg:string -> logdir -> Fpath.t
+val tmprevdepsdir : logdir -> Fpath.t
+val tmprevdepsfile : pkg:string -> logdir -> Fpath.t
 
 val configfile : t -> Fpath.t
 val file_from_logdir : file:string -> logdir -> Fpath.t

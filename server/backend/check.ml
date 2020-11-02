@@ -4,40 +4,17 @@ let get_prefix conf =
   let server_name = Server_configfile.name conf in
   "opam-health-check-"^server_name
 
-let docker_build ~conf ~cached ~stderr ~img_name dockerfile =
-  let cache = if cached then [] else ["--pull";"--no-cache"] in
-  let stdin, fd = Lwt_unix.pipe () in
-  let stdin = `FD_move stdin in
-  Lwt_unix.set_close_on_exec fd;
-  let label = get_prefix conf in
-  begin
-    if not cached then
-      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"system";"prune";"-af";"--volumes";("--filter=label="^label)]
-    else
-      Lwt.return_unit
-  end >>= fun () ->
-  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build"]@cache@["--label";label;"-t";img_name;"-"]) in
-  Oca_lib.write_line_unix fd (Format.sprintf "%a" Dockerfile.pp dockerfile) >>= fun () ->
-  Lwt_unix.close fd >>= fun () ->
-  proc
-
-let docker_run ?timeout ~volumes ~stdout ~stderr img cmd =
-  let volumes = List.fold_left (fun acc (name, dir) -> acc @ ["-v";name^":"^dir]) [] volumes in
-  let get_proc ~stdin cmd =
-    let opts = match stdin with `Close -> volumes | _ -> "-i"::volumes in
-    Oca_lib.exec ?timeout ~stdin ~stdout ~stderr ("docker"::"run"::"--rm"::opts@img::cmd)
+let docker_build ~base_dockerfile ~stdout ~stderr ~img c =
+  let cap_file = "~/ocluster.cap" in (* TODO: fix that *)
+  let dockerfile_content =
+    let open Dockerfile in
+    base_dockerfile @@
+    run "%s" c
   in
-  match cmd with
-  | `Script script ->
-      let stdin, fd = Lwt_unix.pipe () in
-      let stdin = `FD_move stdin in
-      Lwt_unix.set_close_on_exec fd;
-      let proc = get_proc ~stdin ["bash"] in
-      Lwt_list.iter_s (Oca_lib.write_line_unix fd) (String.split_on_char '\n' script) >>= fun () ->
-      Lwt_unix.close fd >>= fun () ->
-      proc
-  | `Cmd cmd ->
-      get_proc ~stdin:`Close cmd
+  Lwt_io.with_temp_file (fun (file, c) ->
+    Lwt_io.write c (Dockerfile.string_of_t dockerfile_content) >|= fun () ->
+    file) >>= fun dockerfile ->
+  Oca_lib.exec ~stdin:`Close ~stdout ~stderr ["ocluster-client"; "submit-docker"; cap_file; "--hint"; img; "--pool=linux-x86_64"; dockerfile]
 
 let get_img_name ~conf switch =
   let switch = Intf.Switch.switch switch in
@@ -52,32 +29,31 @@ let get_img_name ~conf switch =
   in
   get_prefix conf^"-"^switch
 
-let docker_create_volume ~stderr ~conf switch (name, dir, script) =
-  let img_name = get_img_name ~conf switch in
-  let label = get_prefix conf in
-  let name = label^"-"^name in
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"volume";"create";name] >>= fun () ->
-  docker_run ~volumes:[(name, dir)] ~stdout:stderr ~stderr img_name (`Script (script ~dir)) >|= fun () ->
-  (name, dir)
-
 let rec read_lines fd =
   Lwt_io.read_line_opt fd >>= function
   | Some line -> read_lines fd >|= List.cons line
   | None -> Lwt.return_nil
 
-let docker_run_to_str ~stderr ~img_name cmd =
+let docker_build_str ~base_dockerfile ~stderr ~img c =
   let fd, stdout = Lwt_unix.pipe () in
-  let proc = docker_run ~volumes:[] ~stderr ~stdout img_name (`Cmd cmd) in
+  let proc = docker_build ~base_dockerfile ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@") in
   Lwt_unix.close stdout >>= fun () ->
-  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
+  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun lines ->
   Lwt_unix.close fd >>= fun () ->
   proc >|= fun () ->
-  pkgs
+  let rec aux ~is_in acc = function
+    | "@@@"::_ when is_in -> List.rev acc
+    | "@@@"::xs -> aux ~is_in:true [] xs
+    | x::xs when is_in -> aux ~is_in (x :: acc) xs
+    | _::xs -> aux ~is_in acc xs
+    | [] -> []
+  in
+  aux ~is_in:false [] lines
 
-let get_pkgs ~conf ~stderr switch =
+let get_pkgs ~base_dockerfile ~conf ~stderr switch =
   let img_name = get_img_name ~conf switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
-  docker_run_to_str ~stderr ~img_name [] >>= fun pkgs ->
+  docker_build_str ~base_dockerfile ~stderr ~img:img_name (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
@@ -88,15 +64,18 @@ let get_pkgs ~conf ~stderr switch =
   Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
   pkgs
 
-let is_partial_failure logfile =
+let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
-    let rec lookup () =
+    let rec lookup res =
       Lwt_io.read_line_opt ic >>= function
-      | Some "+- The following actions were aborted" -> Lwt.return_true
-      | Some _ -> lookup ()
-      | None -> Lwt.return_false
+      | Some "+- The following actions failed" -> lookup `Failure
+      | Some "+- The following actions were aborted" -> Lwt.return `Partial
+      | Some "[ERROR] Package conflict!" -> lookup `NotAvailable
+      | Some "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field." -> lookup `AcceptFailures
+      | Some _ -> lookup res
+      | None -> Lwt.return res
     in
-    lookup ()
+    lookup `Other
   end
 
 let distribution_used = "debian-unstable"
@@ -129,7 +108,7 @@ fi
 exit $res
 |}
 
-let run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir pkg =
+let run_job ~conf ~pool ~stderr ~base_dockerfile ~switch ~num logdir pkg =
   let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
@@ -138,28 +117,28 @@ let run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        docker_run ~volumes ~stdout ~stderr:stdout img_name (`Script (run_script ~conf pkg))
+        docker_build ~base_dockerfile ~stdout ~stderr:stdout ~img:img_name (run_script ~conf pkg)
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
       Oca_lib.write_line_unix stderr ("["^num^"] succeeded.") >>= fun () ->
       Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
     end begin function
-    | Oca_lib.Process_failure 31 | Oca_lib.Internal_failure -> (* TODO: It might be worth distinguishing between "killed by signal" failures and timeouts, in the future *)
-        is_partial_failure logfile >>= begin function
-        | true ->
+    | Oca_lib.Process_failure _ -> (* TODO: It might be worth distinguishing between "killed by signal" failures and timeouts, in the future *)
+        failure_kind logfile >>= begin function
+        | `Partial ->
             Oca_lib.write_line_unix stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir))
-        | false ->
+        | `Failure ->
             Oca_lib.write_line_unix stderr ("["^num^"] failed.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch logdir))
+        | `NotAvailable ->
+            Oca_lib.write_line_unix stderr ("["^num^"] finished with not available.") >>= fun () ->
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch logdir))
+        | `Other | `AcceptFailures ->
+            Oca_lib.write_line_unix stderr ("["^num^"] finished with an internal failure.") >>= fun () ->
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch logdir))
         end
-    | Oca_lib.Process_failure 20 ->
-        Oca_lib.write_line_unix stderr ("["^num^"] finished with not available.") >>= fun () ->
-        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch logdir))
-    | Oca_lib.Process_failure _ ->
-        Oca_lib.write_line_unix stderr ("["^num^"] finished with an internal failure.") >>= fun () ->
-        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch logdir))
     | e ->
         Lwt.fail e
     end
@@ -171,10 +150,10 @@ let () =
     prerr_endline ("Async exception raised: "^msg);
   end
 
-let get_dockerfile ~conf switch =
+let get_dockerfile ~conf ~opam_repo_commit ~opam_alpha_commit switch =
   let open Dockerfile in
   from ("ocurrent/opam:"^distribution_used^" AS base") @@
-  run "git -C opam-repository pull origin master" @@
+  run "git -C opam-repository pull origin master && git -C opam-repository checkout %s" (Filename.quote opam_repo_commit) @@
   run "opam update" @@
   run "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam" @@
   run "git -C /tmp/opam checkout opam-health-check3" @@
@@ -185,8 +164,7 @@ let get_dockerfile ~conf switch =
   from ("ocurrent/opam:"^distribution_used^"-opam") @@
   copy ~from:"base" ~src:["/home/opam/opam.exe"] ~dst:"/usr/bin/opam" () @@
   run "sudo apt-get update" @@
-  workdir "opam-repository" @@
-  run "git pull origin master" @@
+  run "git -C opam-repository pull origin master && git -C opam-repository checkout %s" (Filename.quote opam_repo_commit) @@
   (if Server_configfile.enable_dune_cache conf then
      run "git pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"
    else
@@ -201,7 +179,9 @@ let get_dockerfile ~conf switch =
   ] @@
   run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
   (if Server_configfile.enable_opam_alpha_repository conf
-   then run "opam repository add --dont-select alpha git://github.com/kit-ty-kate/opam-alpha-repository.git"
+   then
+     run "git clone git://github.com/kit-ty-kate/opam-alpha-repository.git && git -C opam-alpha-repository checkout %s" (Filename.quote opam_alpha_commit) @@
+     run "opam repository add --dont-select alpha opam-alpha-repository"
    else empty) @@
   run "opam switch create --repositories=%sbeta,default %s"
     (if Server_configfile.enable_opam_alpha_repository conf then "alpha," else "")
@@ -220,8 +200,8 @@ let get_dockerfile ~conf switch =
    else
      empty
   ) @@
-  run "echo 'archive-mirrors: [\"/home/opam/.cache/opam\"]' >> /home/opam/.opam/config" @@
-  cmd "%s" (Server_configfile.list_command conf)
+  run "opam admin cache /home/opam/.cache/opam" @@
+  run "echo 'archive-mirrors: [\"/home/opam/.cache/opam\"]' >> /home/opam/.opam/config"
 
 let with_stderr ~start_time workdir f =
   Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) >>= fun () ->
@@ -229,69 +209,58 @@ let with_stderr ~start_time workdir f =
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
   Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
 
-let build_switch ~stderr ~cached conf switch =
-  let img_name = get_img_name ~conf switch in
-  docker_build ~conf ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
-  get_pkgs ~conf ~stderr switch
-
 module Pkg_set = Set.Make (String)
 
-let metadata_script ~max_thread pkgs = {|
-sudo apt-get -qq install bc &> /dev/null
+let get_repo ~stderr ~start_time ~repo = (* TODO: Find better than ~start_time to differenciate *)
+  let dirname = Filename.concat (Filename.get_temp_dir_name ()) (string_of_int (int_of_float start_time)) in
+  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
+    ["git";"clone";"git://github.com/"^repo^".git";dirname] >>= fun () ->
+  let fd, stdout = Lwt_unix.pipe () in
+  let proc =
+    Oca_lib.exec ~stdin:`Close ~stdout ~stderr
+      ["git";"-C";dirname;"rev-parse";"origin/master"]
+  in
+  Lwt_unix.close stdout >>= fun () ->
+  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun git_hash ->
+  Lwt_unix.close fd >>= fun () ->
+  proc >|= fun () ->
+  List.hd git_hash
 
-root=/metadata
-revdeps_dir=$root/revdeps
-maintainers_dir=$root/maintainers
-
-user=$(stat -c '%u' $root)
-group=$(stat -c '%g' $root)
-
-sudo chown opam:opam $root
-mkdir $revdeps_dir $maintainers_dir
-
-echo "pkg=\"\$1\"" > revdeps.sh
-echo "echo \"Getting revdeps for \$pkg\"" >> revdeps.sh
-echo "echo \$(opam list -s --recursive --depopts --with-test --with-doc --depends-on \"\$pkg\" | wc -l) - 1 | bc > \"$revdeps_dir/\$pkg\"" >> revdeps.sh
-
-echo "pkg=\"\$1\"" > maintainers.sh
-echo "echo \"Getting maintainers for \$pkg\"" >> maintainers.sh
-echo "opam show -f maintainer: \"\$pkg\" | sed -E 's/^\"(.*)\"\$/\1/' > \"$maintainers_dir/\$pkg\"" >> maintainers.sh
-
-|}^Pkg_set.fold (fun pkg acc -> acc^"echo "^pkg^" >> pkgs.txt\n") pkgs ""^{|
-cat pkgs.txt | xargs -P |}^string_of_int max_thread^{| -n 1 bash revdeps.sh
-cat pkgs.txt | sed -E 's/^([^.]*).*$/\1/' | sort -u | xargs -P |}^string_of_int max_thread^{| -n 1 bash maintainers.sh
-sudo chown -R $user:$group $root
-exit 0
-|}
-
-let get_metadata ~conf ~pool ~stderr ~workdir ~is_retry switch logdir pkgs =
-  Oca_lib.write_line_unix stderr ("Getting all the metadata...") >>= fun () ->
-  let metadatadir = Server_workdirs.tmpmetadatadir logdir in
-  if is_retry then
-    let src_metadatadir = Server_workdirs.metadatadir workdir in
-    (* TODO: This is very fragile.. Do better *)
-    Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["cp";"-rT";Fpath.to_string src_metadatadir;Fpath.to_string metadatadir]
-  else
-    let img_name = get_img_name ~conf switch in
-    Lwt_pool.use pool begin fun () ->
-      Lwt_unix.getcwd () >>= fun cwd ->
-      let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
-      let max_thread = Server_configfile.processes conf in
-      let cmd = metadata_script ~max_thread pkgs in
-      docker_run ~timeout:48 ~stderr ~stdout:stderr ~volumes:[(metadatadir, "/metadata")] img_name (`Script cmd)
-    end
-
-let get_git_hash ~stderr switch conf =
-  let img_name = get_img_name ~conf switch in
-  Oca_lib.write_line_unix stderr "Getting current git hash..." >>= fun () ->
-  docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"origin/master"] >>= function
-  | [hash] ->
-      Oca_lib.write_line_unix stderr ("Current git hash: "^hash) >|= fun () ->
-      hash
-  | s ->
-      let s = String.unlines s in
-      Oca_lib.write_line_unix stderr ("Error: cannot parse git hash. Got:\n"^s) >>= fun () ->
-      Lwt.fail_with "Something went wrong. See internal log"
+let get_metadata ~stderr ~logdir ~start_time = (* TODO: Find better (see above) *)
+  let dirname = Filename.concat (Filename.get_temp_dir_name ()) (string_of_int (int_of_float start_time)) in
+  let fd, stdout = Lwt_unix.pipe () in
+  let proc =
+    Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
+      ["sh";"-c";"cd "^Filename.quote dirname^" && ls -d packages/*/*"]
+  in
+  Lwt_unix.close stdout >>= fun () ->
+  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
+  Lwt_unix.close fd >>= fun () ->
+  proc >>= fun () ->
+  Oca_lib.mkdir_p (Server_workdirs.tmprevdepsdir logdir) >>= fun () ->
+  Oca_lib.mkdir_p (Server_workdirs.tmpmaintainersdir logdir) >>= fun () ->
+  let rec aux done_pkgnames = function
+    | pkgfile::pkgs ->
+        let pkg = List.nth (String.split_on_char '/' pkgfile) 2 in
+        let revdep_file = Server_workdirs.tmprevdepsfile ~pkg logdir in
+        let revdep_file = Fpath.to_string revdep_file in
+        Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
+          ["sh";"-c";"cd "^dirname^" && echo $(opam admin list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg^" | wc -l) - 1 | bc > "^Filename.quote revdep_file]
+        >>= fun () ->
+        let pkgname = List.nth (String.split_on_char '.' pkg) 0 in
+        if Pkg_set.mem pkgname done_pkgnames then
+          aux done_pkgnames pkgs
+        else
+          let maintainers_file = Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir in
+          let maintainers_file = Fpath.to_string maintainers_file in
+          Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
+            ["sh";"-c";"opam show -f maintainer: "^Filename.quote pkgfile^{| | sed -E 's/^\"(.*)\"\$/\1/' > |}^Filename.quote maintainers_file]
+          >>= fun () ->
+          aux (Pkg_set.add pkgname done_pkgnames) pkgs
+    | [] ->
+        Lwt.return_unit
+  in
+  aux Pkg_set.empty pkgs
 
 let move_tmpdirs_to_final ~stderr logdir workdir =
   let logdir_path = Server_workdirs.get_logdir_path logdir in
@@ -303,7 +272,7 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~conf ~pool ~stderr ~volumes logdir switches pkgs =
+let run_and_get_pkgs ~conf ~pool ~stderr ~base_dockerfile logdir switches pkgs =
   let rgen = Random.int_range (-1) 1 in
   let pkgs = Pkg_set.to_list pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
@@ -312,7 +281,7 @@ let run_and_get_pkgs ~conf ~pool ~stderr ~volumes logdir switches pkgs =
     List.fold_left begin fun (i, jobs) full_name ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job = run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir full_name in
+      let job = run_job ~conf ~pool ~stderr ~base_dockerfile ~switch ~num logdir full_name in
       (i, job :: jobs)
     end (i, jobs) pkgs
   end (0, []) switches
@@ -352,21 +321,9 @@ let wait_current_run_to_finish =
   in
   loop
 
-let cache_setup_script ~dir = {|
-  sudo chown opam:opam '|}^dir^{|'
+(* TODO: Reenable the dune cache mode (maybe with the obuilder mode?) *)
 
-  mkdir -p '|}^dir^{|/opam'
-  opam admin cache '|}^dir^{|/opam'
-
-  mkdir -p '|}^dir^{|/dune'
-  export DUNE_CACHE=enabled
-  export DUNE_CACHE_TRANSPORT=direct
-  export DUNE_CACHE_DUPLICATION=copy
-  opam install -y dune
-  opam exec -- dune cache trim --size=100GB
-|}
-
-let run ~on_finished ~is_retry ~conf cache workdir =
+let run ~on_finished ~conf cache workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   if !run_locked then
     failwith "operation locked";
@@ -377,21 +334,22 @@ let run ~on_finished ~is_retry ~conf cache workdir =
       begin match switches with
       | switch::switches ->
           let timer = Oca_lib.timer_start () in
-          build_switch ~stderr ~cached:is_retry conf switch >>= fun hd_pkgs ->
-          get_git_hash ~stderr switch conf >>= fun hash ->
+          get_repo ~stderr ~start_time ~repo:"ocaml/opam-repository" >>= fun hash ->
+          get_repo ~stderr ~start_time ~repo:"kit-ty-kate/opam-alpha-repository" >>= fun alpha_hash ->
+          let base_dockerfile = get_dockerfile ~conf ~opam_repo_commit:hash ~opam_alpha_commit:alpha_hash switch in
+          get_pkgs ~base_dockerfile ~conf ~stderr switch >>= fun hd_pkgs ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
           let old_logdir = List.head_opt old_logdir in
           let new_logdir = Server_workdirs.new_logdir ~hash ~start_time workdir in
           Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf / 3 * 2) (fun () -> Lwt.return_unit) in
-          Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
-          docker_create_volume ~stderr ~conf switch ("cache", "/home/opam/.cache", cache_setup_script) >>= fun cache ->
-          let volumes = [cache] in
+          Lwt_list.map_p (get_pkgs ~base_dockerfile ~stderr ~conf) switches >>= fun tl_pkgs ->
           let pkgs = Pkg_set.of_list (List.concat (hd_pkgs :: tl_pkgs)) in
           Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          get_metadata ~conf ~pool ~stderr ~workdir ~is_retry switch new_logdir pkgs >>= fun () ->
+          get_metadata ~stderr ~logdir:new_logdir ~start_time >>= fun () ->
+          get_metadata ~stderr ~logdir:new_logdir ~start_time >>= fun () ->
           Oca_lib.timer_log timer stderr "Metadata collection" >>= fun () ->
-          let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes new_logdir (switch :: switches) pkgs in
+          let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~base_dockerfile new_logdir (switch :: switches) pkgs in
           Lwt.join jobs >>= fun () ->
           Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
           move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
