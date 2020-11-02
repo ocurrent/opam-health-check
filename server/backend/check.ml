@@ -13,6 +13,7 @@ let docker_build ~base_dockerfile ~stdout ~stderr ~img c =
   in
   Lwt_io.with_temp_file (fun (dockerfile, c) ->
     Lwt_io.write c (Dockerfile.string_of_t dockerfile_content) >>= fun () ->
+    Lwt_io.flush c >>= fun () ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr ["ocluster-client"; "submit-docker"; cap_file; "--hint"; img; "--pool=linux-x86_64"; dockerfile]
   )
 
