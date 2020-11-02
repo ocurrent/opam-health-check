@@ -212,7 +212,8 @@ let with_stderr ~start_time workdir f =
 module Pkg_set = Set.Make (String)
 
 let get_repo ~stderr ~start_time ~repo = (* TODO: Find better than ~start_time to differenciate *)
-  let dirname = Filename.concat (Filename.get_temp_dir_name ()) (string_of_int (int_of_float start_time)) in
+  let dirname = Filename.basename repo in
+  let dirname = Filename.concat (Filename.get_temp_dir_name ()) (dirname^string_of_int (int_of_float start_time)) in
   Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
     ["git";"clone";"git://github.com/"^repo^".git";dirname] >>= fun () ->
   let fd, stdout = Lwt_unix.pipe () in
@@ -226,8 +227,8 @@ let get_repo ~stderr ~start_time ~repo = (* TODO: Find better than ~start_time t
   proc >|= fun () ->
   List.hd git_hash
 
-let get_metadata ~stderr ~logdir ~start_time = (* TODO: Find better (see above) *)
-  let dirname = Filename.concat (Filename.get_temp_dir_name ()) (string_of_int (int_of_float start_time)) in
+let get_metadata ~stderr ~logdir ~start_time ~repo = (* TODO: Find better (see above) *)
+  let dirname = Filename.concat (Filename.get_temp_dir_name ()) (repo^string_of_int (int_of_float start_time)) in
   let fd, stdout = Lwt_unix.pipe () in
   let proc =
     Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr
@@ -346,8 +347,8 @@ let run ~on_finished ~conf cache workdir =
           Lwt_list.map_p (get_pkgs ~base_dockerfile ~stderr ~conf) switches >>= fun tl_pkgs ->
           let pkgs = Pkg_set.of_list (List.concat (hd_pkgs :: tl_pkgs)) in
           Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          get_metadata ~stderr ~logdir:new_logdir ~start_time >>= fun () ->
-          get_metadata ~stderr ~logdir:new_logdir ~start_time >>= fun () ->
+          get_metadata ~stderr ~logdir:new_logdir ~start_time ~repo:"opam-repository" >>= fun () ->
+          get_metadata ~stderr ~logdir:new_logdir ~start_time ~repo:"opam-alpha-repository" >>= fun () ->
           Oca_lib.timer_log timer stderr "Metadata collection" >>= fun () ->
           let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~base_dockerfile new_logdir (switch :: switches) pkgs in
           Lwt.join jobs >>= fun () ->
