@@ -180,7 +180,7 @@ let get_dockerfile ~conf ~opam_repo_commit ~opam_alpha_commit switch =
    else
      empty
   ) @@
-  run "rm -rf /home/opam/.opam && opam init -ya --bare --disable-sandboxing ." @@
+  run "rm -rf /home/opam/.opam && opam init -ya --bare --disable-sandboxing opam-repository" @@
   env [
     "OPAMPRECISETRACKING","1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
     "OPAMEXTERNALSOLVER","builtin-0install";
