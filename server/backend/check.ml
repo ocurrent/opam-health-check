@@ -15,7 +15,7 @@ let cache ~conf =
 let network = ["host"]
 
 let obuilder_to_string spec =
-  Sexplib0.Sexp.to_string (Obuilder_spec.sexp_of_stage spec)
+  Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_stage spec)
 
 let ocluster_build ~conf ~base_obuilder ~stdout ~stderr ~img c =
   let home = Sys.getenv "HOME" in
