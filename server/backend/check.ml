@@ -1,9 +1,5 @@
 open Lwt.Infix
 
-let get_prefix conf =
-  let server_name = Server_configfile.name conf in
-  "opam-health-check-"^server_name
-
 let cache ~conf =
   let opam_cache = Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache" in
   if Server_configfile.enable_dune_cache conf then
@@ -17,7 +13,7 @@ let network = ["host"]
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_stage spec)
 
-let ocluster_build ~conf ~base_obuilder ~stdout ~stderr ~img c =
+let ocluster_build ~conf ~base_obuilder ~stdout ~stderr c =
   let home = Sys.getenv "HOME" in
   let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
   let obuilder_content =
@@ -30,21 +26,8 @@ let ocluster_build ~conf ~base_obuilder ~stdout ~stderr ~img c =
     Lwt_io.write c obuilder_content >>= fun () ->
     Lwt_io.flush c >>= fun () ->
     Oca_lib.exec ~stdin:`Close ~stdout ~stderr
-      ["ocluster-client"; "submit-obuilder"; cap_file; "--cache-hint"; img; "--pool=linux-x86_64"; "--local-file"; obuilder]
+      ["ocluster-client"; "submit-obuilder"; cap_file; "--pool=linux-x86_64"; "--local-file"; obuilder]
   )
-
-let get_img_name ~conf switch =
-  let switch = Intf.Switch.switch switch in
-  let switch =
-    let rec normalize_ocluster_tag_name = function
-      | ('a'..'z' | 'A'..'Z' | '0'..'9' | '-' | '.') as c::cs -> c::normalize_ocluster_tag_name cs
-      | '_'::'_'::_ -> assert false
-      | _::cs -> '_'::'_'::normalize_ocluster_tag_name cs
-      | [] -> []
-    in
-    String.of_list (normalize_ocluster_tag_name (String.to_list switch))
-  in
-  get_prefix conf^"-"^switch
 
 let rec read_lines fd =
   Lwt_io.read_line_opt fd >>= function
@@ -59,9 +42,9 @@ let exec_out ~fexec ~fout =
   proc >|= fun () ->
   res
 
-let ocluster_build_str ~conf ~base_obuilder ~stderr ~img c =
+let ocluster_build_str ~conf ~base_obuilder ~stderr c =
   exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
-    ocluster_build ~conf ~base_obuilder ~stdout ~stderr ~img ("echo @@@ && "^c^" && echo @@@"))
+    ocluster_build ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@"))
   >|= fun lines ->
   let rec aux ~is_in acc = function
     | "@@@"::_ when is_in -> List.rev acc
@@ -117,7 +100,6 @@ exit $res
 |}
 
 let run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
-  let img_name = get_img_name ~conf switch in
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
     let switch = Intf.Switch.name switch in
@@ -125,7 +107,7 @@ let run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        ocluster_build ~conf ~base_obuilder ~stdout:(`FD_copy stdout) ~stderr:stdout ~img:img_name (run_script ~conf pkg)
+        ocluster_build ~conf ~base_obuilder ~stdout:(`FD_copy stdout) ~stderr:stdout (run_script ~conf pkg)
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
@@ -220,10 +202,9 @@ let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
   end
 
 let get_pkgs ~conf ~stderr ~opam_repo_commit ~opam_alpha_commit switch =
-  let img_name = get_img_name ~conf switch in
   let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
-  ocluster_build_str ~conf ~base_obuilder ~stderr ~img:img_name (Server_configfile.list_command conf) >>= fun pkgs ->
+  ocluster_build_str ~conf ~base_obuilder ~stderr (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
@@ -251,10 +232,9 @@ let get_repo ~stderr ~dir ~repo =
   >|= fun git_hash ->
   List.hd git_hash
 
-let get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg ~pkgname switch =
-  let img = get_img_name ~conf switch in
+let get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg ~pkgname =
   Lwt_pool.use pool begin fun () ->
-    ocluster_build_str ~conf ~base_obuilder ~stderr ~img
+    ocluster_build_str ~conf ~base_obuilder ~stderr
       ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
     >>= fun revdeps ->
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
@@ -263,7 +243,7 @@ let get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg 
     if Pkg_set.mem pkgname done_pkgnames then
       Lwt.return_unit
     else
-      ocluster_build_str ~conf ~base_obuilder ~stderr ~img
+      ocluster_build_str ~conf ~base_obuilder ~stderr
         ("(opam show -f maintainer: "^Filename.quote pkgname^{| | sed -E 's/^\"(.*)\"\$/\1/')|})
       >>= fun maintainers ->
       Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir)) (fun c ->
@@ -293,7 +273,7 @@ let run_and_get_pkgs ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit lo
       let num = string_of_int i^len_suffix in
       let job = run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
       let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
-      let metadata_job = get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg:full_name ~pkgname switch in
+      let metadata_job = get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg:full_name ~pkgname in
       (i, Pkg_set.add pkgname done_pkgnames, job :: metadata_job :: jobs)
     end (i, done_pkgnames, jobs) switches
   end (0, Pkg_set.empty, []) pkgs
