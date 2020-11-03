@@ -242,15 +242,6 @@ let with_stderr ~start_time workdir f =
 
 module Pkg_set = Set.Make (String)
 
-let get_repo ~stderr ~dir ~repo =
-  Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr
-    ["git";"clone";"git://github.com/"^repo^".git";dir] >>= fun () ->
-  exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
-    Oca_lib.exec ~stdin:`Close ~stdout ~stderr
-      ["git";"-C";dir;"rev-parse";"origin/master"])
-  >|= fun git_hash ->
-  List.hd git_hash
-
 let get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg ~pkgname =
   Lwt_pool.use pool begin fun () ->
     ocluster_build_str ~conf ~base_obuilder ~stderr
@@ -269,6 +260,11 @@ let get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg 
         Lwt_io.write c (String.concat "\n" maintainers)
       )
   end
+
+let get_commit_hash ~user ~repo =
+  Github.Monad.run (Github.Repo.get_ref ~user ~repo ~name:"heads/master" ()) >|= fun r ->
+  let r = Github.Response.value r in
+  r.Github_t.git_ref_obj.Github_t.obj_sha
 
 let move_tmpdirs_to_final ~stderr logdir workdir =
   let logdir_path = Server_workdirs.get_logdir_path logdir in
@@ -345,8 +341,8 @@ let run ~on_finished ~conf cache workdir =
       begin match switches with
       | _::_ ->
           let timer = Oca_lib.timer_start () in
-          Lwt_io.with_temp_dir (fun dir -> get_repo ~stderr ~dir ~repo:"ocaml/opam-repository") >>= fun opam_repo_commit ->
-          Lwt_io.with_temp_dir (fun dir -> get_repo ~stderr ~dir ~repo:"kit-ty-kate/opam-alpha-repository") >>= fun opam_alpha_commit ->
+          get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
+          get_commit_hash ~user:"kit-ty-kate" ~repo:"opam-alpha-repository" >>= fun opam_alpha_commit ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
           let old_logdir = List.head_opt old_logdir in
           let new_logdir = Server_workdirs.new_logdir ~hash:opam_repo_commit ~start_time workdir in

@@ -9,5 +9,6 @@
     obuilder-spec
     ocluster-api
     capnp-rpc-unix
+    github-unix
     mirage-crypto-pk
     mirage-crypto-rng.lwt))
