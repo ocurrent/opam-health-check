@@ -54,25 +54,29 @@ let rec read_lines fd =
 
 let exec_out ~fexec ~fout =
   let fd, stdout = Lwt_unix.pipe () in
-  let proc = fexec ~stdout:(`FD_move stdout) in
+  let proc = fexec ~stdout in
   fout (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun res ->
   Lwt_unix.close fd >>= fun () ->
   proc >|= fun () ->
   res
 
 let ocluster_build_str ~conf ~base_obuilder ~stderr c =
-  exec_out ~fout:read_lines ~fexec:(fun ~stdout:(`FD_move stdout) ->
+  exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
     ocluster_build ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@") >>= fun () ->
     Lwt_unix.close stdout)
   >|= fun lines ->
-  let rec aux ~is_in acc = function
-    | "@@@"::_ when is_in -> List.rev acc
-    | "@@@"::xs -> aux ~is_in:true [] xs
-    | x::xs when is_in -> aux ~is_in (x :: acc) xs
-    | _::xs -> aux ~is_in acc xs
+  let rec aux = function
+    | "@@@"::xs ->
+        let rec aux acc = function
+          | "@@@"::_ -> List.rev acc
+          | x::xs -> aux (x :: acc) xs
+          | [] -> [] (* Something went wrong, ignore. *)
+        in
+        aux [] xs
+    | _::xs -> aux xs
     | [] -> []
   in
-  aux ~is_in:false [] lines
+  aux lines
 
 let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
