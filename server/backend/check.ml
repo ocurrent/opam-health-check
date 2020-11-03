@@ -286,17 +286,17 @@ let run_and_get_pkgs ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit lo
   let pkgs = Pkg_set.to_list pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
   let len_suffix = "/"^string_of_int (List.length pkgs * List.length switches) in
-  List.fold_left begin fun (i, done_pkgnames, jobs) switch ->
-    let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
-    List.fold_left begin fun (i, done_pkgnames, jobs) full_name ->
+  List.fold_left begin fun (i, done_pkgnames, jobs) full_name ->
+    List.fold_left begin fun (i, done_pkgnames, jobs) switch ->
+      let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
       let i = succ i in
       let num = string_of_int i^len_suffix in
       let job = run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
       let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
       let metadata_job = get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg:full_name ~pkgname switch in
       (i, Pkg_set.add pkgname done_pkgnames, job :: metadata_job :: jobs)
-    end (i, done_pkgnames, jobs) pkgs
-  end (0, Pkg_set.empty, []) switches
+    end (i, done_pkgnames, jobs) switches
+  end (0, Pkg_set.empty, []) pkgs
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   let body = match old_logdir with
