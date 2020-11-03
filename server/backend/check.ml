@@ -13,39 +13,32 @@ let network = ["host"]
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_stage spec)
 
-let ocluster_build ~conf ~base_obuilder ~stdout ~stderr c =
+let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   let stdout = Lwt_io.of_fd ~mode:Lwt_io.Output stdout in
-  let home = Sys.getenv "HOME" in
-  let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
+  let stderr = Lwt_io.of_fd ~mode:Lwt_io.Output stderr in
   let obuilder_content =
     let open Obuilder_spec in
     { base_obuilder with
       ops = base_obuilder.ops @ [run ~cache:(cache ~conf) ~network "%s" c] }
   in
-  (* TODO: Do this only once *)
-  let vat = Capnp_rpc_unix.client_only_vat () in
-  match Capnp_rpc_unix.Cap_file.load vat cap_file with
-  | Ok sr ->
-      Capnp_rpc_lwt.Sturdy_ref.connect_exn sr >>= fun service ->
-      Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
-      let action = Cluster_api.Submission.obuilder_build (obuilder_to_string obuilder_content) in
-      Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint:"") @@ fun ticket ->
-      Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
-      let rec tail job start =
-        Cluster_api.Job.log job start >>= function
-        | Error (`Capnp e) -> Lwt_io.write stdout (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
-        | Ok ("", _) -> Lwt.return_unit
-        | Ok (data, next) -> Lwt_io.write stdout data >>= fun () -> tail job next
-      in
-      tail job 0L >>= fun () ->
-      Cluster_api.Job.result job >>= begin function
-      | Ok "" -> Lwt.return_unit
-      | Ok x -> Lwt_io.write stdout ("Result: "^x)
-      | Error (`Capnp e) -> Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e)
-      end >>= fun () ->
-      Lwt_io.flush stdout
-  | Error _ ->
-      Oca_lib.write_line_unix stderr "cap file couldn't be loaded"
+  Capnp_rpc_lwt.Sturdy_ref.connect_exn cap >>= fun service ->
+  Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
+  let action = Cluster_api.Submission.obuilder_build (obuilder_to_string obuilder_content) in
+  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint:"") @@ fun ticket ->
+  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
+  let rec tail job start =
+    Cluster_api.Job.log job start >>= function
+    | Error (`Capnp e) -> Lwt_io.write stderr (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
+    | Ok ("", _) -> Lwt.return_unit
+    | Ok (data, next) -> Lwt_io.write stdout data >>= fun () -> tail job next
+  in
+  tail job 0L >>= fun () ->
+  Cluster_api.Job.result job >>= begin function
+  | Ok _ -> Lwt.return_unit
+  | Error (`Capnp e) -> Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e)
+  end >>= fun () ->
+  Lwt_io.flush stdout >>= fun () ->
+  Lwt_io.flush stderr
 
 let rec read_lines fd =
   Lwt_io.read_line_opt fd >>= function
@@ -60,9 +53,9 @@ let exec_out ~fexec ~fout =
   proc >|= fun () ->
   res
 
-let ocluster_build_str ~conf ~base_obuilder ~stderr c =
+let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr c =
   exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
-    ocluster_build ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@") >>= fun () ->
+    ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@") >>= fun () ->
     Lwt_unix.close stdout)
   >|= fun lines ->
   let rec aux = function
@@ -122,7 +115,7 @@ fi
 exit $res
 |}
 
-let run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
+let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
     Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
     let switch = Intf.Switch.name switch in
@@ -130,7 +123,7 @@ let run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        ocluster_build ~conf ~base_obuilder ~stdout ~stderr:stdout (run_script ~conf pkg)
+        ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg)
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->
@@ -224,10 +217,10 @@ let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
     )
   end
 
-let get_pkgs ~conf ~stderr ~opam_repo_commit ~opam_alpha_commit switch =
+let get_pkgs ~cap ~conf ~stderr ~opam_repo_commit ~opam_alpha_commit switch =
   let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
   Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
-  ocluster_build_str ~conf ~base_obuilder ~stderr (Server_configfile.list_command conf) >>= fun pkgs ->
+  ocluster_build_str ~cap ~conf ~base_obuilder ~stderr (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
@@ -246,9 +239,9 @@ let with_stderr ~start_time workdir f =
 
 module Pkg_set = Set.Make (String)
 
-let get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg ~pkgname =
+let get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg ~pkgname =
   Lwt_pool.use pool begin fun () ->
-    ocluster_build_str ~conf ~base_obuilder ~stderr
+    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
       ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
     >>= fun revdeps ->
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
@@ -257,7 +250,7 @@ let get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg 
     if Pkg_set.mem pkgname done_pkgnames then
       Lwt.return_unit
     else
-      ocluster_build_str ~conf ~base_obuilder ~stderr
+      ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
         ("(opam show -f maintainer: "^Filename.quote pkgname^{| | sed -E 's/^\"(.*)\"\$/\1/')|})
       >>= fun maintainers ->
       Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir)) (fun c ->
@@ -280,7 +273,7 @@ let move_tmpdirs_to_final ~stderr logdir workdir =
   Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switches pkgs =
+let run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switches pkgs =
   let rgen = Random.int_range (-1) 1 in
   let pkgs = Pkg_set.to_list pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
@@ -290,9 +283,9 @@ let run_and_get_pkgs ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit lo
       let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job = run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
+      let job = run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
       let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
-      let metadata_job = get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg:full_name ~pkgname in
+      let metadata_job = get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg:full_name ~pkgname in
       (i, Pkg_set.add pkgname done_pkgnames, job :: metadata_job :: jobs)
     end (i, done_pkgnames, jobs) switches
   end (0, Pkg_set.empty, []) pkgs
@@ -318,6 +311,17 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
     | `OK -> Lwt.return_unit
     | _ -> Oca_lib.write_line_unix stderr ("Something when wrong with slack webhook "^Uri.to_string webhook)
   end
+
+let get_cap ~stderr =
+  let home = Sys.getenv "HOME" in
+  let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
+  let vat = Capnp_rpc_unix.client_only_vat () in
+  match Capnp_rpc_unix.Cap_file.load vat cap_file with
+  | Ok sr ->
+      Lwt.return sr
+  | Error _ ->
+      Oca_lib.write_line_unix stderr "cap file couldn't be loaded" >>= fun () ->
+      Lwt.fail_with "cap file not found"
 
 let run_locked = ref false
 
@@ -345,6 +349,7 @@ let run ~on_finished ~conf cache workdir =
       begin match switches with
       | _::_ ->
           let timer = Oca_lib.timer_start () in
+          get_cap ~stderr >>= fun cap ->
           get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
           get_commit_hash ~user:"kit-ty-kate" ~repo:"opam-alpha-repository" >>= fun opam_alpha_commit ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
@@ -352,10 +357,10 @@ let run ~on_finished ~conf cache workdir =
           let new_logdir = Server_workdirs.new_logdir ~hash:opam_repo_commit ~start_time workdir in
           Server_workdirs.init_base_jobs ~switches new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf / 3 * 2) (fun () -> Lwt.return_unit) in
-          Lwt_list.map_p (get_pkgs ~stderr ~conf ~opam_repo_commit ~opam_alpha_commit) switches >>= fun pkgs ->
+          Lwt_list.map_p (get_pkgs ~cap ~stderr ~conf ~opam_repo_commit ~opam_alpha_commit) switches >>= fun pkgs ->
           let pkgs = Pkg_set.of_list (List.concat pkgs) in
           Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          let (_, _, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switches pkgs in
+          let (_, _, jobs) = run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switches pkgs in
           Lwt.join jobs >>= fun () ->
           Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
           move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
