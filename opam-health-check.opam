@@ -23,9 +23,9 @@ depends: [
   "yaml" {>= "2.0.0"}
   "ocaml-xdg-basedir"
   "obuilder-spec"
+  "ocluster-api"
+  "capnp-rpc-unix"
   "lz4"
   "tls" {>= "0.12.0"} # activate conduit with TLS for slack webhooks
-  # "ocluster" # TODO: needed at runtime
-  # TODO: add a conf-bc package (needed at runtime)
 ]
 synopsis: "A toolchain to check for broken opam packages"

@@ -14,6 +14,7 @@ let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_stage spec)
 
 let ocluster_build ~conf ~base_obuilder ~stdout ~stderr c =
+  let stdout = Lwt_io.of_fd ~mode:Lwt_io.Output stdout in
   let home = Sys.getenv "HOME" in
   let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
   let obuilder_content =
@@ -21,13 +22,30 @@ let ocluster_build ~conf ~base_obuilder ~stdout ~stderr c =
     { base_obuilder with
       ops = base_obuilder.ops @ [run ~cache:(cache ~conf) ~network "%s" c] }
   in
-  Lwt_io.with_temp_file (fun (obuilder, c) ->
-    let obuilder_content = obuilder_to_string obuilder_content in
-    Lwt_io.write c obuilder_content >>= fun () ->
-    Lwt_io.flush c >>= fun () ->
-    Oca_lib.exec ~stdin:`Close ~stdout ~stderr
-      ["ocluster-client"; "submit-obuilder"; cap_file; "--pool=linux-x86_64"; "--local-file"; obuilder]
-  )
+  (* TODO: Do this only once *)
+  let vat = Capnp_rpc_unix.client_only_vat () in
+  match Capnp_rpc_unix.Cap_file.load vat cap_file with
+  | Ok sr ->
+      Capnp_rpc_lwt.Sturdy_ref.connect_exn sr >>= fun service ->
+      Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
+      let action = Cluster_api.Submission.obuilder_build (obuilder_to_string obuilder_content) in
+      Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint:"") @@ fun ticket ->
+      Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
+      let rec tail job start =
+        Cluster_api.Job.log job start >>= function
+        | Error (`Capnp e) -> Lwt_io.write stdout (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
+        | Ok ("", _) -> Lwt.return_unit
+        | Ok (data, next) -> Lwt_io.write stdout data >>= fun () -> tail job next
+      in
+      tail job 0L >>= fun () ->
+      Cluster_api.Job.result job >>= begin function
+      | Ok "" -> Lwt.return_unit
+      | Ok x -> Lwt_io.write stdout ("Result: "^x)
+      | Error (`Capnp e) -> Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e)
+      end >>= fun () ->
+      Lwt_io.flush stdout
+  | Error _ ->
+      Oca_lib.write_line_unix stderr "cap file couldn't be loaded"
 
 let rec read_lines fd =
   Lwt_io.read_line_opt fd >>= function
@@ -43,8 +61,9 @@ let exec_out ~fexec ~fout =
   res
 
 let ocluster_build_str ~conf ~base_obuilder ~stderr c =
-  exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
-    ocluster_build ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@"))
+  exec_out ~fout:read_lines ~fexec:(fun ~stdout:(`FD_move stdout) ->
+    ocluster_build ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@") >>= fun () ->
+    Lwt_unix.close stdout)
   >|= fun lines ->
   let rec aux ~is_in acc = function
     | "@@@"::_ when is_in -> List.rev acc
@@ -107,7 +126,7 @@ let run_job ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
     Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
     Lwt.catch begin fun () ->
       Lwt.finalize begin fun () ->
-        ocluster_build ~conf ~base_obuilder ~stdout:(`FD_copy stdout) ~stderr:stdout (run_script ~conf pkg)
+        ocluster_build ~conf ~base_obuilder ~stdout ~stderr:stdout (run_script ~conf pkg)
       end begin fun () ->
         Lwt_unix.close stdout
       end >>= fun () ->

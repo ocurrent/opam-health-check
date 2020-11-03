@@ -7,5 +7,7 @@
     containers
     oca_server
     obuilder-spec
+    ocluster-api
+    capnp-rpc-unix
     mirage-crypto-pk
     mirage-crypto-rng.lwt))
