@@ -259,16 +259,17 @@ let get_metadata ~stderr ~logdir ~dir =
   Oca_lib.mkdir_p (Server_workdirs.tmpmaintainersdir logdir) >>= fun () ->
   let rec aux done_pkgnames = function
     | pkgfile::pkgs ->
-        let pkg = List.nth (String.split_on_char '/' pkgfile) 2 in
+        let pkg = Filename.basename pkgfile in
         let revdep_file = Server_workdirs.tmprevdepsfile ~pkg logdir in
         let revdep_file = Fpath.to_string revdep_file in
         Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr
-          ["sh";"-c";"cd "^Filename.quote dir^" && echo $(opam admin list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg^" | wc -l) - 1 | bc > "^Filename.quote revdep_file]
+          ["sh";"-c";"echo $(cd "^Filename.quote dir^" && opam admin list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg^" | wc -l) - 1 | bc > "^Filename.quote revdep_file]
         >>= fun () ->
         let pkgname = List.nth (String.split_on_char '.' pkg) 0 in
         if Pkg_set.mem pkgname done_pkgnames then
           aux done_pkgnames pkgs
         else
+          let pkgfile = Filename.concat dir pkgfile in
           let maintainers_file = Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir in
           let maintainers_file = Fpath.to_string maintainers_file in
           Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr
