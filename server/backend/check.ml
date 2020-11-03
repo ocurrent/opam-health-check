@@ -238,7 +238,7 @@ let get_metadata ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg 
       ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
     >>= fun revdeps ->
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
-      Lwt_io.write_int c (List.length revdeps)
+      Lwt_io.write c (string_of_int (List.length revdeps))
     ) >>= fun () ->
     if Pkg_set.mem pkgname done_pkgnames then
       Lwt.return_unit
