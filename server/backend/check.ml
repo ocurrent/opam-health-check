@@ -14,8 +14,6 @@ let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_stage spec)
 
 let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
-  let stdout = Lwt_io.of_fd ~mode:Lwt_io.Output stdout in
-  let stderr = Lwt_io.of_fd ~mode:Lwt_io.Output stderr in
   let obuilder_content =
     let open Obuilder_spec in
     { base_obuilder with
@@ -26,50 +24,61 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   let action = Cluster_api.Submission.obuilder_build (obuilder_to_string obuilder_content) in
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint:"") @@ fun ticket ->
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
-  let rec tail job start =
-    Cluster_api.Job.log job start >>= function
-    | Error (`Capnp e) -> Lwt_io.write stderr (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
-    | Ok ("", _) -> Lwt.return_unit
-    | Ok (data, next) -> Lwt_io.write stdout data >>= fun () -> tail job next
+  Capnp_rpc_lwt.Capability.wait_until_settled job >>= fun () ->
+  let proc =
+    let rec tail job start =
+      Cluster_api.Job.log job start >>= function
+      | Error (`Capnp e) -> Lwt_io.write stderr (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
+      | Ok ("", _) -> Lwt.return_unit
+      | Ok (data, next) -> Lwt_io.write stdout data >>= fun () -> tail job next
+    in
+    tail job 0L >>= fun () ->
+    Cluster_api.Job.result job >>= function
+    | Ok _ ->
+        Lwt.return (Ok ())
+    | Error (`Capnp e) ->
+        Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e) >>= fun () ->
+        Lwt.return (Error ())
   in
-  tail job 0L >>= fun () ->
-  Cluster_api.Job.result job >>= begin function
-  | Ok _ -> Lwt.return_unit
-  | Error (`Capnp e) -> Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e)
-  end >>= fun () ->
-  Lwt_io.flush stdout >>= fun () ->
-  Lwt_io.flush stderr
-
-let rec read_lines fd =
-  Lwt_io.read_line_opt fd >>= function
-  | Some line -> read_lines fd >|= List.cons line
-  | None -> Lwt.return_nil
-
-let exec_out ~fexec ~fout =
-  let fd, stdout = Lwt_unix.pipe () in
-  let proc = fexec ~stdout in
-  fout (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun res ->
-  Lwt_unix.close fd >>= fun () ->
-  proc >|= fun () ->
-  res
+  (* NOTE: any processes shouldn't take more than 2 hours *)
+  let timeout =
+    let hours = 2 in
+    Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
+    Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" >>= fun () ->
+    Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_int hours^" hours).") >>= fun () ->
+    Lwt.return (Error ())
+  in
+  Lwt.pick [timeout; proc]
 
 let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr c =
-  exec_out ~fout:read_lines ~fexec:(fun ~stdout ->
-    ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@") >>= fun () ->
-    Lwt_unix.close stdout)
-  >|= fun lines ->
-  let rec aux = function
-    | "@@@"::xs ->
-        let rec aux acc = function
-          | "@@@"::_ -> List.rev acc
-          | x::xs -> aux (x :: acc) xs
-          | [] -> [] (* Something went wrong, ignore. *)
+  let stdin, stdout = Lwt_io.pipe () in
+  Lwt.finalize begin fun () ->
+    Lwt.finalize begin fun () ->
+      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@")
+    end begin fun () ->
+      Lwt_io.close stdout
+    end >>= function
+    | Ok () ->
+        let rec aux () =
+          Lwt_io.read_line_opt stdin >>= function
+          | Some "@@@" ->
+              let rec aux acc =
+                Lwt_io.read_line_opt stdin >>= function
+                | Some "@@@" -> Lwt.return (List.rev acc)
+                | Some x -> aux (x :: acc)
+                | None -> Lwt.return_nil (* Something went wrong, ignore. *)
+              in
+              aux []
+          | Some _ -> aux ()
+          | None -> Lwt.return_nil
         in
-        aux [] xs
-    | _::xs -> aux xs
-    | [] -> []
-  in
-  aux lines
+        aux ()
+    | Error () ->
+        Lwt_io.write_line stderr ("Failure in ocluster: "^c) >>= fun () ->
+        Lwt.fail_with ("Failure in ocluster: "^c)
+  end begin fun () ->
+    Lwt_io.close stdin
+  end
 
 let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
@@ -79,6 +88,7 @@ let failure_kind logfile =
       | Some "+- The following actions were aborted" -> Lwt.return `Partial
       | Some "[ERROR] Package conflict!" -> lookup `NotAvailable
       | Some "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field." -> lookup `AcceptFailures
+      | Some "+++ Timeout!! (2 hours) +++" -> Lwt.return `Timeout
       | Some _ -> lookup res
       | None -> Lwt.return res
     in
@@ -117,37 +127,30 @@ exit $res
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
-    Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
+    Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
-    Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
-    Lwt.catch begin fun () ->
-      Lwt.finalize begin fun () ->
-        ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg)
-      end begin fun () ->
-        Lwt_unix.close stdout
-      end >>= fun () ->
-      Oca_lib.write_line_unix stderr ("["^num^"] succeeded.") >>= fun () ->
-      Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
-    end begin function
-    | Oca_lib.Process_failure _ -> (* TODO: It might be worth distinguishing between "killed by signal" failures and timeouts, in the future *)
+    Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) begin fun stdout ->
+      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg)
+    end >>= function
+    | Ok () ->
+        Lwt_io.write_line stderr ("["^num^"] succeeded.") >>= fun () ->
+        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
+    | Error () ->
         failure_kind logfile >>= begin function
         | `Partial ->
-            Oca_lib.write_line_unix stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
+            Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir))
         | `Failure ->
-            Oca_lib.write_line_unix stderr ("["^num^"] failed.") >>= fun () ->
+            Lwt_io.write_line stderr ("["^num^"] failed.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch logdir))
         | `NotAvailable ->
-            Oca_lib.write_line_unix stderr ("["^num^"] finished with not available.") >>= fun () ->
+            Lwt_io.write_line stderr ("["^num^"] finished with not available.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch logdir))
-        | `Other | `AcceptFailures ->
-            Oca_lib.write_line_unix stderr ("["^num^"] finished with an internal failure.") >>= fun () ->
+        | `Other | `AcceptFailures | `Timeout ->
+            Lwt_io.write_line stderr ("["^num^"] finished with an internal failure.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch logdir))
         end
-    | e ->
-        Lwt.fail e
-    end
   end
 
 let () =
@@ -219,7 +222,7 @@ let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
 
 let get_pkgs ~cap ~conf ~stderr ~opam_repo_commit ~opam_alpha_commit switch =
   let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
-  Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
+  Lwt_io.write_line stderr "Getting packages list..." >>= fun () ->
   ocluster_build_str ~cap ~conf ~base_obuilder ~stderr (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
@@ -228,34 +231,42 @@ let get_pkgs ~cap ~conf ~stderr ~opam_repo_commit ~opam_alpha_commit switch =
     | _ -> true
   end pkgs in
   let nelts = string_of_int (List.length pkgs) in
-  Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
+  Lwt_io.write_line stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
   pkgs
 
 let with_stderr ~start_time workdir f =
   Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) >>= fun () ->
   let logfile = Server_workdirs.new_ilogfile ~start_time workdir in
-  Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
-  Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
+  Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_APPEND] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) begin fun stderr ->
+    f ~stderr
+  end
 
 module Pkg_set = Set.Make (String)
 
-let get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg ~pkgname =
+let get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgs ~done_pkgnames ~stderr ~logdir ~pkg ~pkgname =
   Lwt_pool.use pool begin fun () ->
-    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
-      ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
-    >>= fun revdeps ->
-    Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
-      Lwt_io.write c (string_of_int (List.length revdeps))
-    ) >>= fun () ->
-    if Pkg_set.mem pkgname done_pkgnames then
-      Lwt.return_unit
-    else
-      ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
-        ("(opam show -f maintainer: "^Filename.quote pkgname^{| | sed -E 's/^\"(.*)\"\$/\1/')|})
-      >>= fun maintainers ->
-      Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir)) (fun c ->
-        Lwt_io.write c (String.concat "\n" maintainers)
-      )
+    begin
+      if Pkg_set.mem pkg done_pkgs then
+        Lwt.return_unit
+      else
+        ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
+          ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
+        >>= fun revdeps ->
+        Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
+          Lwt_io.write c (string_of_int (List.length revdeps))
+        )
+    end >>= fun () ->
+    begin
+      if Pkg_set.mem pkgname done_pkgnames then
+        Lwt.return_unit
+      else
+        ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
+          ("(opam show -f maintainer: "^Filename.quote pkgname^{| | sed -E 's/^\"(.*)\"\$/\1/')|})
+        >>= fun maintainers ->
+        Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir)) (fun c ->
+          Lwt_io.write c (String.concat "\n" maintainers)
+        )
+    end
   end
 
 let get_commit_hash ~user ~repo =
@@ -263,14 +274,13 @@ let get_commit_hash ~user ~repo =
   let r = Github.Response.value r in
   r.Github_t.git_ref_obj.Github_t.obj_sha
 
-let move_tmpdirs_to_final ~stderr logdir workdir =
+let move_tmpdirs_to_final logdir workdir =
   let logdir_path = Server_workdirs.get_logdir_path logdir in
   let tmplogdir = Server_workdirs.tmplogdir logdir in
   let metadatadir = Server_workdirs.metadatadir workdir in
   let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
   Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir_path) >>= fun () ->
-  (* TODO: replace by Oca_lib.rm_rf *)
-  Oca_lib.exec ~stdin:`Close ~stdout:(`FD_copy stderr) ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
+  Oca_lib.rm_rf metadatadir >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
 let run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switches pkgs =
@@ -278,17 +288,17 @@ let run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_comm
   let pkgs = Pkg_set.to_list pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
   let len_suffix = "/"^string_of_int (List.length pkgs * List.length switches) in
-  List.fold_left begin fun (i, done_pkgnames, jobs) full_name ->
-    List.fold_left begin fun (i, done_pkgnames, jobs) switch ->
+  List.fold_left begin fun (i, done_pkgs, done_pkgnames, jobs) full_name ->
+    List.fold_left begin fun (i, done_pkgs, done_pkgnames, jobs) switch ->
       let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
       let i = succ i in
       let num = string_of_int i^len_suffix in
       let job = run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
       let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
-      let metadata_job = get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgnames ~stderr ~logdir ~pkg:full_name ~pkgname in
-      (i, Pkg_set.add pkgname done_pkgnames, job :: metadata_job :: jobs)
-    end (i, done_pkgnames, jobs) switches
-  end (0, Pkg_set.empty, []) pkgs
+      let metadata_job = get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgs ~done_pkgnames ~stderr ~logdir ~pkg:full_name ~pkgname in
+      (i, Pkg_set.add full_name done_pkgs, Pkg_set.add pkgname done_pkgnames, job :: metadata_job :: jobs)
+    end (i, done_pkgs, done_pkgnames, jobs) switches
+  end (0, Pkg_set.empty, Pkg_set.empty, []) pkgs
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   let body = match old_logdir with
@@ -301,7 +311,7 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   in
   Server_configfile.slack_webhooks conf |>
   Lwt_list.iter_p begin fun webhook ->
-    Oca_lib.write_line_unix stderr ("Triggering Slack webhook "^Uri.to_string webhook) >>= fun () ->
+    Lwt_io.write_line stderr ("Triggering Slack webhook "^Uri.to_string webhook) >>= fun () ->
     Cohttp_lwt_unix.Client.post
       ~headers:(Cohttp.Header.of_list ["Content-type", "application/json"])
       ~body:(`String body)
@@ -309,7 +319,7 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
     >>= fun (resp, _body) ->
     match Cohttp.Response.status resp with
     | `OK -> Lwt.return_unit
-    | _ -> Oca_lib.write_line_unix stderr ("Something when wrong with slack webhook "^Uri.to_string webhook)
+    | _ -> Lwt_io.write_line stderr ("Something when wrong with slack webhook "^Uri.to_string webhook)
   end
 
 let get_cap ~stderr =
@@ -320,7 +330,7 @@ let get_cap ~stderr =
   | Ok sr ->
       Lwt.return sr
   | Error _ ->
-      Oca_lib.write_line_unix stderr "cap file couldn't be loaded" >>= fun () ->
+      Lwt_io.write_line stderr "cap file couldn't be loaded" >>= fun () ->
       Lwt.fail_with "cap file not found"
 
 let run_locked = ref false
@@ -335,8 +345,6 @@ let wait_current_run_to_finish =
       Lwt.return_unit
   in
   loop
-
-(* TODO: Reenable the dune cache mode (maybe with the obuilder mode?) *)
 
 let run ~on_finished ~conf cache workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
@@ -360,15 +368,15 @@ let run ~on_finished ~conf cache workdir =
           Lwt_list.map_p (get_pkgs ~cap ~stderr ~conf ~opam_repo_commit ~opam_alpha_commit) switches >>= fun pkgs ->
           let pkgs = Pkg_set.of_list (List.concat pkgs) in
           Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          let (_, _, jobs) = run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switches pkgs in
+          let (_, _, _, jobs) = run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switches pkgs in
           Lwt.join jobs >>= fun () ->
-          Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
-          move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
+          Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
+          move_tmpdirs_to_final new_logdir workdir >>= fun () ->
           on_finished workdir;
           trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
           Oca_lib.timer_log timer stderr "Operation"
       | [] ->
-          Oca_lib.write_line_unix stderr "No switches."
+          Lwt_io.write_line stderr "No switches."
       end
     end
   end (fun () -> run_locked := false; Lwt.return_unit) end;
