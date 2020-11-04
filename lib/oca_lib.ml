@@ -96,6 +96,6 @@ let default_html_port = "8080"
 let default_admin_port = "9999"
 let default_admin_name = "admin"
 let default_auto_run_interval = 48 (* 48 hours *)
-let default_processes = 72
+let default_processes = 200
 let default_list_command = "opam list --available --installable --short --all-versions"
 let localhost = "localhost"
