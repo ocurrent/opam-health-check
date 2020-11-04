@@ -50,35 +50,40 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   in
   Lwt.pick [timeout; proc]
 
-let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr c =
+let exec_out ~fexec ~fout =
   let stdin, stdout = Lwt_io.pipe () in
-  Lwt.finalize begin fun () ->
-    Lwt.finalize begin fun () ->
-      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@")
-    end begin fun () ->
-      Lwt_io.close stdout
-    end >>= function
-    | Ok () ->
-        let rec aux () =
+  let proc =
+    Lwt.finalize
+      (fun () -> fexec ~stdout)
+      (fun () -> Lwt_io.close stdout)
+  in
+  fout ~stdin >>= fun res ->
+  Lwt_io.close stdin >>= fun () ->
+  proc >|= fun r ->
+  (r, res)
+
+let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr c =
+  let rec aux ~stdin =
+    Lwt_io.read_line_opt stdin >>= function
+    | Some "@@@" ->
+        let rec aux acc =
           Lwt_io.read_line_opt stdin >>= function
-          | Some "@@@" ->
-              let rec aux acc =
-                Lwt_io.read_line_opt stdin >>= function
-                | Some "@@@" -> Lwt.return (List.rev acc)
-                | Some x -> aux (x :: acc)
-                | None -> Lwt.return_nil (* Something went wrong, ignore. *)
-              in
-              aux []
-          | Some _ -> aux ()
-          | None -> Lwt.return_nil
+          | Some "@@@" -> Lwt.return (List.rev acc)
+          | Some x -> aux (x :: acc)
+          | None -> Lwt.return_nil (* Something went wrong, ignore. *)
         in
-        aux ()
-    | Error () ->
-        Lwt_io.write_line stderr ("Failure in ocluster: "^c) >>= fun () ->
-        Lwt.fail_with ("Failure in ocluster: "^c)
-  end begin fun () ->
-    Lwt_io.close stdin
-  end
+        aux []
+    | Some _ -> aux ~stdin
+    | None -> Lwt.return_nil
+  in
+  exec_out ~fout:aux ~fexec:begin fun ~stdout ->
+    ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@")
+  end >>= function
+  | (Ok (), r) ->
+      Lwt.return r
+  | (Error (), _) ->
+      Lwt_io.write_line stderr ("Failure in ocluster: "^c) >>= fun () ->
+      Lwt.fail_with ("Failure in ocluster: "^c)
 
 let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
