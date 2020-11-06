@@ -310,7 +310,7 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
     | Some old_logdir ->
         let old_logdir = Server_workdirs.get_logdir_name old_logdir in
         let new_logdir = Server_workdirs.get_logdir_name new_logdir in
-        Printf.sprintf {|{"text":"The latest check is done. Check out http://check.ocamllabs.io/diff/%s..%s to discover which packages are now broken or fixed"}|} old_logdir new_logdir
+        Printf.sprintf {|{"username": "opam-health-check", "text":"The latest check is done. Check out http://check.ocamllabs.io/diff/%s..%s to discover which packages are now broken or fixed"}|} old_logdir new_logdir
     | None ->
         {|{"text":"The first check is done. Check out http://check.ocamllabs.io/ to discover which packages are now broken or fixed"}|}
   in
