@@ -1,102 +1,103 @@
 open Lwt.Infix
 
-let get_prefix conf =
-  let server_name = Server_configfile.name conf in
-  "opam-health-check-"^server_name
+let cache ~conf =
+  let opam_cache = Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache" in
+  if Server_configfile.enable_dune_cache conf then
+    let dune_cache = Obuilder_spec.Cache.v "dune-cache" ~target:"/home/opam/.config/dune" in
+    [opam_cache; dune_cache]
+  else
+    [opam_cache]
 
-let docker_build ~conf ~cached ~stderr ~img_name dockerfile =
-  let cache = if cached then [] else ["--pull";"--no-cache"] in
-  let stdin, fd = Lwt_unix.pipe () in
-  let stdin = `FD_move stdin in
-  Lwt_unix.set_close_on_exec fd;
-  let label = get_prefix conf in
-  begin
-    if not cached then
-      Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"system";"prune";"-af";"--volumes";("--filter=label="^label)]
-    else
-      Lwt.return_unit
-  end >>= fun () ->
-  let proc = Oca_lib.exec ~stdin ~stdout:stderr ~stderr (["docker";"build"]@cache@["--label";label;"-t";img_name;"-"]) in
-  Oca_lib.write_line_unix fd (Format.sprintf "%a" Dockerfile.pp dockerfile) >>= fun () ->
-  Lwt_unix.close fd >>= fun () ->
-  proc
+let network = ["host"]
 
-let docker_run ?timeout ~volumes ~stdout ~stderr img cmd =
-  let volumes = List.fold_left (fun acc (name, dir) -> acc @ ["-v";name^":"^dir]) [] volumes in
-  let get_proc ~stdin cmd =
-    let opts = match stdin with `Close -> volumes | _ -> "-i"::volumes in
-    Oca_lib.exec ?timeout ~stdin ~stdout ~stderr ("docker"::"run"::"--rm"::opts@img::cmd)
+let obuilder_to_string spec =
+  Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_stage spec)
+
+let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
+  let obuilder_content =
+    let open Obuilder_spec in
+    { base_obuilder with
+      ops = base_obuilder.ops @ [run ~cache:(cache ~conf) ~network "%s" c] }
   in
-  match cmd with
-  | `Script script ->
-      let stdin, fd = Lwt_unix.pipe () in
-      let stdin = `FD_move stdin in
-      Lwt_unix.set_close_on_exec fd;
-      let proc = get_proc ~stdin ["bash"] in
-      Lwt_list.iter_s (Oca_lib.write_line_unix fd) (String.split_on_char '\n' script) >>= fun () ->
-      Lwt_unix.close fd >>= fun () ->
-      proc
-  | `Cmd cmd ->
-      get_proc ~stdin:`Close cmd
-
-let get_img_name ~conf switch =
-  let switch = Intf.Switch.switch switch in
-  let switch =
-    let rec normalize_docker_tag_name = function
-      | ('a'..'z' | 'A'..'Z' | '0'..'9' | '-' | '.') as c::cs -> c::normalize_docker_tag_name cs
-      | '_'::'_'::_ -> assert false
-      | _::cs -> '_'::'_'::normalize_docker_tag_name cs
-      | [] -> []
+  Capnp_rpc_lwt.Sturdy_ref.connect_exn cap >>= fun service ->
+  Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
+  let action = Cluster_api.Submission.obuilder_build (obuilder_to_string obuilder_content) in
+  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint:"") @@ fun ticket ->
+  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
+  Capnp_rpc_lwt.Capability.wait_until_settled job >>= fun () ->
+  let proc =
+    let rec tail job start =
+      Cluster_api.Job.log job start >>= function
+      | Error (`Capnp e) -> Lwt_io.write stderr (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
+      | Ok ("", _) -> Lwt.return_unit
+      | Ok (data, next) -> Lwt_io.write stdout data >>= fun () -> tail job next
     in
-    String.of_list (normalize_docker_tag_name (String.to_list switch))
+    tail job 0L >>= fun () ->
+    Cluster_api.Job.result job >>= function
+    | Ok _ ->
+        Lwt.return (Ok ())
+    | Error (`Capnp e) ->
+        Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e) >>= fun () ->
+        Lwt.return (Error ())
   in
-  get_prefix conf^"-"^switch
+  (* NOTE: any processes shouldn't take more than 2 hours *)
+  let timeout =
+    let hours = 2 in
+    Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
+    Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" >>= fun () ->
+    Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_int hours^" hours).") >>= fun () ->
+    Lwt.return (Error ())
+  in
+  Lwt.pick [timeout; proc]
 
-let docker_create_volume ~stderr ~conf switch (name, dir, script) =
-  let img_name = get_img_name ~conf switch in
-  let label = get_prefix conf in
-  let name = label^"-"^name in
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["docker";"volume";"create";name] >>= fun () ->
-  docker_run ~volumes:[(name, dir)] ~stdout:stderr ~stderr img_name (`Script (script ~dir)) >|= fun () ->
-  (name, dir)
+let exec_out ~fexec ~fout =
+  let stdin, stdout = Lwt_io.pipe () in
+  let proc =
+    Lwt.finalize
+      (fun () -> fexec ~stdout)
+      (fun () -> Lwt_io.close stdout)
+  in
+  fout ~stdin >>= fun res ->
+  Lwt_io.close stdin >>= fun () ->
+  proc >|= fun r ->
+  (r, res)
 
-let rec read_lines fd =
-  Lwt_io.read_line_opt fd >>= function
-  | Some line -> read_lines fd >|= List.cons line
-  | None -> Lwt.return_nil
+let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr c =
+  let rec aux ~stdin =
+    Lwt_io.read_line_opt stdin >>= function
+    | Some "@@@" ->
+        let rec aux acc =
+          Lwt_io.read_line_opt stdin >>= function
+          | Some "@@@" -> Lwt.return (List.rev acc)
+          | Some x -> aux (x :: acc)
+          | None -> Lwt.return_nil (* Something went wrong, ignore. *)
+        in
+        aux []
+    | Some _ -> aux ~stdin
+    | None -> Lwt.return_nil
+  in
+  exec_out ~fout:aux ~fexec:begin fun ~stdout ->
+    ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@")
+  end >>= function
+  | (Ok (), r) ->
+      Lwt.return r
+  | (Error (), _) ->
+      Lwt_io.write_line stderr ("Failure in ocluster: "^c) >>= fun () ->
+      Lwt.fail_with ("Failure in ocluster: "^c)
 
-let docker_run_to_str ~stderr ~img_name cmd =
-  let fd, stdout = Lwt_unix.pipe () in
-  let proc = docker_run ~volumes:[] ~stderr ~stdout img_name (`Cmd cmd) in
-  Lwt_unix.close stdout >>= fun () ->
-  read_lines (Lwt_io.of_fd ~mode:Lwt_io.Input fd) >>= fun pkgs ->
-  Lwt_unix.close fd >>= fun () ->
-  proc >|= fun () ->
-  pkgs
-
-let get_pkgs ~conf ~stderr switch =
-  let img_name = get_img_name ~conf switch in
-  Oca_lib.write_line_unix stderr "Getting packages list..." >>= fun () ->
-  docker_run_to_str ~stderr ~img_name [] >>= fun pkgs ->
-  let pkgs = List.filter begin fun pkg ->
-    Oca_lib.is_valid_filename pkg &&
-    match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
-    | "ocaml" | "ocaml-base-compiler" | "ocaml-variants" | "ocaml-beta" | "ocaml-config" -> false
-    | _ -> true
-  end pkgs in
-  let nelts = string_of_int (List.length pkgs) in
-  Oca_lib.write_line_unix stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
-  pkgs
-
-let is_partial_failure logfile =
+let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
-    let rec lookup () =
+    let rec lookup res =
       Lwt_io.read_line_opt ic >>= function
-      | Some "+- The following actions were aborted" -> Lwt.return_true
-      | Some _ -> lookup ()
-      | None -> Lwt.return_false
+      | Some "+- The following actions failed" -> lookup `Failure
+      | Some "+- The following actions were aborted" -> Lwt.return `Partial
+      | Some "[ERROR] Package conflict!" -> lookup `NotAvailable
+      | Some "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field." -> lookup `AcceptFailures
+      | Some "+++ Timeout!! (2 hours) +++" -> Lwt.return `Timeout
+      | Some _ -> lookup res
+      | None -> Lwt.return res
     in
-    lookup ()
+    lookup `Other
   end
 
 let distribution_used = "debian-unstable"
@@ -129,40 +130,32 @@ fi
 exit $res
 |}
 
-let run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir pkg =
-  let img_name = get_img_name ~conf switch in
+let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
-    Oca_lib.write_line_unix stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
+    Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
-    Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_TRUNC] 0o640 >>= fun stdout ->
-    Lwt.catch begin fun () ->
-      Lwt.finalize begin fun () ->
-        docker_run ~volumes ~stdout ~stderr:stdout img_name (`Script (run_script ~conf pkg))
-      end begin fun () ->
-        Lwt_unix.close stdout
-      end >>= fun () ->
-      Oca_lib.write_line_unix stderr ("["^num^"] succeeded.") >>= fun () ->
-      Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
-    end begin function
-    | Oca_lib.Process_failure 31 | Oca_lib.Internal_failure -> (* TODO: It might be worth distinguishing between "killed by signal" failures and timeouts, in the future *)
-        is_partial_failure logfile >>= begin function
-        | true ->
-            Oca_lib.write_line_unix stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
+    Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) begin fun stdout ->
+      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg)
+    end >>= function
+    | Ok () ->
+        Lwt_io.write_line stderr ("["^num^"] succeeded.") >>= fun () ->
+        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
+    | Error () ->
+        failure_kind logfile >>= begin function
+        | `Partial ->
+            Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir))
-        | false ->
-            Oca_lib.write_line_unix stderr ("["^num^"] failed.") >>= fun () ->
+        | `Failure ->
+            Lwt_io.write_line stderr ("["^num^"] failed.") >>= fun () ->
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch logdir))
+        | `NotAvailable ->
+            Lwt_io.write_line stderr ("["^num^"] finished with not available.") >>= fun () ->
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch logdir))
+        | `Other | `AcceptFailures | `Timeout ->
+            Lwt_io.write_line stderr ("["^num^"] finished with an internal failure.") >>= fun () ->
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch logdir))
         end
-    | Oca_lib.Process_failure 20 ->
-        Oca_lib.write_line_unix stderr ("["^num^"] finished with not available.") >>= fun () ->
-        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch logdir))
-    | Oca_lib.Process_failure _ ->
-        Oca_lib.write_line_unix stderr ("["^num^"] finished with an internal failure.") >>= fun () ->
-        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch logdir))
-    | e ->
-        Lwt.fail e
-    end
   end
 
 let () =
@@ -171,151 +164,146 @@ let () =
     prerr_endline ("Async exception raised: "^msg);
   end
 
-let get_dockerfile ~conf switch =
-  let open Dockerfile in
-  from ("ocurrent/opam:"^distribution_used^" AS base") @@
-  run "git -C opam-repository pull origin master" @@
-  run "opam update" @@
-  run "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam" @@
-  run "git -C /tmp/opam checkout opam-health-check3" @@
-  run "sudo apt-get install -yy m4" @@
-  run "opam pin add -yn /tmp/opam" @@
-  run "opam install -y opam-devel opam-0install-cudf" @@
-  run {|mv "$(opam var opam-devel:lib)/opam" opam.exe|} @@
-  from ("ocurrent/opam:"^distribution_used^"-opam") @@
-  copy ~from:"base" ~src:["/home/opam/opam.exe"] ~dst:"/usr/bin/opam" () @@
-  run "sudo apt-get update" @@
-  workdir "opam-repository" @@
-  run "git pull origin master" @@
-  (if Server_configfile.enable_dune_cache conf then
-     run "git pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"
-   else
-     empty
-  ) @@
-  run "rm -rf /home/opam/.opam && opam init -ya --bare --disable-sandboxing ." @@
-  env [
-    "OPAMPRECISETRACKING","1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
-    "OPAMEXTERNALSOLVER","builtin-0install";
-    "OPAMDEPEXTYES","1";
-    "OPAMDROPINSTALLEDPACKAGES","1";
-  ] @@
-  run "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git" @@
-  (if Server_configfile.enable_opam_alpha_repository conf
-   then run "opam repository add --dont-select alpha git://github.com/kit-ty-kate/opam-alpha-repository.git"
-   else empty) @@
-  run "opam switch create --repositories=%sbeta,default %s"
-    (if Server_configfile.enable_opam_alpha_repository conf then "alpha," else "")
-    (Intf.Switch.switch switch) @@
-  (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0
-   then run "opam install -y ocaml-secondary-compiler" (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
-                                                          and https://github.com/ocaml/opam-repository/pull/15642 *)
-   else empty) @@
-  Option.map_or ~default:empty (run "%s") (Server_configfile.extra_command conf) @@
-  (if Server_configfile.enable_dune_cache conf then
-     env [
-       "DUNE_CACHE","enabled";
-       "DUNE_CACHE_TRANSPORT","direct";
-       "DUNE_CACHE_DUPLICATION","copy";
-     ]
-   else
-     empty
-  ) @@
-  run "echo 'archive-mirrors: [\"/home/opam/.cache/opam\"]' >> /home/opam/.opam/config" @@
-  cmd "%s" (Server_configfile.list_command conf)
+let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
+  let open Obuilder_spec in
+  let cache = cache ~conf in
+  stage ~from:("ocurrent/opam:"^distribution_used) begin
+    [ user ~uid:1000 ~gid:1000;
+      workdir "/home/opam";
+      run ~network "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam";
+      run "git -C /tmp/opam checkout opam-health-check3";
+      run ~network "sudo apt-get update";
+      run ~network "sudo apt-get install -yy m4";
+      run ~network "opam pin add -yn /tmp/opam";
+      run ~network "opam install -y opam-devel opam-0install-cudf";
+      run "sudo apt-get purge --autoremove -yy m4";
+      run {|sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam|};
+      run "rm -rf /tmp/opam";
+      run ~network "git -C opam-repository pull origin master && git -C opam-repository checkout %s" (Filename.quote opam_repo_commit);
+    ] @
+    (if Server_configfile.enable_dune_cache conf then
+       [run ~network "git -C opam-repository pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
+     else
+       []
+    ) @ [
+      env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
+      env "OPAMEXTERNALSOLVER" "builtin-0install";
+      env "OPAMDEPEXTYES" "1";
+      env "OPAMDROPINSTALLEDPACKAGES" "1";
+      run "rm -rf /home/opam/.opam && opam init -ya --bare --disable-sandboxing opam-repository";
+      run ~network "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git";
+    ] @
+    (if Server_configfile.enable_opam_alpha_repository conf then
+       [ run ~network "git clone git://github.com/kit-ty-kate/opam-alpha-repository.git && git -C opam-alpha-repository checkout %s" (Filename.quote opam_alpha_commit);
+         run "opam repository add --dont-select alpha opam-alpha-repository";
+       ]
+     else
+       []
+    ) @ [
+      run ~cache ~network "opam switch create --repositories=%sbeta,default %s"
+        (if Server_configfile.enable_opam_alpha_repository conf then "alpha," else "")
+        (Intf.Switch.switch switch);
+    ] @
+    (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
+       [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
+       (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
+                and https://github.com/ocaml/opam-repository/pull/15642 *)
+     else
+       []
+    ) @
+    (match Server_configfile.extra_command conf with
+     | Some c -> [run ~cache ~network "%s" c]
+     | None -> []
+    ) @
+    (if Server_configfile.enable_dune_cache conf then
+       [ env "DUNE_CACHE" "enabled";
+         env "DUNE_CACHE_TRANSPORT" "direct";
+         env "DUNE_CACHE_DUPLICATION" "copy";
+       ]
+     else
+       []
+    )
+  end
+
+let get_pkgs ~cap ~conf ~stderr ~opam_repo_commit ~opam_alpha_commit switch =
+  let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
+  Lwt_io.write_line stderr "Getting packages list..." >>= fun () ->
+  ocluster_build_str ~cap ~conf ~base_obuilder ~stderr (Server_configfile.list_command conf) >>= fun pkgs ->
+  let pkgs = List.filter begin fun pkg ->
+    Oca_lib.is_valid_filename pkg &&
+    match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
+    | "ocaml" | "ocaml-base-compiler" | "ocaml-variants" | "ocaml-beta" | "ocaml-config" -> false
+    | _ -> true
+  end pkgs in
+  let nelts = string_of_int (List.length pkgs) in
+  Lwt_io.write_line stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
+  pkgs
 
 let with_stderr ~start_time workdir f =
   Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) >>= fun () ->
   let logfile = Server_workdirs.new_ilogfile ~start_time workdir in
-  Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_WRONLY; O_CREAT; O_APPEND] 0o640 >>= fun stderr ->
-  Lwt.finalize (fun () -> f ~stderr) (fun () -> Lwt_unix.close stderr)
-
-let build_switch ~stderr ~cached conf switch =
-  let img_name = get_img_name ~conf switch in
-  docker_build ~conf ~stderr ~cached ~img_name (get_dockerfile ~conf switch) >>= fun () ->
-  get_pkgs ~conf ~stderr switch
+  Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_APPEND] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) begin fun stderr ->
+    f ~stderr
+  end
 
 module Pkg_set = Set.Make (String)
 
-let metadata_script ~max_thread pkgs = {|
-sudo apt-get -qq install bc &> /dev/null
-
-root=/metadata
-revdeps_dir=$root/revdeps
-maintainers_dir=$root/maintainers
-
-user=$(stat -c '%u' $root)
-group=$(stat -c '%g' $root)
-
-sudo chown opam:opam $root
-mkdir $revdeps_dir $maintainers_dir
-
-echo "pkg=\"\$1\"" > revdeps.sh
-echo "echo \"Getting revdeps for \$pkg\"" >> revdeps.sh
-echo "echo \$(opam list -s --recursive --depopts --with-test --with-doc --depends-on \"\$pkg\" | wc -l) - 1 | bc > \"$revdeps_dir/\$pkg\"" >> revdeps.sh
-
-echo "pkg=\"\$1\"" > maintainers.sh
-echo "echo \"Getting maintainers for \$pkg\"" >> maintainers.sh
-echo "opam show -f maintainer: \"\$pkg\" | sed -E 's/^\"(.*)\"\$/\1/' > \"$maintainers_dir/\$pkg\"" >> maintainers.sh
-
-|}^Pkg_set.fold (fun pkg acc -> acc^"echo "^pkg^" >> pkgs.txt\n") pkgs ""^{|
-cat pkgs.txt | xargs -P |}^string_of_int max_thread^{| -n 1 bash revdeps.sh
-cat pkgs.txt | sed -E 's/^([^.]*).*$/\1/' | sort -u | xargs -P |}^string_of_int max_thread^{| -n 1 bash maintainers.sh
-sudo chown -R $user:$group $root
-exit 0
-|}
-
-let get_metadata ~conf ~pool ~stderr ~workdir ~is_retry switch logdir pkgs =
-  Oca_lib.write_line_unix stderr ("Getting all the metadata...") >>= fun () ->
-  let metadatadir = Server_workdirs.tmpmetadatadir logdir in
-  if is_retry then
-    let src_metadatadir = Server_workdirs.metadatadir workdir in
-    (* TODO: This is very fragile.. Do better *)
-    Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["cp";"-rT";Fpath.to_string src_metadatadir;Fpath.to_string metadatadir]
-  else
-    let img_name = get_img_name ~conf switch in
-    Lwt_pool.use pool begin fun () ->
-      Lwt_unix.getcwd () >>= fun cwd ->
-      let metadatadir = Fpath.to_string Fpath.(v cwd // metadatadir) in
-      let max_thread = Server_configfile.processes conf in
-      let cmd = metadata_script ~max_thread pkgs in
-      docker_run ~timeout:48 ~stderr ~stdout:stderr ~volumes:[(metadatadir, "/metadata")] img_name (`Script cmd)
+let get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgs ~done_pkgnames ~stderr ~logdir ~pkg ~pkgname =
+  Lwt_pool.use pool begin fun () ->
+    begin
+      if Pkg_set.mem pkg done_pkgs then
+        Lwt.return_unit
+      else
+        ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
+          ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
+        >>= fun revdeps ->
+        Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
+          Lwt_io.write c (string_of_int (List.length revdeps))
+        )
+    end >>= fun () ->
+    begin
+      if Pkg_set.mem pkgname done_pkgnames then
+        Lwt.return_unit
+      else
+        ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
+          ("(opam show -f maintainer: "^Filename.quote pkgname^{| | sed -E 's/^\"(.*)\"\$/\1/')|})
+        >>= fun maintainers ->
+        Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir)) (fun c ->
+          Lwt_io.write c (String.concat "\n" maintainers)
+        )
     end
+  end
 
-let get_git_hash ~stderr switch conf =
-  let img_name = get_img_name ~conf switch in
-  Oca_lib.write_line_unix stderr "Getting current git hash..." >>= fun () ->
-  docker_run_to_str ~stderr ~img_name ["git";"rev-parse";"origin/master"] >>= function
-  | [hash] ->
-      Oca_lib.write_line_unix stderr ("Current git hash: "^hash) >|= fun () ->
-      hash
-  | s ->
-      let s = String.unlines s in
-      Oca_lib.write_line_unix stderr ("Error: cannot parse git hash. Got:\n"^s) >>= fun () ->
-      Lwt.fail_with "Something went wrong. See internal log"
+let get_commit_hash ~user ~repo =
+  Github.Monad.run (Github.Repo.get_ref ~user ~repo ~name:"heads/master" ()) >|= fun r ->
+  let r = Github.Response.value r in
+  r.Github_t.git_ref_obj.Github_t.obj_sha
 
-let move_tmpdirs_to_final ~stderr logdir workdir =
+let move_tmpdirs_to_final logdir workdir =
   let logdir_path = Server_workdirs.get_logdir_path logdir in
   let tmplogdir = Server_workdirs.tmplogdir logdir in
   let metadatadir = Server_workdirs.metadatadir workdir in
   let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
   Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir_path) >>= fun () ->
-  (* TODO: replace by Oca_lib.rm_rf *)
-  Oca_lib.exec ~stdin:`Close ~stdout:stderr ~stderr ["rm";"-rf";Fpath.to_string metadatadir] >>= fun () ->
+  Oca_lib.rm_rf metadatadir >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~conf ~pool ~stderr ~volumes logdir switches pkgs =
+let run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switches pkgs =
   let rgen = Random.int_range (-1) 1 in
   let pkgs = Pkg_set.to_list pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
   let len_suffix = "/"^string_of_int (List.length pkgs * List.length switches) in
-  List.fold_left begin fun (i, jobs) switch ->
-    List.fold_left begin fun (i, jobs) full_name ->
+  List.fold_left begin fun (i, done_pkgs, done_pkgnames, jobs) full_name ->
+    List.fold_left begin fun (i, done_pkgs, done_pkgnames, jobs) switch ->
+      let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job = run_job ~conf ~pool ~stderr ~volumes ~switch ~num logdir full_name in
-      (i, job :: jobs)
-    end (i, jobs) pkgs
-  end (0, []) switches
+      let job = run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
+      let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
+      let metadata_job = get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgs ~done_pkgnames ~stderr ~logdir ~pkg:full_name ~pkgname in
+      (i, Pkg_set.add full_name done_pkgs, Pkg_set.add pkgname done_pkgnames, job :: metadata_job :: jobs)
+    end (i, done_pkgs, done_pkgnames, jobs) switches
+  end (0, Pkg_set.empty, Pkg_set.empty, []) pkgs
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   let body = match old_logdir with
@@ -328,7 +316,7 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   in
   Server_configfile.slack_webhooks conf |>
   Lwt_list.iter_p begin fun webhook ->
-    Oca_lib.write_line_unix stderr ("Triggering Slack webhook "^Uri.to_string webhook) >>= fun () ->
+    Lwt_io.write_line stderr ("Triggering Slack webhook "^Uri.to_string webhook) >>= fun () ->
     Cohttp_lwt_unix.Client.post
       ~headers:(Cohttp.Header.of_list ["Content-type", "application/json"])
       ~body:(`String body)
@@ -336,8 +324,19 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
     >>= fun (resp, _body) ->
     match Cohttp.Response.status resp with
     | `OK -> Lwt.return_unit
-    | _ -> Oca_lib.write_line_unix stderr ("Something when wrong with slack webhook "^Uri.to_string webhook)
+    | _ -> Lwt_io.write_line stderr ("Something when wrong with slack webhook "^Uri.to_string webhook)
   end
+
+let get_cap ~stderr =
+  let home = Sys.getenv "HOME" in
+  let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
+  let vat = Capnp_rpc_unix.client_only_vat () in
+  match Capnp_rpc_unix.Cap_file.load vat cap_file with
+  | Ok sr ->
+      Lwt.return sr
+  | Error _ ->
+      Lwt_io.write_line stderr "cap file couldn't be loaded" >>= fun () ->
+      Lwt.fail_with "cap file not found"
 
 let run_locked = ref false
 
@@ -352,21 +351,7 @@ let wait_current_run_to_finish =
   in
   loop
 
-let cache_setup_script ~dir = {|
-  sudo chown opam:opam '|}^dir^{|'
-
-  mkdir -p '|}^dir^{|/opam'
-  opam admin cache '|}^dir^{|/opam'
-
-  mkdir -p '|}^dir^{|/dune'
-  export DUNE_CACHE=enabled
-  export DUNE_CACHE_TRANSPORT=direct
-  export DUNE_CACHE_DUPLICATION=copy
-  opam install -y dune
-  opam exec -- dune cache trim --size=100GB
-|}
-
-let run ~on_finished ~is_retry ~conf cache workdir =
+let run ~on_finished ~conf cache workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   if !run_locked then
     failwith "operation locked";
@@ -375,31 +360,28 @@ let run ~on_finished ~is_retry ~conf cache workdir =
     let start_time = Unix.time () in
     with_stderr ~start_time workdir begin fun ~stderr ->
       begin match switches with
-      | switch::switches ->
+      | _::_ ->
           let timer = Oca_lib.timer_start () in
-          build_switch ~stderr ~cached:is_retry conf switch >>= fun hd_pkgs ->
-          get_git_hash ~stderr switch conf >>= fun hash ->
+          get_cap ~stderr >>= fun cap ->
+          get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
+          get_commit_hash ~user:"kit-ty-kate" ~repo:"opam-alpha-repository" >>= fun opam_alpha_commit ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
           let old_logdir = List.head_opt old_logdir in
-          let new_logdir = Server_workdirs.new_logdir ~hash ~start_time workdir in
-          Server_workdirs.init_base_jobs ~switches:(switch :: switches) new_logdir >>= fun () ->
+          let new_logdir = Server_workdirs.new_logdir ~hash:opam_repo_commit ~start_time workdir in
+          Server_workdirs.init_base_jobs ~switches new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf / 3 * 2) (fun () -> Lwt.return_unit) in
-          Lwt_list.map_p (build_switch ~stderr ~cached:true conf) switches >>= fun tl_pkgs ->
-          docker_create_volume ~stderr ~conf switch ("cache", "/home/opam/.cache", cache_setup_script) >>= fun cache ->
-          let volumes = [cache] in
-          let pkgs = Pkg_set.of_list (List.concat (hd_pkgs :: tl_pkgs)) in
+          Lwt_list.map_p (get_pkgs ~cap ~stderr ~conf ~opam_repo_commit ~opam_alpha_commit) switches >>= fun pkgs ->
+          let pkgs = Pkg_set.of_list (List.concat pkgs) in
           Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          get_metadata ~conf ~pool ~stderr ~workdir ~is_retry switch new_logdir pkgs >>= fun () ->
-          Oca_lib.timer_log timer stderr "Metadata collection" >>= fun () ->
-          let (_, jobs) = run_and_get_pkgs ~conf ~pool ~stderr ~volumes new_logdir (switch :: switches) pkgs in
+          let (_, _, _, jobs) = run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switches pkgs in
           Lwt.join jobs >>= fun () ->
-          Oca_lib.write_line_unix stderr "Finishing up..." >>= fun () ->
-          move_tmpdirs_to_final ~stderr new_logdir workdir >>= fun () ->
+          Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
+          move_tmpdirs_to_final new_logdir workdir >>= fun () ->
           on_finished workdir;
           trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
           Oca_lib.timer_log timer stderr "Operation"
       | [] ->
-          Oca_lib.write_line_unix stderr "No switches."
+          Lwt_io.write_line stderr "No switches."
       end
     end
   end (fun () -> run_locked := false; Lwt.return_unit) end;

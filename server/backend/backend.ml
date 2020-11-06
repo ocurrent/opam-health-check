@@ -145,7 +145,8 @@ let start conf workdir =
   let task () =
     Lwt.join [
       tcp_server port callback;
-      run_action_loop ~conf ~run_trigger (fun ~is_retry -> Check.run ~on_finished ~is_retry ~conf cache workdir);
+      run_action_loop ~conf ~run_trigger (fun ~is_retry:_ -> Check.run ~on_finished ~conf cache workdir);
+      (* TODO: Remove retries *)
     ]
   in
   (workdir, task)

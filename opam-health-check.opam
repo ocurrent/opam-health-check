@@ -22,7 +22,10 @@ depends: [
   "re" {>= "1.7.2"}
   "yaml" {>= "2.0.0"}
   "ocaml-xdg-basedir"
-  "dockerfile"
+  "obuilder-spec"
+  "ocluster-api"
+  "github-unix"
+  "capnp-rpc-unix"
   "lz4"
   "tls" {>= "0.12.0"} # activate conduit with TLS for slack webhooks
 ]

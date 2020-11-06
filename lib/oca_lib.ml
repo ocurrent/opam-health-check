@@ -1,5 +1,7 @@
 open Lwt.Infix
 
+let (//) = Fpath.(/)
+
 let rec list_map_cube f = function
   | x::(_::_ as xs) -> List.map (f x) xs @ list_map_cube f xs
   | [_] | [] -> []
@@ -52,59 +54,40 @@ let mkdir_p dir =
   | ""::dirs -> aux Fpath.(v dir_sep) dirs
   | dirs -> aux (Fpath.v Filename.current_dir_name) dirs
 
-let write_line_unix fd s =
-  let fd = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
-  Lwt_io.write_line fd s >>= fun () ->
-  Lwt_io.flush fd
-
-let proc_fd_of_unix = function
-  | `Close -> `Close
-  | `Dev_null -> `Dev_null
-  | `FD_move fd -> `FD_move (Lwt_unix.unix_file_descr fd)
-  | `FD_copy fd -> `FD_copy (Lwt_unix.unix_file_descr fd)
-  | `Keep -> `Keep
-
-exception Process_failure of int
-exception Internal_failure
-
-let exec ?(timeout=2) ~stdin ~stdout ~stderr cmd =
-  let stdin = proc_fd_of_unix stdin in
-  let stdout = proc_fd_of_unix (`FD_copy stdout) in
-  let stderr_lwt = stderr in
-  let stderr = proc_fd_of_unix (`FD_copy stderr) in
-  let proc =
-    Lwt_process.exec ~stdin ~stdout ~stderr ("", Array.of_list cmd) >>= function
-    | Unix.WEXITED 0 ->
-        Lwt.return_unit
-    | Unix.WEXITED e ->
-        let cmd = String.concat " " cmd in
-        write_line_unix stderr_lwt ("Command '"^cmd^"' failed.") >>= fun () ->
-        Lwt.fail (Process_failure e)
-    | Unix.WSIGNALED n | Unix.WSTOPPED n ->
-        let cmd = String.concat " " cmd in
-        write_line_unix stderr_lwt ("Command '"^cmd^"' killed by a signal (n°"^string_of_int n^")") >>= fun () ->
-        Lwt.fail Internal_failure
-  in
-  (* NOTE: any processes shouldn't take more than 2 hours *)
-  let timeout =
-    let hours = timeout in
-    Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
-    let cmd = String.concat " " cmd in
-    write_line_unix stderr_lwt ("Command '"^cmd^"' timed-out ("^string_of_int hours^" hours).") >>= fun () ->
-    Lwt.fail Internal_failure
-  in
-  Lwt.pick [timeout; proc]
+let rec rm_rf dirname =
+  Lwt_unix.opendir (Fpath.to_string dirname) >>= fun dir ->
+  Lwt.finalize begin fun () ->
+    let rec rm_files () =
+      Lwt_unix.readdir dir >>= function
+      | "." | ".." -> rm_files ()
+      | file ->
+          let file = dirname // file in
+          Lwt_unix.stat (Fpath.to_string file) >>= fun stat ->
+          begin match stat.Unix.st_kind with
+          | Unix.S_DIR -> rm_rf file
+          | _ -> Lwt_unix.unlink (Fpath.to_string file)
+          end >>= fun () ->
+          rm_files ()
+    in
+    Lwt.catch rm_files begin function
+    | End_of_file -> Lwt.return_unit
+    | e -> Lwt.fail e
+    end
+  end begin fun () ->
+    Lwt_unix.closedir dir >>= fun () ->
+    Lwt_unix.rmdir (Fpath.to_string dirname)
+  end
 
 type timer = float ref
 
 let timer_start () =
   ref (Unix.time ())
 
-let timer_log timer fd msg =
+let timer_log timer c msg =
   let start_time = !timer in
   let end_time = Unix.time () in
   let time_span = end_time -. start_time in
-  write_line_unix fd ("Done. "^msg^" took: "^string_of_float time_span^" seconds") >|= fun () ->
+  Lwt_io.write_line c ("Done. "^msg^" took: "^string_of_float time_span^" seconds") >|= fun () ->
   timer := Unix.time ()
 
 let protocol_version = "2"
@@ -113,6 +96,6 @@ let default_html_port = "8080"
 let default_admin_port = "9999"
 let default_admin_name = "admin"
 let default_auto_run_interval = 48 (* 48 hours *)
-let default_processes = 72
+let default_processes = 200
 let default_list_command = "opam list --available --installable --short --all-versions"
 let localhost = "localhost"

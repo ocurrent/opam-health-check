@@ -72,6 +72,10 @@ let revdepsdir workdir = metadatadir workdir/"revdeps"
 let revdepsfile ~pkg workdir = revdepsdir workdir/pkg
 
 let tmpmetadatadir (Logdir (_, _, workdir) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"metadata"
+let tmpmaintainersdir logdir = tmpmetadatadir logdir/"maintainers"
+let tmpmaintainersfile ~pkg logdir = tmpmaintainersdir logdir/pkg
+let tmprevdepsdir logdir = tmpmetadatadir logdir/"revdeps"
+let tmprevdepsfile ~pkg logdir = tmprevdepsdir logdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
 let file_from_logdir ~file logdir =
@@ -97,4 +101,6 @@ let init_base_job ~switch logdir =
 let init_base_jobs ~switches logdir =
   Oca_lib.mkdir_p (tmplogdir logdir) >>= fun () ->
   Oca_lib.mkdir_p (tmpmetadatadir logdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmprevdepsdir logdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpmaintainersdir logdir) >>= fun () ->
   Lwt_list.iter_s (fun switch -> init_base_job ~switch logdir) switches

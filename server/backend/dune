@@ -6,6 +6,9 @@
     cohttp-lwt-unix
     containers
     oca_server
-    dockerfile
+    obuilder-spec
+    ocluster-api
+    capnp-rpc-unix
+    github-unix
     mirage-crypto-pk
     mirage-crypto-rng.lwt))
