@@ -4,6 +4,7 @@ type t = {
   yamlfile : Fpath.t;
   mutable name : string option;
   mutable port : int option;
+  mutable public_url : string option;
   mutable admin_port : int option;
   mutable auto_run_interval : int option;
   mutable processes : int option;
@@ -21,6 +22,7 @@ let create_conf yamlfile = {
   yamlfile;
   name = None;
   port = None;
+  public_url = None;
   admin_port = None;
   auto_run_interval = None;
   processes = None;
@@ -58,6 +60,8 @@ let set_config conf = function
       set_field ~field (fun () -> conf.name <- Some name) conf.name
   | "port" as field, `Float port ->
       set_field ~field (fun () -> conf.port <- Some (int_of_float port)) conf.port
+  | "public-url" as field, `String public_url ->
+      set_field ~field (fun () -> conf.public_url <- Some public_url) conf.public_url
   | "admin-port" as field, `Float admin_port ->
       set_field ~field (fun () -> conf.admin_port <- Some (int_of_float admin_port)) conf.admin_port
   | "auto-run-interval" as field, `Float auto_run_interval ->
@@ -89,6 +93,7 @@ let yaml_of_conf conf =
   `O [
     "name", `String (Option.get_exn conf.name);
     "port", `Float (float_of_int (Option.get_exn conf.port));
+    "public-url", `String (Option.get_exn conf.public_url);
     "admin-port", `Float (float_of_int (Option.get_exn conf.admin_port));
     "auto-run-interval", `Float (float_of_int (Option.get_exn conf.auto_run_interval));
     "processes", `Float (float_of_int (Option.get_exn conf.processes));
@@ -107,6 +112,8 @@ let set_defaults conf =
     conf.name <- Some Oca_lib.default_server_name;
   if Option.is_none conf.port then
     conf.port <- Some (int_of_string Oca_lib.default_html_port);
+  if Option.is_none conf.public_url then
+    conf.public_url <- Some Oca_lib.default_public_url;
   if Option.is_none conf.admin_port then
     conf.admin_port <- Some (int_of_string Oca_lib.default_admin_port);
   if Option.is_none conf.auto_run_interval then
@@ -180,6 +187,7 @@ let from_workdir workdir =
 
 let name {name; _} = Option.get_exn name
 let port {port; _} = Option.get_exn port
+let public_url {public_url; _} = Option.get_exn public_url
 let admin_port {admin_port; _} = Option.get_exn admin_port
 let auto_run_interval {auto_run_interval; _} = Option.get_exn auto_run_interval
 let processes {processes; _} = Option.get_exn processes

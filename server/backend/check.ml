@@ -306,13 +306,14 @@ let run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_comm
   end (0, Pkg_set.empty, Pkg_set.empty, []) pkgs
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
+  let public_url = Server_configfile.public_url conf in
   let body = match old_logdir with
     | Some old_logdir ->
         let old_logdir = Server_workdirs.get_logdir_name old_logdir in
         let new_logdir = Server_workdirs.get_logdir_name new_logdir in
-        Printf.sprintf {|{"username": "opam-health-check", "text":"The latest check is done. Check out http://check.ocamllabs.io/diff/%s..%s to discover which packages are now broken or fixed"}|} old_logdir new_logdir
+        Printf.sprintf {|{"username": "opam-health-check", "text":"The latest check is done. Check out %s/diff/%s..%s to discover which packages are now broken or fixed"}|} public_url old_logdir new_logdir
     | None ->
-        {|{"text":"The first check is done. Check out http://check.ocamllabs.io/ to discover which packages are now broken or fixed"}|}
+        Printf.sprintf {|{"text":"The first check is done. Check out %s to discover which packages are now broken or fixed"}|} public_url
   in
   Server_configfile.slack_webhooks conf |>
   Lwt_list.iter_p begin fun webhook ->

@@ -93,6 +93,7 @@ let timer_log timer c msg =
 let protocol_version = "2"
 let default_server_name = "default" (* TODO: Just make it random instead?! *)
 let default_html_port = "8080"
+let default_public_url = "http://check.ocamllabs.io"
 let default_admin_port = "9999"
 let default_admin_name = "admin"
 let default_auto_run_interval = 48 (* 48 hours *)

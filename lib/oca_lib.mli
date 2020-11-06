@@ -15,6 +15,7 @@ val timer_log : timer -> Lwt_io.output_channel -> string -> unit Lwt.t
 val protocol_version : string
 val default_server_name : string
 val default_html_port : string
+val default_public_url : string
 val default_admin_port : string
 val default_admin_name : string
 val default_auto_run_interval : int
