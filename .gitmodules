@@ -1,0 +1,3 @@
+[submodule "ocluster"]
+	path = ocluster
+	url = git://github.com/ocurrent/ocluster.git
