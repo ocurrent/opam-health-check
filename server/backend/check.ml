@@ -236,7 +236,7 @@ let get_pkgs ~cap ~conf ~stderr (switch, base_obuilder) =
     | _ -> true
   end pkgs in
   let nelts = string_of_int (List.length pkgs) in
-  Lwt_io.write_line stderr ("Package list retrieved. "^nelts^" elements to process.") >|= fun () ->
+  Lwt_io.write_line stderr ("Package list for "^switch^" retrieved. "^nelts^" elements to process.") >|= fun () ->
   pkgs
 
 let with_stderr ~start_time workdir f =
