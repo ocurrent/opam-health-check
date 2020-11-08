@@ -248,31 +248,36 @@ let with_stderr ~start_time workdir f =
 
 module Pkg_set = Set.Make (String)
 
-let get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgs ~done_pkgnames ~stderr ~logdir ~pkg ~pkgname =
-  Lwt_pool.use pool begin fun () ->
-    begin
-      if Pkg_set.mem pkg done_pkgs then
-        Lwt.return_unit
-      else
-        ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
-          ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
-        >>= fun revdeps ->
-        Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
-          Lwt_io.write c (string_of_int (List.length revdeps))
-        )
-    end >>= fun () ->
-    begin
-      if Pkg_set.mem pkgname done_pkgnames then
-        Lwt.return_unit
-      else
-        ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
-          ("(opam show -f maintainer: "^Filename.quote pkgname^{| | sed -E 's/^\"(.*)\"\$/\1/')|})
-        >>= fun maintainers ->
-        Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir)) (fun c ->
-          Lwt_io.write c (String.concat "\n" maintainers)
-        )
-    end
-  end
+let get_metadata ~jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switch pkgs =
+  let get_revdeps ~base_obuilder ~pkg ~logdir =
+    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
+      ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
+    >>= fun revdeps ->
+    Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
+      Lwt_io.write c (string_of_int (List.length revdeps))
+    )
+  in
+  let get_maintainers ~base_obuilder ~pkgname ~logdir =
+    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
+      ("(opam show -f maintainer: "^Filename.quote pkgname^{| | sed -E 's/^\"(.*)\"\$/\1/')|})
+    >>= fun maintainers ->
+    Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir)) (fun c ->
+      Lwt_io.write c (String.concat "\n" maintainers)
+    )
+  in
+  let pkgs = Pkg_set.to_list pkgs in
+  List.fold_left begin fun (pkgs_set, jobs) pkg ->
+    let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
+    let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
+    let job =
+      Lwt_pool.use pool begin fun () ->
+        Lwt_io.write_line stderr ("Getting metadata for "^pkg) >>= fun () ->
+        get_revdeps ~base_obuilder ~pkg ~logdir >>= fun () ->
+        if Pkg_set.mem pkgname pkgs_set then Lwt.return_unit else get_maintainers ~base_obuilder ~pkgname ~logdir
+      end
+    in
+    (Pkg_set.add pkgname pkgs_set, job :: jobs)
+  end (Pkg_set.empty, jobs) pkgs
 
 let get_commit_hash ~user ~repo =
   Github.Monad.run (Github.Repo.get_ref ~user ~repo ~name:"heads/master" ()) >|= fun r ->
@@ -288,22 +293,20 @@ let move_tmpdirs_to_final logdir workdir =
   Oca_lib.rm_rf metadatadir >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switches pkgs =
+let run_jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switches pkgs =
   let rgen = Random.int_range (-1) 1 in
   let pkgs = Pkg_set.to_list pkgs in
   let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
   let len_suffix = "/"^string_of_int (List.length pkgs * List.length switches) in
-  List.fold_left begin fun (i, done_pkgs, done_pkgnames, jobs) full_name ->
-    List.fold_left begin fun (i, done_pkgs, done_pkgnames, jobs) switch ->
+  List.fold_left begin fun (i, jobs) full_name ->
+    List.fold_left begin fun (i, jobs) switch ->
       let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
       let i = succ i in
       let num = string_of_int i^len_suffix in
       let job = run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
-      let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
-      let metadata_job = get_metadata ~cap ~pool ~conf ~base_obuilder ~done_pkgs ~done_pkgnames ~stderr ~logdir ~pkg:full_name ~pkgname in
-      (i, Pkg_set.add full_name done_pkgs, Pkg_set.add pkgname done_pkgnames, job :: metadata_job :: jobs)
-    end (i, done_pkgs, done_pkgnames, jobs) switches
-  end (0, Pkg_set.empty, Pkg_set.empty, []) pkgs
+      (i, job :: jobs)
+    end (i, jobs) switches
+  end (0, []) pkgs
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   let public_url = Server_configfile.public_url conf in
@@ -361,7 +364,7 @@ let run ~on_finished ~conf cache workdir =
     let start_time = Unix.time () in
     with_stderr ~start_time workdir begin fun ~stderr ->
       begin match switches with
-      | _::_ ->
+      | switch::_ ->
           let timer = Oca_lib.timer_start () in
           get_cap ~stderr >>= fun cap ->
           get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
@@ -374,7 +377,8 @@ let run ~on_finished ~conf cache workdir =
           Lwt_list.map_p (get_pkgs ~cap ~stderr ~conf ~opam_repo_commit ~opam_alpha_commit) switches >>= fun pkgs ->
           let pkgs = Pkg_set.of_list (List.concat pkgs) in
           Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          let (_, _, _, jobs) = run_and_get_pkgs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switches pkgs in
+          let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switches pkgs in
+          let (_, jobs) = get_metadata ~jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switch pkgs in
           Lwt.join jobs >>= fun () ->
           Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
           move_tmpdirs_to_final new_logdir workdir >>= fun () ->
