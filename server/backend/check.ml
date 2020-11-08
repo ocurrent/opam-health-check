@@ -265,19 +265,18 @@ let get_metadata ~jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_co
       Lwt_io.write c (String.concat "\n" maintainers)
     )
   in
-  let pkgs = Pkg_set.to_list pkgs in
-  List.fold_left begin fun (pkgs_set, jobs) pkg ->
+  Pkg_set.fold begin fun full_name (pkgs_set, jobs) ->
     let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
-    let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
+    let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
     let job =
       Lwt_pool.use pool begin fun () ->
-        Lwt_io.write_line stderr ("Getting metadata for "^pkg) >>= fun () ->
-        get_revdeps ~base_obuilder ~pkg ~logdir >>= fun () ->
+        Lwt_io.write_line stderr ("Getting metadata for "^full_name) >>= fun () ->
+        get_revdeps ~base_obuilder ~pkg:full_name ~logdir >>= fun () ->
         if Pkg_set.mem pkgname pkgs_set then Lwt.return_unit else get_maintainers ~base_obuilder ~pkgname ~logdir
       end
     in
     (Pkg_set.add pkgname pkgs_set, job :: jobs)
-  end (Pkg_set.empty, jobs) pkgs
+  end pkgs (Pkg_set.empty, jobs)
 
 let get_commit_hash ~user ~repo =
   Github.Monad.run (Github.Repo.get_ref ~user ~repo ~name:"heads/master" ()) >|= fun r ->
@@ -294,11 +293,8 @@ let move_tmpdirs_to_final logdir workdir =
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
 let run_jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switches pkgs =
-  let rgen = Random.int_range (-1) 1 in
-  let pkgs = Pkg_set.to_list pkgs in
-  let pkgs = List.sort (fun _ _ -> Random.run rgen) pkgs in
-  let len_suffix = "/"^string_of_int (List.length pkgs * List.length switches) in
-  List.fold_left begin fun (i, jobs) full_name ->
+  let len_suffix = "/"^string_of_int (Pkg_set.cardinal pkgs * List.length switches) in
+  Pkg_set.fold begin fun full_name (i, jobs) ->
     List.fold_left begin fun (i, jobs) switch ->
       let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
       let i = succ i in
@@ -306,7 +302,7 @@ let run_jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdi
       let job = run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
       (i, job :: jobs)
     end (i, jobs) switches
-  end (0, []) pkgs
+  end pkgs (0, [])
 
 let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   let public_url = Server_configfile.public_url conf in
