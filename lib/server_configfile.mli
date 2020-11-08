@@ -10,7 +10,7 @@ val auto_run_interval : t -> int
 val processes : t -> int
 val enable_dune_cache : t -> bool
 val enable_in_memory_logs : t -> bool
-val enable_opam_alpha_repository : t -> bool
+val extra_repositories : t -> Intf.Repository.t list
 val with_test : t -> bool
 val list_command : t -> string
 val extra_command : t -> string option

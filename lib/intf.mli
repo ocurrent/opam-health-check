@@ -29,6 +29,17 @@ module Switch : sig
   val compare : t -> t -> int
 end
 
+module Repository : sig
+  type t
+
+  val create : name:string -> github:string -> t
+
+  val name : t -> string
+  val github : t -> string
+  val github_user : t -> string
+  val github_repo : t -> string
+end
+
 module Log : sig
   type t
 

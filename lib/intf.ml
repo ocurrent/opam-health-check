@@ -48,6 +48,27 @@ module Switch = struct
   let compare (Switch (x, _)) (Switch (y, _)) = Compiler.compare x y
 end
 
+module Repository = struct
+  type t = {
+    name : string;
+    github_user : string;
+    github_repo : string;
+  }
+
+  let create ~name ~github =
+    let github_user, github_repo =
+      match String.split_on_char '/' github with
+      | [user; repo] -> (user, repo)
+      | _ -> failwith "Ill-formed Github repository (expected: user/repo)"
+    in
+    {name; github_user; github_repo}
+
+  let name {name; _} = name
+  let github {github_user; github_repo; _} = github_user^"/"^github_repo
+  let github_user {github_user; _} = github_user
+  let github_repo {github_repo; _} = github_repo
+end
+
 module Log = struct
   type t =
     | Compressed of bytes Lwt.t

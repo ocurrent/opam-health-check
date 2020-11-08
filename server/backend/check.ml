@@ -164,7 +164,7 @@ let () =
     prerr_endline ("Async exception raised: "^msg);
   end
 
-let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
+let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
   let open Obuilder_spec in
   let cache = cache ~conf in
   stage ~from:("ocurrent/opam:"^distribution_used) begin
@@ -191,17 +191,18 @@ let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
       env "OPAMDEPEXTYES" "1";
       env "OPAMDROPINSTALLEDPACKAGES" "1";
       run "rm -rf /home/opam/.opam && opam init -ya --bare --disable-sandboxing opam-repository";
-      run ~network "opam repository add --dont-select beta git://github.com/ocaml/ocaml-beta-repository.git";
     ] @
-    (if Server_configfile.enable_opam_alpha_repository conf then
-       [ run ~network "git clone git://github.com/kit-ty-kate/opam-alpha-repository.git && git -C opam-alpha-repository checkout %s" (Filename.quote opam_alpha_commit);
-         run "opam repository add --dont-select alpha opam-alpha-repository";
-       ]
-     else
-       []
+    List.flatten (
+      List.map (fun (repo, hash) ->
+        let name = Filename.quote (Intf.Repository.name repo) in
+        let github = Intf.Repository.github repo in
+        [ run ~network "git clone 'git://github.com/%s.git' %s && git -C %s checkout %s" github name name hash;
+          run "opam repository add --dont-select %s %s" name name;
+        ]
+      ) extra_repos
     ) @ [
-      run ~cache ~network "opam switch create --repositories=%sbeta,default %s"
-        (if Server_configfile.enable_opam_alpha_repository conf then "alpha," else "")
+      run ~cache ~network "opam switch create --repositories=%sdefault %s"
+        (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
         (Intf.Switch.switch switch);
     ] @
     (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
@@ -282,6 +283,14 @@ let get_commit_hash ~user ~repo =
   let r = Github.Response.value r in
   r.Github_t.git_ref_obj.Github_t.obj_sha
 
+let get_commit_hash_extra_repos conf =
+  Lwt_list.map_s begin fun repository ->
+    let user = Intf.Repository.github_user repository in
+    let repo = Intf.Repository.github_repo repository in
+    get_commit_hash ~user ~repo >|= fun hash ->
+    (repository, hash)
+  end (Server_configfile.extra_repositories conf)
+
 let move_tmpdirs_to_final logdir workdir =
   let logdir_path = Server_workdirs.get_logdir_path logdir in
   let tmplogdir = Server_workdirs.tmplogdir logdir in
@@ -360,9 +369,9 @@ let run ~on_finished ~conf cache workdir =
       let timer = Oca_lib.timer_start () in
       get_cap ~stderr >>= fun cap ->
       get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
-      get_commit_hash ~user:"kit-ty-kate" ~repo:"opam-alpha-repository" >>= fun opam_alpha_commit ->
+      get_commit_hash_extra_repos conf >>= fun extra_repos ->
       let switches' = switches in
-      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch)) switches in
+      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo_commit ~extra_repos switch)) switches in
       begin match switches with
       | switch::_ ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
