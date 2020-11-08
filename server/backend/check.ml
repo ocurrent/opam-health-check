@@ -225,9 +225,9 @@ let get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch =
     )
   end
 
-let get_pkgs ~cap ~conf ~stderr ~opam_repo_commit ~opam_alpha_commit switch =
-  let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
-  Lwt_io.write_line stderr "Getting packages list..." >>= fun () ->
+let get_pkgs ~cap ~conf ~stderr (switch, base_obuilder) =
+  let switch = Intf.Compiler.to_string (Intf.Switch.name switch) in
+  Lwt_io.write_line stderr ("Getting packages list for "^switch^"...") >>= fun () ->
   ocluster_build_str ~cap ~conf ~base_obuilder ~stderr (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
@@ -248,7 +248,7 @@ let with_stderr ~start_time workdir f =
 
 module Pkg_set = Set.Make (String)
 
-let get_metadata ~jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switch pkgs =
+let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkg ~logdir =
     ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
       ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
@@ -266,7 +266,6 @@ let get_metadata ~jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_co
     )
   in
   Pkg_set.fold begin fun full_name (pkgs_set, jobs) ->
-    let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
     let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
     let job =
       Lwt_pool.use pool begin fun () ->
@@ -292,11 +291,10 @@ let move_tmpdirs_to_final logdir workdir =
   Oca_lib.rm_rf metadatadir >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
-let run_jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit logdir switches pkgs =
+let run_jobs ~cap ~conf ~pool ~stderr logdir switches pkgs =
   let len_suffix = "/"^string_of_int (Pkg_set.cardinal pkgs * List.length switches) in
   Pkg_set.fold begin fun full_name (i, jobs) ->
-    List.fold_left begin fun (i, jobs) switch ->
-      let base_obuilder = get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch in
+    List.fold_left begin fun (i, jobs) (switch, base_obuilder) ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
       let job = run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
@@ -359,22 +357,24 @@ let run ~on_finished ~conf cache workdir =
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     let start_time = Unix.time () in
     with_stderr ~start_time workdir begin fun ~stderr ->
+      let timer = Oca_lib.timer_start () in
+      get_cap ~stderr >>= fun cap ->
+      get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
+      get_commit_hash ~user:"kit-ty-kate" ~repo:"opam-alpha-repository" >>= fun opam_alpha_commit ->
+      let switches' = switches in
+      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo_commit ~opam_alpha_commit switch)) switches in
       begin match switches with
       | switch::_ ->
-          let timer = Oca_lib.timer_start () in
-          get_cap ~stderr >>= fun cap ->
-          get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
-          get_commit_hash ~user:"kit-ty-kate" ~repo:"opam-alpha-repository" >>= fun opam_alpha_commit ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
           let old_logdir = List.head_opt old_logdir in
           let new_logdir = Server_workdirs.new_logdir ~hash:opam_repo_commit ~start_time workdir in
-          Server_workdirs.init_base_jobs ~switches new_logdir >>= fun () ->
+          Server_workdirs.init_base_jobs ~switches:switches' new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf / 3 * 2) (fun () -> Lwt.return_unit) in
-          Lwt_list.map_p (get_pkgs ~cap ~stderr ~conf ~opam_repo_commit ~opam_alpha_commit) switches >>= fun pkgs ->
+          Lwt_list.map_p (get_pkgs ~cap ~stderr ~conf) switches >>= fun pkgs ->
           let pkgs = Pkg_set.of_list (List.concat pkgs) in
           Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switches pkgs in
-          let (_, jobs) = get_metadata ~jobs ~cap ~conf ~pool ~stderr ~opam_repo_commit ~opam_alpha_commit new_logdir switch pkgs in
+          let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
+          let (_, jobs) = get_metadata ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
           Lwt.join jobs >>= fun () ->
           Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
           move_tmpdirs_to_final new_logdir workdir >>= fun () ->
