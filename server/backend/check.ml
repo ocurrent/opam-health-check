@@ -255,7 +255,7 @@ let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
       ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
     >>= fun revdeps ->
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
-      Lwt_io.write c (string_of_int (List.length revdeps))
+      Lwt_io.write c (string_of_int (List.length revdeps - 1))
     )
   in
   let get_maintainers ~base_obuilder ~pkgname ~logdir =
