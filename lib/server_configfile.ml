@@ -94,6 +94,15 @@ let set_config conf = function
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
+let yaml_of_extra_repositories l =
+  `A (List.map (fun s -> `O [Intf.Repository.name s, `String (Intf.Repository.github s)]) l)
+
+let yaml_of_ocaml_switches l =
+  `A (List.map (fun s -> `O [Intf.(Compiler.to_string (Switch.name s)), `String (Intf.Switch.switch s)]) l)
+
+let yaml_of_slack_webhooks l =
+  `A (List.map (fun s -> `String (Uri.to_string s)) l)
+
 let yaml_of_conf conf =
   `O [
     "name", `String (Option.get_exn conf.name);
@@ -104,12 +113,12 @@ let yaml_of_conf conf =
     "processes", `Float (float_of_int (Option.get_exn conf.processes));
     "enable-dune-cache", `Bool (Option.get_exn conf.enable_dune_cache);
     "enable-in-memory-logs", `Bool (Option.get_exn conf.enable_in_memory_logs);
-    "extra-repositories", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `O [Intf.Repository.name s, `String (Intf.Repository.github s)]) l)) conf.extra_repositories;
+    "extra-repositories", Option.map_or ~default:`Null yaml_of_extra_repositories conf.extra_repositories;
     "with-test", `Bool (Option.get_exn conf.with_test);
     "list-command", `String (Option.get_exn conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
-    "ocaml-switches", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `O [Intf.(Compiler.to_string (Switch.name s)), `String (Intf.Switch.switch s)]) l)) conf.ocaml_switches;
-    "slack-webhooks", Option.map_or ~default:`Null (fun l -> `A (List.map (fun s -> `String (Uri.to_string s)) l)) conf.slack_webhooks;
+    "ocaml-switches", Option.map_or ~default:`Null yaml_of_ocaml_switches conf.ocaml_switches;
+    "slack-webhooks", Option.map_or ~default:`Null yaml_of_slack_webhooks conf.slack_webhooks;
   ]
 
 let set_defaults conf =
