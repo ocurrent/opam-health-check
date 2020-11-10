@@ -165,6 +165,14 @@ let () =
   end
 
 let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
+  let extra_repos =
+    let switch = Intf.Switch.name switch in
+    List.filter (fun (repo, _) ->
+      match Intf.Repository.for_switches repo with
+      | None -> true
+      | Some for_switches -> List.exists (Intf.Compiler.equal switch) for_switches
+    ) extra_repos
+  in
   let open Obuilder_spec in
   let cache = cache ~conf in
   stage ~from:("ocurrent/opam:"^distribution_used) begin

@@ -40,13 +40,23 @@ let set_field ~field set = function
   | Some _ -> failwith (Printf.sprintf "Config parser: '%s' is defined twice" field)
   | None -> set ()
 
+let get_comp_str = function
+  | `String s -> Intf.Compiler.from_string s
+  | _ -> failwith "string expected"
+
 let get_comp = function
   | `O [name, `String switch] -> Intf.Switch.create ~name ~switch
   | _ -> failwith "key and value expected"
 
 let get_repo = function
-  | `O [name, `String github] -> Intf.Repository.create ~name ~github
-  | _ -> failwith "key and value expected"
+  | `O [name, `O ["github", `String github]]
+  | `O [name, `String github] ->
+      Intf.Repository.create ~name ~github ~for_switches:None
+  | `O [name, `O [("github", `String github); ("for-switches", `A for_switches)]] ->
+      let for_switches = List.map get_comp_str for_switches in
+      Intf.Repository.create ~name ~github ~for_switches:(Some for_switches)
+  | _ ->
+      failwith "key and value expected"
 
 let get_uri = function
   | `String s -> Uri.of_string s
@@ -95,7 +105,17 @@ let set_config conf = function
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
 let yaml_of_extra_repositories l =
-  `A (List.map (fun s -> `O [Intf.Repository.name s, `String (Intf.Repository.github s)]) l)
+  let aux repo =
+    match Intf.Repository.for_switches repo with
+    | None ->
+        `String (Intf.Repository.github repo)
+    | Some for_switches ->
+        `O [
+          ("github", `String (Intf.Repository.github repo));
+          ("for-switches", `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) for_switches));
+        ]
+  in
+  `A (List.map (fun repo -> `O [Intf.Repository.name repo, aux repo]) l)
 
 let yaml_of_ocaml_switches l =
   `A (List.map (fun s -> `O [Intf.(Compiler.to_string (Switch.name s)), `String (Intf.Switch.switch s)]) l)
@@ -139,7 +159,7 @@ let set_defaults conf =
   if Option.is_none conf.enable_in_memory_logs then
     conf.enable_in_memory_logs <- Some false; (* NOTE: Requires too much memory for regular users *)
   if Option.is_none conf.extra_repositories then
-    conf.extra_repositories <- Some [Intf.Repository.create ~name:"beta" ~github:"ocaml/ocaml-beta-repository"];
+    conf.extra_repositories <- Some [Intf.Repository.create ~name:"beta" ~github:"ocaml/ocaml-beta-repository" ~for_switches:None];
   if Option.is_none conf.with_test then
     conf.with_test <- Some false; (* TODO: Enable by default in the future (takes 1.5x the time) *)
   if Option.is_none conf.list_command then

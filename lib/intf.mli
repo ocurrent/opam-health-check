@@ -32,12 +32,13 @@ end
 module Repository : sig
   type t
 
-  val create : name:string -> github:string -> t
+  val create : name:string -> github:string -> for_switches:Compiler.t list option -> t
 
   val name : t -> string
   val github : t -> string
   val github_user : t -> string
   val github_repo : t -> string
+  val for_switches : t -> Compiler.t list option
 end
 
 module Log : sig

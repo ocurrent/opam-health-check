@@ -36,6 +36,7 @@ module Compiler = struct
   let compare (Comp x) (Comp y) = OpamVersionCompare.compare x y
 end
 
+(* TODO: Exchange the name with the Compiler module *)
 module Switch = struct
   type t = Switch of Compiler.t * string
 
@@ -53,20 +54,22 @@ module Repository = struct
     name : string;
     github_user : string;
     github_repo : string;
+    for_switches : Compiler.t list option;
   }
 
-  let create ~name ~github =
+  let create ~name ~github ~for_switches =
     let github_user, github_repo =
       match String.split_on_char '/' github with
       | [user; repo] -> (user, repo)
       | _ -> failwith "Ill-formed Github repository (expected: user/repo)"
     in
-    {name; github_user; github_repo}
+    {name; github_user; github_repo; for_switches}
 
   let name {name; _} = name
   let github {github_user; github_repo; _} = github_user^"/"^github_repo
   let github_user {github_user; _} = github_user
   let github_repo {github_repo; _} = github_repo
+  let for_switches {for_switches; _} = for_switches
 end
 
 module Log = struct
