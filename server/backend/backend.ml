@@ -121,12 +121,13 @@ let run_action_loop ~conf ~run_trigger f =
         let run_interval = Server_configfile.auto_run_interval conf * 60 * 60 in
         if run_interval > 0 then
           Lwt_unix.sleep (float_of_int run_interval) >>= fun () ->
-          Check.wait_current_run_to_finish () >|= fun () -> false
+          Check.wait_current_run_to_finish ()
         else
           fst (Lwt.wait ())
       in
       let manual_run = Lwt_mvar.take run_trigger in
-      Lwt.pick [regular_run; manual_run] >>= fun is_retry -> f ~is_retry
+      Lwt.pick [regular_run; manual_run] >>= fun () ->
+      f ()
     end begin fun e ->
       let msg = Printexc.to_string e in
       Lwt_io.write_line Lwt_io.stderr ("Exception raised in action loop: "^msg)
@@ -145,8 +146,7 @@ let start conf workdir =
   let task () =
     Lwt.join [
       tcp_server port callback;
-      run_action_loop ~conf ~run_trigger (fun ~is_retry:_ -> Check.run ~on_finished ~conf cache workdir);
-      (* TODO: Remove retries *)
+      run_action_loop ~conf ~run_trigger (fun () -> Check.run ~on_finished ~conf cache workdir);
     ]
   in
   (workdir, task)

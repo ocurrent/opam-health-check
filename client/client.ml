@@ -158,19 +158,6 @@ let run_cmd ~confdir ~conffile =
   let info = Cmdliner.Term.info "run" in
   (term, info)
 
-let retry ~confdir ~conffile profilename () =
-  send_msg ~profilename ~confdir ~conffile ["retry"]
-
-let retry_cmd ~confdir ~conffile =
-  let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (retry ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Term.const ()
-  in
-  let info = Cmdliner.Term.info "retry" in
-  (term, info)
-
 let add_user ~confdir ~conffile profilename username =
   send_msg ~profilename ~confdir ~conffile ["add-user";username]
 
@@ -246,7 +233,6 @@ let cmds =
     set_slack_webhooks_cmd ~confdir ~conffile;
     set_list_command_cmd ~confdir ~conffile;
     run_cmd ~confdir ~conffile;
-    retry_cmd ~confdir ~conffile;
     clear_cache_cmd ~confdir ~conffile;
     log_cmd ~confdir ~conffile;
     set_auto_run_interval_cmd ~confdir ~conffile;

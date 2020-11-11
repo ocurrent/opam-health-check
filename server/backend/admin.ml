@@ -99,10 +99,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
       Server_configfile.set_list_command conf cmd >|= fun () ->
       (fun () -> Lwt.return_none)
   | ["run"] ->
-      Lwt_mvar.put run_trigger false >|= fun () ->
-      (fun () -> Lwt.return_none)
-  | ["retry"] ->
-      Lwt_mvar.put run_trigger true >|= fun () ->
+      Lwt_mvar.put run_trigger () >|= fun () ->
       (fun () -> Lwt.return_none)
   | ["add-user";username] ->
       create_userkey workdir username >|= fun () ->
