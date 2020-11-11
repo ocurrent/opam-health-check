@@ -377,6 +377,20 @@ let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; d
 
 type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list)
 
+let common_header =
+  let open Tyxml.Html in
+  h3 [
+    a ~a:[a_href "/"] [
+      img
+        ~a:[a_style "border-radius: 8px; width: 50px; vertical-align: middle;"]
+        ~src:"http://ocamllabs.io/assets/img/origami-camel.png"
+        ~alt:"OCamllabs icon" ()
+        (* TODO: Integrate the image in each instances *)
+    ];
+    txt " ";
+    span ~a:[a_style "vertical-align: middle;"] [a ~a:[a_href "/"] [txt "Home"]];
+  ]
+
 let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_failure, good) =
   let open Tyxml.Html in
   let title = title (txt "opam-health-check diff") in
@@ -397,6 +411,7 @@ let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_fail
   let not_available_txt = span ~a:[a_style ("color: "^CUD_pallette.grey^";")] [txt "not available"] in
   let internal_failure_txt = span ~a:[a_style "border: 2px solid black;"] [txt "internal failure"] in
   let doc = html head (body [
+    common_header; hr ();
     h2 [txt "Differences between "; old_hash_elm; txt " and "; new_hash_elm; txt " ("; git_diff; txt ")"];
     br ();
     h3 [txt "Packages now ";bad_txt;txt ":"];
@@ -454,7 +469,7 @@ let get_diff_list diffs =
         ul (List.map map_diff xs);
       ]
   in
-  let doc = html head (body (h2 [txt "Available diffs:"] :: diffs)) in
+  let doc = html head (body (common_header :: hr () :: h2 [txt "Available diffs:"] :: diffs)) in
   Format.sprintf "%a\n" (pp ()) doc
 
 let map_logdir logdir =
@@ -470,5 +485,5 @@ let get_run_list logdirs =
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
   let runs = List.map map_logdir logdirs in
-  let doc = html head (body [h2 [txt "Available runs:"]; ul runs]) in
+  let doc = html head (body [common_header; hr (); h2 [txt "Available runs:"]; ul runs]) in
   Format.sprintf "%a\n" (pp ()) doc
