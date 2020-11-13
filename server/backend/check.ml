@@ -62,7 +62,7 @@ let exec_out ~fexec ~fout =
   proc >|= fun r ->
   (r, res)
 
-let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr c =
+let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default c =
   let rec aux ~stdin =
     Lwt_io.read_line_opt stdin >>= function
     | Some "@@@" ->
@@ -83,7 +83,9 @@ let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr c =
       Lwt.return r
   | (Error (), _) ->
       Lwt_io.write_line stderr ("Failure in ocluster: "^c) >>= fun () ->
-      Lwt.fail_with ("Failure in ocluster: "^c)
+      match default with
+      | None -> Lwt.fail_with ("Failure in ocluster: "^c)
+      | Some v -> v
 
 let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
@@ -237,7 +239,7 @@ let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
 let get_pkgs ~cap ~conf ~stderr (switch, base_obuilder) =
   let switch = Intf.Compiler.to_string (Intf.Switch.name switch) in
   Lwt_io.write_line stderr ("Getting packages list for "^switch^"...") >>= fun () ->
-  ocluster_build_str ~cap ~conf ~base_obuilder ~stderr (Server_configfile.list_command conf) >>= fun pkgs ->
+  ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
@@ -259,7 +261,7 @@ module Pkg_set = Set.Make (String)
 
 let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkg ~logdir =
-    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
+    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
       ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
     >>= fun revdeps ->
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
@@ -267,7 +269,7 @@ let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
     )
   in
   let get_maintainers ~base_obuilder ~pkgname ~logdir =
-    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr
+    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
       ("(opam show -f maintainer: "^Filename.quote pkgname^{| | sed -E 's/^\"(.*)\"\$/\1/')|})
     >>= fun maintainers ->
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir)) (fun c ->
