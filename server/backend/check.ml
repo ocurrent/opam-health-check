@@ -84,7 +84,7 @@ let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default c =
   | (Error (), _) ->
       Lwt_io.write_line stderr ("Failure in ocluster: "^c) >>= fun () ->
       match default with
-      | None -> Lwt.fail_with ("Failure in ocluster: "^c)
+      | None -> Lwt.fail_with ("Failure in ocluster: "^c) (* TODO: Replace this with "send message to debug slack webhook" *)
       | Some v -> v
 
 let failure_kind logfile =
@@ -214,6 +214,7 @@ let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
       run ~cache ~network "opam switch create --repositories=%sdefault %s"
         (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
         (Intf.Switch.switch switch);
+      run ~network "sudo apt-get update";
     ] @
     (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
        [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
