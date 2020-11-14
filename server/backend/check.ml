@@ -85,7 +85,7 @@ let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default c =
       Lwt_io.write_line stderr ("Failure in ocluster: "^c) >>= fun () ->
       match default with
       | None -> Lwt.fail_with ("Failure in ocluster: "^c) (* TODO: Replace this with "send message to debug slack webhook" *)
-      | Some v -> v
+      | Some v -> Lwt.return v
 
 let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
