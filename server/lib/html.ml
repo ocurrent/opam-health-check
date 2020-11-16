@@ -37,6 +37,13 @@ let log_url logdir pkg instance =
   let pkg = Pkg.full_name pkg in
   Printf.sprintf "/log/%s/%s/%s/%s" logdir comp state pkg
 
+let date_to_string date =
+  let open Unix in
+  let date = localtime date in
+  Printf.sprintf "%d-%02d-%02d %02d:%02d:%02d"
+    (date.tm_year + 1900) (date.tm_mon + 1) date.tm_mday
+    date.tm_hour date.tm_min date.tm_sec
+
 let instance_to_html ~pkg logdir instances comp =
   let open Tyxml.Html in
   let td c = td ~a:[a_class ["result-col"; "results-cell"; c]] in
@@ -150,12 +157,15 @@ let gen_table_form ~logdir l =
   in
   let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last checks"]] in
   let opam_previous_runs_uri = a ~a:[a_href "/run"] [b [txt "🔗 Previous runs"]] in
+  let date = Server_workdirs.get_logdir_time logdir in
+  let date = date_to_string date in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
     td [result_legend;
         p ~a:[a_style "text-align: right;"] [opam_repo_uri];
         p ~a:[a_style "text-align: right;"] [opam_diff_uri];
         p ~a:[a_style "text-align: right;"] [opam_previous_runs_uri];
+        p ~a:[a_style "text-align: right;"] [i [small [txt ("Run made on the "^date)]]];
        ]
   ]]]]
 
@@ -430,13 +440,6 @@ let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_fail
     ul (List.map (generate_diff_html ~old_logdir ~new_logdir) good);
   ]) in
   Format.sprintf "%a\n" (pp ()) doc
-
-let date_to_string date =
-  let open Unix in
-  let date = localtime date in
-  Printf.sprintf "%d-%02d-%02d %02d:%02d:%02d"
-    (date.tm_year + 1900) (date.tm_mon + 1) date.tm_mday
-    date.tm_hour date.tm_min date.tm_sec
 
 let get_diff_url ~old_logdir ~new_logdir content =
   let open Tyxml.Html in
