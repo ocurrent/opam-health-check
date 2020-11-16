@@ -62,7 +62,7 @@ let (>>&&) x f =
   x >>= fun x ->
   if x then f () else Lwt.return_false
 
-let must_show_package query ~last pkg =
+let must_show_package ~pool query ~last pkg =
   let maintainers = Pkg.maintainers pkg in
   let instances' = Pkg.instances pkg in
   let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.compilers) instances' in
@@ -101,17 +101,20 @@ let must_show_package query ~last pkg =
     else
       true
   end >>&& begin fun () ->
-    Lwt.return @@
     match snd query.maintainers with
-    | Some re -> List.exists (Re.execp re) maintainers
-    | None -> true
+    | Some re ->
+        Lwt_pool.use pool begin fun _ ->
+          Lwt.return (List.exists (Re.execp re) maintainers)
+        end
+    | None -> Lwt.return_true
   end >>&& begin fun () ->
     match snd query.logsearch with
     | Some (re, comp) ->
-        Lwt_main.yield () >>= fun () ->
-        Lwt_list.exists_s begin fun inst ->
+        Lwt_list.exists_p begin fun inst ->
           if Intf.Compiler.equal comp (Intf.Instance.compiler inst) then
-            Intf.Instance.content inst >|= Re.execp re
+            Lwt_pool.use pool begin fun _ ->
+              Intf.Instance.content inst >|= Re.execp re
+            end
           else
             Lwt.return_false
         end instances
@@ -119,10 +122,19 @@ let must_show_package query ~last pkg =
         Lwt.return_true
   end
 
-let filter_pkg query (acc, last) pkg =
-  must_show_package query ~last pkg >|= function
-  | true -> (pkg :: acc, Some pkg)
-  | false -> (acc, Some pkg)
+let filter_pkg ~pool query (pkg, last) =
+  must_show_package ~pool query ~last pkg >|= fun filter ->
+  (pkg, filter)
+
+let filter_pkgs query pkgs =
+  let pool =
+    match snd query.logsearch with
+    | Some _ -> Lwt_pool.create 75 (fun () -> Lwt.return_true)
+    | None -> Lwt_pool.create 1 (fun () -> Lwt.return_true)
+  in
+  let (pkgs, _) = List.fold_left (fun (acc, last) pkg -> ((pkg, last) :: acc, Some pkg)) ([], None) (List.rev pkgs) in
+  Lwt_list.map_p (filter_pkg ~pool query) pkgs >|= fun pkgs ->
+  List.filter_map (fun (pkg, filter) -> if filter then Some pkg else None) pkgs
 
 let pkg_to_html logdir query pkg =
   let open Tyxml.Html in
@@ -194,7 +206,7 @@ let revdeps_cmp p1 p2 =
 let get_html ~logdir query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
-  Lwt_list.fold_left_s (filter_pkg query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
+  filter_pkgs query pkgs >|= fun pkgs ->
   let pkgs = if query.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
   let pkgs = List.map (pkg_to_html logdir query) pkgs in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
