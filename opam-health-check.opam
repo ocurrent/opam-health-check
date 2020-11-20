@@ -23,7 +23,6 @@ depends: [
   "yaml" {>= "2.0.0"}
   "ocaml-xdg-basedir"
   "obuilder-spec"
-  "ocluster-api"
   "github-unix"
   "capnp-rpc-unix"
   "lz4"
