@@ -9,7 +9,7 @@ bug-reports: "https://github.com/kit-ty-kate/opam-health-check/issues"
 tags: ["opam" "check"]
 build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
-  "ocaml"
+  "ocaml" {>= "4.10.0"}
   "dune" {>= "1.0"}
   "tyxml" {>= "4.3.0"}
   "cohttp-lwt-unix"
@@ -28,5 +28,6 @@ depends: [
   "lz4"
   "tls" {>= "0.12.0"} # activate conduit with TLS for slack webhooks
   "conf-libev" # Required for lwt to avoid hitting the limits of select(2)
+  "ppx_deriving_yojson" # TODO: Remove. Required for the vendored ocluster-api
 ]
 synopsis: "A toolchain to check for broken opam packages"
