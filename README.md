@@ -17,12 +17,18 @@ $ opam-health-serve /tmp/opam-health-check
 
 Now simply use the `opam-health-check` command. First we need to initialize it like so:
 ```
-$ opam-health-check --from-local-workdir /tmp/opam-health-check
+$ opam-health-check init --from-local-workdir /tmp/opam-health-check
 ```
 or used any custom path given to the server.
 
 Now you can send any command to the server using the `opam-health-check` command.
 All subcommands are listed with `opam-health-check --help`
+
+### OCluster capability file
+
+opam-health-check now uses OCluster for its daily use. This means you need access to an
+OCluster instance and you also need to place its dedicated capability file to `~/ocluster.cap`
+on the server (will change in the future)
 
 ### How to use opam-health-check remotely:
 
