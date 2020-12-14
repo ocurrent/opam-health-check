@@ -71,10 +71,16 @@ module Make (Backend : Backend_intf.S) = struct
     | "" -> []
     | path -> filter_path (Fpath.segs (Fpath.v path))
 
-  let callback workdir backend _conn req _body =
+  let get_logdir name =
+    Cache.get_logdirs Backend.cache >|= fun logdirs ->
+    List.find (fun logdir ->
+      String.equal (Server_workdirs.get_logdir_name logdir) name
+    ) logdirs
+
+  let callback backend _conn req _body =
     let uri = Cohttp.Request.uri req in
     let get_log ~logdir ~comp ~state ~pkg =
-      let logdir = Server_workdirs.logdir_from_string workdir logdir in
+      get_logdir logdir >>= fun logdir ->
       let comp = Intf.Compiler.from_string comp in
       let state = Intf.State.from_string state in
       Backend.get_log backend ~logdir ~comp ~state ~pkg >>= fun log ->
@@ -90,7 +96,7 @@ module Make (Backend : Backend_intf.S) = struct
         Cache.get_html_run_list Backend.cache >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["run";logdir] ->
-        let logdir = Server_workdirs.logdir_from_string workdir logdir in
+        get_logdir logdir >>= fun logdir ->
         parse_raw_query logdir uri >>= fun query ->
         Cache.get_html Backend.cache query logdir >>= fun html ->
         serv_text ~content_type:"text/html" html
@@ -102,8 +108,8 @@ module Make (Backend : Backend_intf.S) = struct
           | [old_logdir; ""; new_logdir] -> (old_logdir, new_logdir)
           | _ -> assert false
         in
-        let old_logdir = Server_workdirs.logdir_from_string workdir old_logdir in
-        let new_logdir = Server_workdirs.logdir_from_string workdir new_logdir in
+        get_logdir old_logdir >>= fun old_logdir ->
+        get_logdir new_logdir >>= fun new_logdir ->
         Cache.get_html_diff ~old_logdir ~new_logdir Backend.cache >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["log"; logdir; comp; state; pkg] ->
@@ -125,7 +131,7 @@ module Make (Backend : Backend_intf.S) = struct
     let port = Server_configfile.port conf in
     Backend.start conf workdir >>= fun (backend, backend_task) ->
     Lwt.join [
-      tcp_server ~debug port (callback workdir backend);
+      tcp_server ~debug port (callback backend);
       backend_task ();
     ]
 end

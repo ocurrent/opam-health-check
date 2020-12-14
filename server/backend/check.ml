@@ -304,12 +304,11 @@ let get_commit_hash_extra_repos conf =
     (repository, hash)
   end (Server_configfile.extra_repositories conf)
 
-let move_tmpdirs_to_final logdir workdir =
-  let logdir_path = Server_workdirs.get_logdir_path logdir in
-  let tmplogdir = Server_workdirs.tmplogdir logdir in
+let move_tmpdirs_to_final ~switches logdir workdir =
   let metadatadir = Server_workdirs.metadatadir workdir in
   let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
-  Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir_path) >>= fun () ->
+  let switches = List.map Intf.Switch.name switches in
+  Server_workdirs.logdir_compress ~switches logdir >>= fun () ->
   Oca_lib.rm_rf metadatadir >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
 
@@ -400,7 +399,7 @@ let run ~on_finished ~conf cache workdir =
           let (_, jobs) = get_metadata ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
           Lwt.join jobs >>= fun () ->
           Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
-          move_tmpdirs_to_final new_logdir workdir >>= fun () ->
+          move_tmpdirs_to_final ~switches:switches' new_logdir workdir >>= fun () ->
           on_finished workdir;
           trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
           Oca_lib.timer_log timer stderr "Operation"

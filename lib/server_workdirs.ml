@@ -14,44 +14,93 @@ let create ~workdir = Fpath.v workdir
 let keysdir workdir = workdir/"keys"
 let keyfile ~username workdir = keysdir workdir/username+"key"
 
-type logdir = Logdir of float * string * t
+type logdir_files = string list
 
-let logdir_from_string workdir s =
-  match String.split_on_char '-' s with
-  | [time; hash] -> Logdir (float_of_string time, hash, workdir)
-  | _ -> assert false
+type logdir_ty = Uncompressed | Compressed
+type logdir = Logdir of (logdir_ty * float * string * t * logdir_files Lwt.t)
+(* TODO: differenciate logdir and tmplogdir *)
 
 let base_logdir workdir = workdir/"logs"
 let base_tmpdir workdir = workdir/"tmp"
-let new_logdir ~hash ~start_time workdir = Logdir (start_time, hash, workdir)
+let new_logdir ~hash ~start_time workdir = Logdir (Compressed, start_time, hash, workdir, Lwt.return [])
 let logdirs workdir =
-  Oca_lib.get_files (base_logdir workdir) >|= fun dirs ->
+  let base_logdir = base_logdir workdir in
+  Oca_lib.get_files base_logdir >|= fun dirs ->
   let dirs = List.sort (fun x y -> -String.compare x y) dirs in
-  List.map (logdir_from_string workdir) dirs
+  List.map (fun dir ->
+    match String.split_on_char '-' dir with
+    | [time; hash] ->
+        begin match String.split_on_char '.' hash with
+        | [hash] -> Logdir (Uncompressed, float_of_string time, hash, workdir, Oca_lib.scan_dir (base_logdir/dir))
+        | [hash; "tpxz"] -> Logdir (Compressed, float_of_string time, hash, workdir, Oca_lib.scan_tpxz_archive (base_logdir/dir+"tpxz"))
+        | _ -> assert false
+        end
+    | _ -> assert false
+  ) dirs
 
-let logdir_equal (Logdir (time1, hash1, workdir1)) (Logdir (time2, hash2, workdir2)) =
+let logdir_ty_equal ty1 ty2 = match ty1, ty2 with
+  | Uncompressed, Uncompressed
+  | Compressed, Compressed -> true
+  | Uncompressed, _
+  | Compressed, _ -> false
+
+let logdir_equal (Logdir (ty1, time1, hash1, workdir1, _files1)) (Logdir (ty2, time2, hash2, workdir2, _files2)) =
+  logdir_ty_equal ty1 ty2 &&
   Float.equal time1 time2 &&
   String.equal hash1 hash2 &&
   Fpath.equal workdir1 workdir2
 
-let get_logdir_name (Logdir (time, hash, _)) = Printf.sprintf "%.0f-%s" time hash
-let get_logdir_path (Logdir (_, _, workdir) as logdir) = base_logdir workdir/get_logdir_name logdir
-let get_logdir_hash (Logdir (_, hash, _)) = hash
-let get_logdir_time (Logdir (time, _, _)) = time
+let get_logdir_name (Logdir (_, time, hash, _, _)) = Printf.sprintf "%.0f-%s" time hash
+let get_logdir_hash (Logdir (_, _, hash, _, _)) = hash
+let get_logdir_time (Logdir (_, time, _, _, _)) = time
 
-let tmplogdir (Logdir (_, _, workdir) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"logs"
+let get_files ~name ~switch (Logdir (_, _, _, _, files)) =
+  let switch = Intf.Compiler.to_string switch in
+  files >|= fun files ->
+  List.filter_map (fun file ->
+    match String.split_on_char '/' file with
+    | [switch'; name'; pkg] when String.equal switch switch' && String.equal name name' -> Some pkg
+    | _ -> None
+  ) files
+
+let goodfiles = get_files ~name:"good"
+let partialfiles = get_files ~name:"partial"
+let badfiles = get_files ~name:"bad"
+let notavailablefiles = get_files ~name:"not-available"
+let internalfailurefiles = get_files ~name:"internal-failure"
+
+let logdir_get_compilers (Logdir (_, _, _, _, files)) =
+  files >|= fun files ->
+  List.filter_map (fun file ->
+    match String.split_on_char '/' file with
+    | [switch; ""] -> Some (Intf.Compiler.from_string switch)
+    | _ -> None
+  ) files
+
+let logdir_get_content ~comp ~state ~pkg = function
+  | Logdir (Uncompressed, _, _, workdir, _) as logdir ->
+      let comp = Intf.Compiler.to_string comp in
+      let state = Intf.State.to_string state in
+      let file = base_logdir workdir/get_logdir_name logdir/comp/state/pkg in
+      Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
+  | Logdir (Compressed, _, _, workdir, _) as logdir ->
+      let archive = base_logdir workdir/get_logdir_name logdir+"tpxz" in
+      let comp = Intf.Compiler.to_string comp in
+      let state = Intf.State.to_string state in
+      let file = comp^"/"^state^"/"^pkg in
+      Oca_lib.random_access_tpxz_archive ~file archive
+
+let tmplogdir (Logdir (_, _, _, workdir, _) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"logs"
+let tmpswitchlogdir ~switch logdir = tmplogdir logdir/Intf.Compiler.to_string switch
+
+let logdir_compress ~switches (Logdir (_, _, _, workdir, _) as logdir) =
+  let directories = List.map (fun switch -> tmpswitchlogdir ~switch logdir) switches in
+  let archive = base_logdir workdir/get_logdir_name logdir+"tpxz" in
+  Oca_lib.compress_tpxz_archive ~directories archive
 
 let ilogdir workdir = workdir/"ilogs"
 let new_ilogfile ~start_time workdir = ilogdir workdir/Printf.sprintf "%.0f" start_time
 
-let switchlogdir ~switch logdir = get_logdir_path logdir/Intf.Compiler.to_string switch
-let gooddir ~switch logdir = switchlogdir ~switch logdir/"good"
-let partialdir ~switch logdir = switchlogdir ~switch logdir/"partial"
-let baddir ~switch logdir = switchlogdir ~switch logdir/"bad"
-let notavailabledir ~switch logdir = switchlogdir ~switch logdir/"not-available"
-let internalfailuredir ~switch logdir = switchlogdir ~switch logdir/"internal-failure"
-
-let tmpswitchlogdir ~switch logdir = tmplogdir logdir/Intf.Compiler.to_string switch
 let tmpgooddir ~switch logdir = tmpswitchlogdir ~switch logdir/"good"
 let tmppartialdir ~switch logdir = tmpswitchlogdir ~switch logdir/"partial"
 let tmpbaddir ~switch logdir = tmpswitchlogdir ~switch logdir/"bad"
@@ -71,17 +120,13 @@ let maintainersfile ~pkg workdir = maintainersdir workdir/pkg
 let revdepsdir workdir = metadatadir workdir/"revdeps"
 let revdepsfile ~pkg workdir = revdepsdir workdir/pkg
 
-let tmpmetadatadir (Logdir (_, _, workdir) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"metadata"
+let tmpmetadatadir (Logdir (_, _, _, workdir, _) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"metadata"
 let tmpmaintainersdir logdir = tmpmetadatadir logdir/"maintainers"
 let tmpmaintainersfile ~pkg logdir = tmpmaintainersdir logdir/pkg
 let tmprevdepsdir logdir = tmpmetadatadir logdir/"revdeps"
 let tmprevdepsfile ~pkg logdir = tmprevdepsdir logdir/pkg
 
 let configfile workdir = workdir/"config.yaml"
-let file_from_logdir ~file logdir =
-  let file = Fpath.v file in
-  let file = Fpath.segs file in
-  List.fold_left (/) (get_logdir_path logdir) file
 
 let init_base workdir =
   Oca_lib.mkdir_p (keysdir workdir) >>= fun () ->

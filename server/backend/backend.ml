@@ -4,29 +4,15 @@ type t = Server_workdirs.t
 
 let cache = Oca_server.Cache.create ()
 
-let is_directory dir file =
-  if Sys.is_directory (Fpath.to_string (Fpath.add_seg dir file)) then
-    Some (Intf.Compiler.from_string file)
-  else
-    None
-
 let get_compilers logdir =
-  let dir = Server_workdirs.get_logdir_path logdir in
-  Oca_lib.get_files dir >|= fun files ->
-  let dirs = List.filter_map (is_directory dir) files in
-  List.sort Intf.Compiler.compare dirs
+  Server_workdirs.logdir_get_compilers logdir >|= fun compilers ->
+  List.sort Intf.Compiler.compare compilers
 
 module Pkg_tbl = Hashtbl.Make (String)
 
 let pkg_update ~conf ~old ~pool pkg_tbl logdir comp state pkg =
-  let file =
-    let comp = Intf.Compiler.to_string comp in
-    let state = Intf.State.to_string state in
-    Fpath.(to_string (v comp/state/pkg))
-  in
-  let file = Server_workdirs.file_from_logdir ~file logdir in
   let get_content () = Lwt_pool.use pool begin fun () ->
-    Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
+    Server_workdirs.logdir_get_content ~comp ~state ~pkg logdir
   end in
   let content =
     if old || not (Server_configfile.enable_in_memory_logs conf) then Intf.Log.unstored get_content else Intf.Log.compressed (get_content ())
@@ -39,11 +25,11 @@ let pkg_update ~conf ~old ~pool pkg_tbl logdir comp state pkg =
   Pkg_tbl.replace pkg_tbl pkg instances
 
 let fill_pkgs_from_dir ~conf ~old ~pool pkg_tbl logdir comp =
-  Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.gooddir ~switch:comp logdir)) >>= fun good_files ->
-  Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.partialdir ~switch:comp logdir)) >>= fun partial_files ->
-  Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.baddir ~switch:comp logdir)) >>= fun bad_files ->
-  Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.notavailabledir ~switch:comp logdir)) >>= fun notavailable_files ->
-  Lwt_pool.use pool (fun () -> Oca_lib.get_files (Server_workdirs.internalfailuredir ~switch:comp logdir)) >|= fun internalfailure_files ->
+  Server_workdirs.goodfiles ~switch:comp logdir >>= fun good_files ->
+  Server_workdirs.partialfiles ~switch:comp logdir >>= fun partial_files ->
+  Server_workdirs.badfiles ~switch:comp logdir >>= fun bad_files ->
+  Server_workdirs.notavailablefiles ~switch:comp logdir >>= fun notavailable_files ->
+  Server_workdirs.internalfailurefiles ~switch:comp logdir >|= fun internalfailure_files ->
   List.iter (pkg_update ~conf ~old ~pool pkg_tbl logdir comp Intf.State.Good) good_files;
   List.iter (pkg_update ~conf ~old ~pool pkg_tbl logdir comp Intf.State.Partial) partial_files;
   List.iter (pkg_update ~conf ~old ~pool pkg_tbl logdir comp Intf.State.Bad) bad_files;
@@ -59,7 +45,7 @@ let add_pkg full_name instances acc =
 
 let get_pkgs ~conf ~pool ~old ~compilers logdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
-  Lwt_list.iter_p (fill_pkgs_from_dir ~conf ~old ~pool pkg_tbl logdir) compilers >>= fun () ->
+  Lwt_list.iter_s (fill_pkgs_from_dir ~conf ~old ~pool pkg_tbl logdir) compilers >>= fun () ->
   Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil >|=
   List.sort Intf.Pkg.compare
 

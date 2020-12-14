@@ -36,6 +36,53 @@ let get_files dirname =
   Lwt_unix.closedir dir >|= fun () ->
   files
 
+let rec scan_dir dirname =
+  get_files dirname >>= fun files ->
+  Lwt_list.fold_left_s (fun acc file ->
+    let file = Fpath.add_seg dirname file in
+    Lwt_unix.stat (Fpath.to_string file) >>= function
+    | {Unix.st_kind = Unix.S_DIR; _} -> scan_dir file >|= fun files -> files @ acc
+    | {Unix.st_kind = Unix.S_REG; _} -> Lwt.return (Fpath.to_string file :: acc)
+    | _ -> assert false
+  ) [] files
+
+let pread ~timeout cmd f =
+  Lwt_process.with_process_in ~timeout ~stdin:`Close ("", Array.of_list cmd) begin fun proc ->
+    f proc#stdout >>= fun res ->
+    proc#close >>= function
+    | Unix.WEXITED 0 ->
+        Lwt.return res
+    | Unix.WEXITED n ->
+        let cmd = String.concat " " cmd in
+        prerr_endline ("Command '"^cmd^"' failed (exit status: "^string_of_int n^".");
+        Lwt.fail (Failure "process failure")
+    | Unix.WSIGNALED n | Unix.WSTOPPED n ->
+        let cmd = String.concat " " cmd in
+        prerr_endline ("Command '"^cmd^"' killed by a signal (n°"^string_of_int n^")");
+        Lwt.fail (Failure "process failure")
+  end
+
+let scan_tpxz_archive archive =
+  pread ~timeout:60. ["pixz"; "-l"; Fpath.to_string archive] begin fun c ->
+    let rec aux acc =
+      Lwt_io.read_line_opt c >>= function
+      | None -> Lwt.return acc (* Note: We don't care about the line ordering *)
+      | Some line -> aux (line :: acc)
+    in
+    aux []
+  end
+
+let random_access_tpxz_archive ~file archive =
+  let file = Filename.quote file in
+  let archive = Filename.quote (Fpath.to_string archive) in
+  pread ~timeout:60. ["sh"; "-c"; "pixz -x "^file^" -i "^archive^" | tar -xO"] (Lwt_io.read ?count:None)
+
+let compress_tpxz_archive ~directories archive =
+  pread ~timeout:60. ("tar" :: "-Ipixz" :: "-cf" :: Fpath.to_string archive :: List.map Fpath.to_string directories) begin fun _ ->
+    (* TODO: Do not use pread *)
+    Lwt.return ()
+  end
+
 let mkdir_p dir =
   let rec aux base = function
     | [] ->
