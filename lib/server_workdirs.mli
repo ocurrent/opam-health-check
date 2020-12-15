@@ -1,6 +1,6 @@
 type t
 
-val create : workdir:string -> t
+val create : cwd:string -> workdir:string -> t
 
 val keysdir : t -> Fpath.t
 val keyfile : username:string -> t -> Fpath.t

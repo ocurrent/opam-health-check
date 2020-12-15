@@ -8,8 +8,9 @@ let (/) path file =
   Fpath.(/) path file
 
 let (+) = Fpath.(+)
+let (//) = Fpath.(//)
 
-let create ~workdir = Fpath.v workdir
+let create ~cwd ~workdir = Fpath.v cwd // Fpath.v workdir
 
 let keysdir workdir = workdir/"keys"
 let keyfile ~username workdir = keysdir workdir/username+"key"
