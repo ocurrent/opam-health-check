@@ -10,7 +10,7 @@ let (/) path file =
 let (+) = Fpath.(+)
 let (//) = Fpath.(//)
 
-let create ~cwd ~workdir = Fpath.v cwd // Fpath.v workdir
+let create ~cwd ~workdir = Fpath.normalize (Fpath.v cwd // Fpath.v workdir)
 
 let keysdir workdir = workdir/"keys"
 let keyfile ~username workdir = keysdir workdir/username+"key"
