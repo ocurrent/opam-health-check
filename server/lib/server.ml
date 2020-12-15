@@ -117,10 +117,15 @@ module Make (Backend : Backend_intf.S) = struct
     | _ ->
         failwith "path non recognized: 404"
 
+  let callback ~debug backend conn req body =
+    (* TODO: Try to understand why it wouldn't do anything before when this was ~on_exn *)
+    Lwt.catch
+      (fun () -> callback backend conn req body)
+      (fun e -> if debug then prerr_endline Printexc.(get_backtrace () ^ to_string e); Lwt.fail e)
+
   let tcp_server ~debug port callback =
     Printexc.record_backtrace debug;
     Cohttp_lwt_unix.Server.create
-      ~on_exn:(fun e -> if debug then prerr_endline Printexc.(get_backtrace () ^ to_string e))
       ~mode:(`TCP (`Port port))
       (Cohttp_lwt_unix.Server.make ~callback ())
 
@@ -131,7 +136,7 @@ module Make (Backend : Backend_intf.S) = struct
     let port = Server_configfile.port conf in
     Backend.start conf workdir >>= fun (backend, backend_task) ->
     Lwt.join [
-      tcp_server ~debug port (callback backend);
+      tcp_server ~debug port (callback ~debug backend);
       backend_task ();
     ]
 end
