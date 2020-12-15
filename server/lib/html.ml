@@ -108,10 +108,10 @@ let must_show_package query ~last pkg =
   end >>&& begin fun () ->
     match snd query.logsearch with
     | Some (re, comp) ->
-        Lwt_main.yield () >>= fun () ->
-        Lwt_list.exists_s begin fun inst ->
+        let pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit) in
+        Lwt_list.exists_p begin fun inst ->
           if Intf.Compiler.equal comp (Intf.Instance.compiler inst) then
-            Intf.Instance.content inst >|= Re.execp re
+            Lwt_pool.use pool (fun () -> Intf.Instance.content inst >|= Re.execp re)
           else
             Lwt.return_false
         end instances
