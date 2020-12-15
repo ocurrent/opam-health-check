@@ -37,7 +37,7 @@ let get_files dirname =
   files
 
 let rec scan_dir ~full_path dirname =
-  get_files dirname >>= fun files ->
+  get_files full_path >>= fun files ->
   Lwt_list.fold_left_s (fun acc file ->
     let full_path = Fpath.add_seg full_path file in
     let file = Fpath.normalize (Fpath.add_seg dirname file) in
