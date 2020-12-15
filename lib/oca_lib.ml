@@ -78,7 +78,7 @@ let random_access_tpxz_archive ~file archive =
   pread ~timeout:60. ["sh"; "-c"; "pixz -x "^file^" -i "^archive^" | tar -xO"] (Lwt_io.read ?count:None)
 
 let compress_tpxz_archive ~directories archive =
-  pread ~timeout:60. ("tar" :: "-Ipixz" :: "-cf" :: Fpath.to_string archive :: List.map Fpath.to_string directories) begin fun _ ->
+  pread ~timeout:3600. ("tar" :: "-Ipixz" :: "-cf" :: Fpath.to_string archive :: List.map Fpath.to_string directories) begin fun _ ->
     (* TODO: Do not use pread *)
     Lwt.return ()
   end
