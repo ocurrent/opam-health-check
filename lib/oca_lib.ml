@@ -36,18 +36,21 @@ let get_files dirname =
   Lwt_unix.closedir dir >|= fun () ->
   files
 
-let rec scan_dir dirname =
+let rec scan_dir ~full_path dirname =
   get_files dirname >>= fun files ->
   Lwt_list.fold_left_s (fun acc file ->
-    let file = Fpath.add_seg dirname file in
-    Lwt_unix.stat (Fpath.to_string file) >>= function
+    let full_path = Fpath.add_seg full_path file in
+    let file = Fpath.normalize (Fpath.add_seg dirname file) in
+    Lwt_unix.stat (Fpath.to_string full_path) >>= function
     | {Unix.st_kind = Unix.S_DIR; _} ->
-        scan_dir file >|= fun files ->
+        scan_dir ~full_path file >|= fun files ->
         Fpath.to_string (Fpath.add_seg file "") :: files @ acc
     | {Unix.st_kind = Unix.S_REG; _} ->
         Lwt.return (Fpath.to_string file :: acc)
     | _ -> assert false
   ) [] files
+
+let scan_dir dirname = scan_dir ~full_path:dirname (Fpath.v ".")
 
 let pread ?cwd ~timeout cmd f =
   Lwt_process.with_process_in ?cwd ~timeout ~stdin:`Close ("", Array.of_list cmd) begin fun proc ->
