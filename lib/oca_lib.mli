@@ -7,7 +7,7 @@ val get_files : Fpath.t -> string list Lwt.t
 val scan_dir : Fpath.t -> string list Lwt.t
 val scan_tpxz_archive : Fpath.t -> string list Lwt.t
 val random_access_tpxz_archive : file:string -> Fpath.t -> string Lwt.t
-val compress_tpxz_archive : directories:Fpath.t list -> Fpath.t -> unit Lwt.t
+val compress_tpxz_archive : cwd:Fpath.t -> directories:string list -> Fpath.t -> unit Lwt.t
 val mkdir_p : Fpath.t -> unit Lwt.t
 val rm_rf : Fpath.t -> unit Lwt.t
 

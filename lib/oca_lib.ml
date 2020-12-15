@@ -46,8 +46,8 @@ let rec scan_dir dirname =
     | _ -> assert false
   ) [] files
 
-let pread ~timeout cmd f =
-  Lwt_process.with_process_in ~timeout ~stdin:`Close ("", Array.of_list cmd) begin fun proc ->
+let pread ?cwd ~timeout cmd f =
+  Lwt_process.with_process_in ?cwd ~timeout ~stdin:`Close ("", Array.of_list cmd) begin fun proc ->
     f proc#stdout >>= fun res ->
     proc#close >>= function
     | Unix.WEXITED 0 ->
@@ -77,8 +77,9 @@ let random_access_tpxz_archive ~file archive =
   let archive = Filename.quote (Fpath.to_string archive) in
   pread ~timeout:60. ["sh"; "-c"; "pixz -x "^file^" -i "^archive^" | tar -xO"] (Lwt_io.read ?count:None)
 
-let compress_tpxz_archive ~directories archive =
-  pread ~timeout:3600. ("tar" :: "-Ipixz" :: "-cf" :: Fpath.to_string archive :: List.map Fpath.to_string directories) begin fun _ ->
+let compress_tpxz_archive ~cwd ~directories archive =
+  let cwd = Fpath.to_string cwd in
+  pread ~timeout:3600. ~cwd ("tar" :: "-Ipixz" :: "-cf" :: Fpath.to_string archive :: directories) begin fun _ ->
     (* TODO: Do not use pread *)
     Lwt.return ()
   end

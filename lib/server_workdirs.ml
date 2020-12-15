@@ -95,9 +95,10 @@ let tmplogdir (Logdir (_, _, _, workdir, _) as logdir) = base_tmpdir workdir/get
 let tmpswitchlogdir ~switch logdir = tmplogdir logdir/Intf.Compiler.to_string switch
 
 let logdir_compress ~switches (Logdir (_, _, _, workdir, _) as logdir) =
-  let directories = List.map (fun switch -> tmpswitchlogdir ~switch logdir) switches in
+  let cwd = tmplogdir logdir in
+  let directories = List.map Intf.Compiler.to_string switches in
   let archive = base_logdir workdir/get_logdir_name logdir+"tpxz" in
-  Oca_lib.compress_tpxz_archive ~directories archive
+  Oca_lib.compress_tpxz_archive ~cwd ~directories archive
 
 let ilogdir workdir = workdir/"ilogs"
 let new_ilogfile ~start_time workdir = ilogdir workdir/Printf.sprintf "%.0f" start_time
