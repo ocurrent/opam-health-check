@@ -27,6 +27,7 @@ val logdir_compress : switches:Intf.Compiler.t list -> logdir -> unit Lwt.t
 val ilogdir : t -> Fpath.t
 val new_ilogfile : start_time:float -> t -> Fpath.t
 
+val tmplogdir : logdir -> Fpath.t
 val tmplogfile : pkg:string -> switch:Intf.Compiler.t -> logdir -> Fpath.t
 
 val tmpgoodlog : pkg:string -> switch:Intf.Compiler.t -> logdir -> Fpath.t

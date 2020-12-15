@@ -307,10 +307,12 @@ let get_commit_hash_extra_repos conf =
 let move_tmpdirs_to_final ~switches logdir workdir =
   let metadatadir = Server_workdirs.metadatadir workdir in
   let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
+  let tmplogdir = Server_workdirs.tmplogdir logdir in
   let switches = List.map Intf.Switch.name switches in
   Server_workdirs.logdir_compress ~switches logdir >>= fun () ->
   Oca_lib.rm_rf metadatadir >>= fun () ->
-  Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
+  Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) >>= fun () ->
+  Oca_lib.rm_rf tmplogdir
 
 let run_jobs ~cap ~conf ~pool ~stderr logdir switches pkgs =
   let len_suffix = "/"^string_of_int (Pkg_set.cardinal pkgs * List.length switches) in
