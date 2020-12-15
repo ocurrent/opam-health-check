@@ -21,10 +21,12 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
       ~from
       (ops @ [Obuilder_spec.run ~cache:(cache ~conf) ~network "%s" c])
   in
+  let obuilder_content = obuilder_to_string obuilder_content in
   Capnp_rpc_lwt.Sturdy_ref.connect_exn cap >>= fun service ->
   Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
-  let action = Cluster_api.Submission.obuilder_build (obuilder_to_string obuilder_content) in
-  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint:"") @@ fun ticket ->
+  let action = Cluster_api.Submission.obuilder_build obuilder_content in
+  let cache_hint = "opam-health-check-"^Digest.to_hex (Digest.string obuilder_content) in
+  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint) @@ fun ticket ->
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
   Capnp_rpc_lwt.Capability.wait_until_settled job >>= fun () ->
   let proc =
