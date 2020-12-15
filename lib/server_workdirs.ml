@@ -60,6 +60,7 @@ let get_files ~name ~switch (Logdir (_, _, _, _, files)) =
   files >|= fun files ->
   List.filter_map (fun file ->
     match String.split_on_char '/' file with
+    | [_switch; _name; ""] -> None
     | [switch'; name'; pkg] when String.equal switch switch' && String.equal name name' -> Some pkg
     | _ -> None
   ) files
