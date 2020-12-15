@@ -398,11 +398,12 @@ let run ~on_finished ~conf cache workdir =
           let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
           let (_, jobs) = get_metadata ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
           Lwt.join jobs >>= fun () ->
+          Oca_lib.timer_log timer stderr "Operation" >>= fun () ->
           Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
           move_tmpdirs_to_final ~switches:switches' new_logdir workdir >>= fun () ->
           on_finished workdir;
           trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
-          Oca_lib.timer_log timer stderr "Operation"
+          Oca_lib.timer_log timer stderr "Clean up"
       | [] ->
           Lwt_io.write_line stderr "No switches."
       end
