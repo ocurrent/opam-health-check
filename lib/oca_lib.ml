@@ -41,8 +41,11 @@ let rec scan_dir dirname =
   Lwt_list.fold_left_s (fun acc file ->
     let file = Fpath.add_seg dirname file in
     Lwt_unix.stat (Fpath.to_string file) >>= function
-    | {Unix.st_kind = Unix.S_DIR; _} -> scan_dir file >|= fun files -> files @ acc
-    | {Unix.st_kind = Unix.S_REG; _} -> Lwt.return (Fpath.to_string file :: acc)
+    | {Unix.st_kind = Unix.S_DIR; _} ->
+        scan_dir file >|= fun files ->
+        Fpath.to_string (Fpath.add_seg file "") :: files @ acc
+    | {Unix.st_kind = Unix.S_REG; _} ->
+        Lwt.return (Fpath.to_string file :: acc)
     | _ -> assert false
   ) [] files
 
