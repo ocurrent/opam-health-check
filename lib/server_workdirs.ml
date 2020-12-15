@@ -30,9 +30,10 @@ let logdirs workdir =
   List.map (fun dir ->
     match String.split_on_char '-' dir with
     | [time; hash] ->
+        let logdir = base_logdir/dir in
         begin match String.split_on_char '.' hash with
-        | [hash] -> Logdir (Uncompressed, float_of_string time, hash, workdir, Oca_lib.scan_dir (base_logdir/dir))
-        | [hash; "tpxz"] -> Logdir (Compressed, float_of_string time, hash, workdir, Oca_lib.scan_tpxz_archive (base_logdir/dir+"tpxz"))
+        | [hash] -> Logdir (Uncompressed, float_of_string time, hash, workdir, Oca_lib.scan_dir logdir)
+        | [hash; "tpxz"] -> Logdir (Compressed, float_of_string time, hash, workdir, Oca_lib.scan_tpxz_archive logdir)
         | _ -> assert false
         end
     | _ -> assert false
