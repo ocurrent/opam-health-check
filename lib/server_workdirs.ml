@@ -34,7 +34,7 @@ let logdirs workdir =
         let logdir = base_logdir/dir in
         begin match String.split_on_char '.' hash with
         | [hash] -> Logdir (Uncompressed, float_of_string time, hash, workdir, Oca_lib.scan_dir logdir)
-        | [hash; "tpxz"] -> Logdir (Compressed, float_of_string time, hash, workdir, Oca_lib.scan_tpxz_archive logdir)
+        | [hash; "txz"] -> Logdir (Compressed, float_of_string time, hash, workdir, Oca_lib.scan_tpxz_archive logdir)
         | _ -> assert false
         end
     | _ -> assert false
@@ -87,7 +87,7 @@ let logdir_get_content ~comp ~state ~pkg = function
       let file = base_logdir workdir/get_logdir_name logdir/comp/state/pkg in
       Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
   | Logdir (Compressed, _, _, workdir, _) as logdir ->
-      let archive = base_logdir workdir/get_logdir_name logdir+"tpxz" in
+      let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
       let comp = Intf.Compiler.to_string comp in
       let state = Intf.State.to_string state in
       let file = comp^"/"^state^"/"^pkg in
@@ -99,7 +99,7 @@ let tmpswitchlogdir ~switch logdir = tmplogdir logdir/Intf.Compiler.to_string sw
 let logdir_compress ~switches (Logdir (_, _, _, workdir, _) as logdir) =
   let cwd = tmplogdir logdir in
   let directories = List.map Intf.Compiler.to_string switches in
-  let archive = base_logdir workdir/get_logdir_name logdir+"tpxz" in
+  let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
   Oca_lib.compress_tpxz_archive ~cwd ~directories archive
 
 let ilogdir workdir = workdir/"ilogs"
