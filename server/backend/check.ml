@@ -166,7 +166,7 @@ let () =
     prerr_endline ("Async exception raised: "^msg);
   end
 
-let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
+let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
     List.filter (fun (repo, _) ->
@@ -180,8 +180,7 @@ let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
   stage ~from:("ocurrent/opam:"^distribution_used) begin
     [ user ~uid:1000 ~gid:1000;
       workdir "/home/opam";
-      run ~network "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam";
-      run "git -C /tmp/opam checkout opam-health-check3";
+      run ~network "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam && git -C /tmp/opam checkout %s" (Filename.quote opam_commit);
       run ~network "sudo apt-get update";
       run ~network "sudo apt-get install -yy m4";
       run ~network "opam pin add -yn /tmp/opam";
@@ -289,8 +288,8 @@ let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
     (Pkg_set.add pkgname pkgs_set, job :: jobs)
   end pkgs (Pkg_set.empty, jobs)
 
-let get_commit_hash ~user ~repo =
-  Github.Monad.run (Github.Repo.get_ref ~user ~repo ~name:"heads/master" ()) >|= fun r ->
+let get_commit_hash ~user ~repo ~branch =
+  Github.Monad.run (Github.Repo.get_ref ~user ~repo ~name:("heads/"^branch) ()) >|= fun r ->
   let r = Github.Response.value r in
   r.Github_t.git_ref_obj.Github_t.obj_sha
 
@@ -298,7 +297,8 @@ let get_commit_hash_extra_repos conf =
   Lwt_list.map_s begin fun repository ->
     let user = Intf.Repository.github_user repository in
     let repo = Intf.Repository.github_repo repository in
-    get_commit_hash ~user ~repo >|= fun hash ->
+    let branch = "master" in
+    get_commit_hash ~user ~repo ~branch >|= fun hash ->
     (repository, hash)
   end (Server_configfile.extra_repositories conf)
 
@@ -379,10 +379,11 @@ let run ~on_finished ~conf cache workdir =
     with_stderr ~start_time workdir begin fun ~stderr ->
       let timer = Oca_lib.timer_start () in
       get_cap ~stderr >>= fun cap ->
-      get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
+      get_commit_hash ~user:"ocaml" ~repo:"opam-repository" ~branch:"master" >>= fun opam_repo_commit ->
+      get_commit_hash ~user:"kit-ty-kate" ~repo:"opam" ~branch:"opam-health-check3" >>= fun opam_commit ->
       get_commit_hash_extra_repos conf >>= fun extra_repos ->
       let switches' = switches in
-      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo_commit ~extra_repos switch)) switches in
+      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch)) switches in
       begin match switches with
       | switch::_ ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
