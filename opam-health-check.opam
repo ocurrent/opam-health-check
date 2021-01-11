@@ -22,7 +22,7 @@ depends: [
   "re" {>= "1.7.2"}
   "yaml" {>= "2.0.0"}
   "ocaml-xdg-basedir"
-  "obuilder-spec" {< "0.1.0"}
+  "obuilder-spec" {>= "0.2"}
   "ocluster-api" {>= "0.1"}
   "github-unix"
   "capnp-rpc-lwt"

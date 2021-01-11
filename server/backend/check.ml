@@ -11,13 +11,15 @@ let cache ~conf =
 let network = ["host"]
 
 let obuilder_to_string spec =
-  Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_stage spec)
+  Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_t spec)
 
 let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   let obuilder_content =
-    let open Obuilder_spec in
-    { base_obuilder with
-      ops = base_obuilder.ops @ [run ~cache:(cache ~conf) ~network "%s" c] }
+    let {Obuilder_spec.child_builds; from; ops} = base_obuilder in
+    Obuilder_spec.stage
+      ~child_builds
+      ~from
+      (ops @ [Obuilder_spec.run ~cache:(cache ~conf) ~network "%s" c])
   in
   Capnp_rpc_lwt.Sturdy_ref.connect_exn cap >>= fun service ->
   Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
