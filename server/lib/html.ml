@@ -10,7 +10,7 @@ type query = {
   show_latest_only : bool;
   sort_by_revdeps : bool;
   maintainers : string * Re.re option;
-  logsearch : string * (Re.re * Compiler.t) option;
+  logsearch : string * (Re.re * Compiler.t) option; (* TODO: Remove Re.re? (unused?) *)
 }
 
 let github_url = "https://github.com/ocaml/opam-repository"
@@ -62,7 +62,7 @@ let (>>&&) x f =
   x >>= fun x ->
   if x then f () else Lwt.return_false
 
-let must_show_package query ~last pkg =
+let must_show_package ~logsearch query ~last pkg =
   let maintainers = Pkg.maintainers pkg in
   let instances' = Pkg.instances pkg in
   let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.compilers) instances' in
@@ -107,20 +107,12 @@ let must_show_package query ~last pkg =
     | None -> true
   end >>&& begin fun () ->
     match snd query.logsearch with
-    | Some (re, comp) ->
-        let pool = Lwt_pool.create 64 (fun () -> Lwt.return_unit) in
-        Lwt_list.exists_p begin fun inst ->
-          if Intf.Compiler.equal comp (Intf.Instance.compiler inst) then
-            Lwt_pool.use pool (fun () -> Intf.Instance.content inst >|= Re.execp re)
-          else
-            Lwt.return_false
-        end instances
-    | None ->
-        Lwt.return_true
+    | Some _ -> logsearch >|= List.exists (Pkg.equal pkg)
+    | None -> Lwt.return_true
   end
 
-let filter_pkg query (acc, last) pkg =
-  must_show_package query ~last pkg >|= function
+let filter_pkg ~logsearch query (acc, last) pkg =
+  must_show_package ~logsearch query ~last pkg >|= function
   | true -> (pkg :: acc, Some pkg)
   | false -> (acc, Some pkg)
 
@@ -191,10 +183,24 @@ let comp_checkboxes ~name checked query =
 let revdeps_cmp p1 p2 =
   Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
 
+(* TODO: Put this function in the Cache module (and make use of it) *)
+let get_logsearch ~query ~logdir =
+  match query.logsearch with
+  | _, None -> Lwt.return []
+  | regexp, Some (_, comp) ->
+      let switch = Compiler.to_string comp in
+      Server_workdirs.logdir_search ~switch ~regexp logdir >|=
+      List.filter_map (fun s ->
+        match String.split_on_char '/' s with
+        | [_switch; _state; full_name] -> Some (Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:(-1))
+        | _ -> None
+      )
+
 let get_html ~logdir query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
-  Lwt_list.fold_left_s (filter_pkg query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
+  let logsearch = get_logsearch ~query ~logdir in
+  Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
   let pkgs = if query.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
   let pkgs = List.map (pkg_to_html logdir query) pkgs in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in

@@ -93,6 +93,14 @@ let logdir_get_content ~comp ~state ~pkg = function
       let file = comp^"/"^state^"/"^pkg in
       Oca_lib.random_access_tpxz_archive ~file archive
 
+let logdir_search ~switch ~regexp = function
+  | Logdir (Uncompressed, _, _, workdir, _) as logdir ->
+      let cwd = base_logdir workdir/get_logdir_name logdir in
+      Oca_lib.ugrep_dir ~switch ~regexp ~cwd
+  | Logdir (Compressed, _, _, workdir, _) as logdir ->
+      let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
+      Oca_lib.ugrep_tpxz ~switch ~regexp ~archive
+
 let tmplogdir (Logdir (_, _, _, workdir, _) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"logs"
 let tmpswitchlogdir ~switch logdir = tmplogdir logdir/Intf.Compiler.to_string switch
 

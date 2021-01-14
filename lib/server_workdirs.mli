@@ -23,6 +23,7 @@ val internalfailurefiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
 val logdir_get_content : comp:Intf.Compiler.t -> state:Intf.State.t -> pkg:string -> logdir -> string Lwt.t
 val logdir_get_compilers : logdir -> Intf.Compiler.t list Lwt.t
 val logdir_compress : switches:Intf.Compiler.t list -> logdir -> unit Lwt.t
+val logdir_search : switch:string -> regexp:string -> logdir -> string list Lwt.t
 
 val ilogdir : t -> Fpath.t
 val new_ilogfile : start_time:float -> t -> Fpath.t

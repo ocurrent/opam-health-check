@@ -33,5 +33,6 @@ depends: [
   "tls" {>= "0.12.0"} # activate conduit with TLS for slack webhooks
   "conf-libev" # Required for lwt to avoid hitting the limits of select(2)
   "conf-pixz" # TODO: Make it a library
+  # TODO: Add conf-ugrep
 ]
 synopsis: "A toolchain to check for broken opam packages"

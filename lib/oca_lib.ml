@@ -68,15 +68,16 @@ let pread ?cwd ~timeout cmd f =
         Lwt.fail (Failure "process failure")
   end
 
+let read_unordered_lines c =
+  let rec aux acc =
+    Lwt_io.read_line_opt c >>= function
+    | None -> Lwt.return acc (* Note: We don't care about the line ordering *)
+    | Some line -> aux (line :: acc)
+  in
+  aux []
+
 let scan_tpxz_archive archive =
-  pread ~timeout:60. ["pixz"; "-l"; Fpath.to_string archive] begin fun c ->
-    let rec aux acc =
-      Lwt_io.read_line_opt c >>= function
-      | None -> Lwt.return acc (* Note: We don't care about the line ordering *)
-      | Some line -> aux (line :: acc)
-    in
-    aux []
-  end
+  pread ~timeout:60. ["pixz"; "-l"; Fpath.to_string archive] read_unordered_lines
 
 let random_access_tpxz_archive ~file archive =
   let file = Filename.quote file in
@@ -89,6 +90,14 @@ let compress_tpxz_archive ~cwd ~directories archive =
     (* TODO: Do not use pread *)
     Lwt.return ()
   end
+
+let ugrep_dir ~switch ~regexp ~cwd =
+  let cwd = Fpath.to_string cwd in
+  pread ~timeout:60. ~cwd ["ugrep"; "-Rl"; "--include="^switch^"/**"; "--regexp="^regexp; "."] read_unordered_lines
+
+let ugrep_tpxz ~switch ~regexp ~archive =
+  let archive = Fpath.to_string archive in
+  pread ~timeout:60. ["ugrep"; "-zl"; "--include="^switch^"/**"; "--format=%z%~"; "--regexp="^regexp; archive] read_unordered_lines
 
 let mkdir_p dir =
   let rec aux base = function
