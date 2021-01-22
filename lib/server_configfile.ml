@@ -9,7 +9,7 @@ type t = {
   mutable auto_run_interval : int option;
   mutable processes : int option;
   mutable enable_dune_cache : bool option;
-  mutable enable_in_memory_logs : bool option;
+  mutable enable_logs_compression : bool option;
   mutable extra_repositories : Intf.Repository.t list option;
   mutable with_test : bool option;
   mutable list_command : string option;
@@ -27,7 +27,7 @@ let create_conf yamlfile = {
   auto_run_interval = None;
   processes = None;
   enable_dune_cache = None;
-  enable_in_memory_logs = None;
+  enable_logs_compression = None;
   extra_repositories = None;
   with_test = None;
   list_command = None;
@@ -82,8 +82,8 @@ let set_config conf = function
       set_field ~field (fun () -> conf.auto_run_interval <- Some (int_of_float auto_run_interval)) conf.auto_run_interval
   | "enable-dune-cache" as field, `Bool dune_cache ->
       set_field ~field (fun () -> conf.enable_dune_cache <- Some dune_cache) conf.enable_dune_cache
-  | "enable-in-memory-logs" as field, `Bool in_memory_logs ->
-      set_field ~field (fun () -> conf.enable_in_memory_logs <- Some in_memory_logs) conf.enable_in_memory_logs
+  | "enable-logs-compression" as field, `Bool logs_compression ->
+      set_field ~field (fun () -> conf.enable_logs_compression <- Some logs_compression) conf.enable_logs_compression
   | "extra-repositories" as field, `A repositories ->
       let repositories = List.map get_repo repositories in
       set_field ~field (fun () -> conf.extra_repositories <- Some repositories) conf.extra_repositories
@@ -132,7 +132,7 @@ let yaml_of_conf conf =
     "auto-run-interval", `Float (float_of_int (Option.get_exn conf.auto_run_interval));
     "processes", `Float (float_of_int (Option.get_exn conf.processes));
     "enable-dune-cache", `Bool (Option.get_exn conf.enable_dune_cache);
-    "enable-in-memory-logs", `Bool (Option.get_exn conf.enable_in_memory_logs);
+    "enable-logs-compression", `Bool (Option.get_exn conf.enable_logs_compression);
     "extra-repositories", Option.map_or ~default:`Null yaml_of_extra_repositories conf.extra_repositories;
     "with-test", `Bool (Option.get_exn conf.with_test);
     "list-command", `String (Option.get_exn conf.list_command);
@@ -156,8 +156,8 @@ let set_defaults conf =
     conf.processes <- Some Oca_lib.default_processes;
   if Option.is_none conf.enable_dune_cache then
     conf.enable_dune_cache <- Some false; (* NOTE: Too unstable to enable by default *)
-  if Option.is_none conf.enable_in_memory_logs then
-    conf.enable_in_memory_logs <- Some false; (* NOTE: Requires too much memory for regular users *)
+  if Option.is_none conf.enable_logs_compression then
+    conf.enable_logs_compression <- Some true; (* NOTE: Requires too much disk space for regular users *)
   if Option.is_none conf.extra_repositories then
     conf.extra_repositories <- Some [Intf.Repository.create ~name:"beta" ~github:"ocaml/ocaml-beta-repository" ~for_switches:None];
   if Option.is_none conf.with_test then
@@ -226,7 +226,7 @@ let admin_port {admin_port; _} = Option.get_exn admin_port
 let auto_run_interval {auto_run_interval; _} = Option.get_exn auto_run_interval
 let processes {processes; _} = Option.get_exn processes
 let enable_dune_cache {enable_dune_cache; _} = Option.get_exn enable_dune_cache
-let enable_in_memory_logs {enable_in_memory_logs; _} = Option.get_exn enable_in_memory_logs
+let enable_logs_compression {enable_logs_compression; _} = Option.get_exn enable_logs_compression
 let extra_repositories {extra_repositories; _} = Option.get_exn extra_repositories
 let with_test {with_test; _} = Option.get_exn with_test
 let list_command {list_command; _} = Option.get_exn list_command

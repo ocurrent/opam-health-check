@@ -36,6 +36,69 @@ let get_files dirname =
   Lwt_unix.closedir dir >|= fun () ->
   files
 
+let rec scan_dir ~full_path dirname =
+  get_files full_path >>= fun files ->
+  Lwt_list.fold_left_s (fun acc file ->
+    let full_path = Fpath.add_seg full_path file in
+    let file = Fpath.normalize (Fpath.add_seg dirname file) in
+    Lwt_unix.stat (Fpath.to_string full_path) >>= function
+    | {Unix.st_kind = Unix.S_DIR; _} ->
+        scan_dir ~full_path file >|= fun files ->
+        Fpath.to_string (Fpath.add_seg file "") :: files @ acc
+    | {Unix.st_kind = Unix.S_REG; _} ->
+        Lwt.return (Fpath.to_string file :: acc)
+    | _ -> assert false
+  ) [] files
+
+let scan_dir dirname = scan_dir ~full_path:dirname (Fpath.v ".")
+
+let pread ?cwd ~timeout cmd f =
+  Lwt_process.with_process_in ?cwd ~timeout ~stdin:`Close ("", Array.of_list cmd) begin fun proc ->
+    f proc#stdout >>= fun res ->
+    proc#close >>= function
+    | Unix.WEXITED 0 ->
+        Lwt.return res
+    | Unix.WEXITED n ->
+        let cmd = String.concat " " cmd in
+        prerr_endline ("Command '"^cmd^"' failed (exit status: "^string_of_int n^".");
+        Lwt.fail (Failure "process failure")
+    | Unix.WSIGNALED n | Unix.WSTOPPED n ->
+        let cmd = String.concat " " cmd in
+        prerr_endline ("Command '"^cmd^"' killed by a signal (n°"^string_of_int n^")");
+        Lwt.fail (Failure "process failure")
+  end
+
+let read_unordered_lines c =
+  let rec aux acc =
+    Lwt_io.read_line_opt c >>= function
+    | None -> Lwt.return acc (* Note: We don't care about the line ordering *)
+    | Some line -> aux (line :: acc)
+  in
+  aux []
+
+let scan_tpxz_archive archive =
+  pread ~timeout:60. ["pixz"; "-l"; Fpath.to_string archive] read_unordered_lines
+
+let random_access_tpxz_archive ~file archive =
+  let file = Filename.quote file in
+  let archive = Filename.quote (Fpath.to_string archive) in
+  pread ~timeout:60. ["sh"; "-c"; "pixz -x "^file^" -i "^archive^" | tar -xO"] (Lwt_io.read ?count:None)
+
+let compress_tpxz_archive ~cwd ~directories archive =
+  let cwd = Fpath.to_string cwd in
+  pread ~timeout:3600. ~cwd ("tar" :: "-Ipixz" :: "-cf" :: Fpath.to_string archive :: directories) begin fun _ ->
+    (* TODO: Do not use pread *)
+    Lwt.return ()
+  end
+
+let ugrep_dir ~switch ~regexp ~cwd =
+  let cwd = Fpath.to_string cwd in
+  pread ~timeout:60. ~cwd ["ugrep"; "-Rl"; "--include="^switch^"/**"; "--regexp="^regexp; "."] read_unordered_lines
+
+let ugrep_tpxz ~switch ~regexp ~archive =
+  let archive = Fpath.to_string archive in
+  pread ~timeout:60. ["ugrep"; "-zl"; "--include="^switch^"/**"; "--format=%z%~"; "--regexp="^regexp; archive] read_unordered_lines
+
 let mkdir_p dir =
   let rec aux base = function
     | [] ->

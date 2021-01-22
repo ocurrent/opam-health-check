@@ -44,8 +44,7 @@ end
 module Log : sig
   type t
 
-  val compressed : string Lwt.t -> t
-  val unstored : (unit -> string Lwt.t) -> t
+  val create : (unit -> string Lwt.t) -> t
 end
 
 module Instance : sig

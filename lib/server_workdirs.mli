@@ -1,34 +1,34 @@
 type t
 
-val create : workdir:string -> t
+val create : cwd:string -> workdir:string -> t
 
 val keysdir : t -> Fpath.t
 val keyfile : username:string -> t -> Fpath.t
 
 type logdir
 
-val new_logdir : hash:string -> start_time:float -> t -> logdir
+val new_logdir : compressed:bool -> hash:string -> start_time:float -> t -> logdir
 val logdirs : t -> logdir list Lwt.t
-val tmplogdir : logdir -> Fpath.t
 
-val logdir_from_string : t -> string -> logdir
 val logdir_equal : logdir -> logdir -> bool
 val get_logdir_name : logdir -> string
-val get_logdir_path : logdir -> Fpath.t
 val get_logdir_hash : logdir -> string
 val get_logdir_time : logdir -> float
+
+val goodfiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
+val partialfiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
+val badfiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
+val notavailablefiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
+val internalfailurefiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
+val logdir_get_content : comp:Intf.Compiler.t -> state:Intf.State.t -> pkg:string -> logdir -> string Lwt.t
+val logdir_get_compilers : logdir -> Intf.Compiler.t list Lwt.t
+val logdir_move : switches:Intf.Compiler.t list -> logdir -> unit Lwt.t
+val logdir_search : switch:string -> regexp:string -> logdir -> string list Lwt.t
 
 val ilogdir : t -> Fpath.t
 val new_ilogfile : start_time:float -> t -> Fpath.t
 
-val switchlogdir : switch:Intf.Compiler.t -> logdir -> Fpath.t
-val gooddir : switch:Intf.Compiler.t -> logdir -> Fpath.t
-val partialdir : switch:Intf.Compiler.t -> logdir -> Fpath.t
-val baddir : switch:Intf.Compiler.t -> logdir -> Fpath.t
-val notavailabledir : switch:Intf.Compiler.t -> logdir -> Fpath.t
-val internalfailuredir : switch:Intf.Compiler.t -> logdir -> Fpath.t
-
-val tmpswitchlogdir : switch:Intf.Compiler.t -> logdir -> Fpath.t
+val tmplogdir : logdir -> Fpath.t
 val tmplogfile : pkg:string -> switch:Intf.Compiler.t -> logdir -> Fpath.t
 
 val tmpgoodlog : pkg:string -> switch:Intf.Compiler.t -> logdir -> Fpath.t
@@ -50,7 +50,6 @@ val tmprevdepsdir : logdir -> Fpath.t
 val tmprevdepsfile : pkg:string -> logdir -> Fpath.t
 
 val configfile : t -> Fpath.t
-val file_from_logdir : file:string -> logdir -> Fpath.t
 
 val init_base : t -> unit Lwt.t
 val init_base_jobs : switches:Intf.Switch.t list -> logdir -> unit Lwt.t

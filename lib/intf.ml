@@ -73,24 +73,11 @@ module Repository = struct
 end
 
 module Log = struct
-  type t =
-    | Compressed of bytes Lwt.t
-    | Unstored of (unit -> string Lwt.t)
+  type t = (unit -> string Lwt.t)
 
-  let compressed_buffer_len = ref 0
+  let create f = f
 
-  let compressed s =
-    let s =
-      s >|= fun s ->
-      compressed_buffer_len := max !compressed_buffer_len (String.length s);
-      LZ4.Bytes.compress (Bytes.unsafe_of_string s)
-    in
-    Compressed s
-  let unstored f = Unstored f
-
-  let to_string = function
-    | Compressed s -> s >|= fun s -> Bytes.unsafe_to_string (LZ4.Bytes.decompress ~length:!compressed_buffer_len s)
-    | Unstored f -> f ()
+  let to_string f = f ()
 end
 
 module Instance = struct

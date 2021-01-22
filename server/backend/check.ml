@@ -21,10 +21,12 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
       ~from
       (ops @ [Obuilder_spec.run ~cache:(cache ~conf) ~network "%s" c])
   in
+  let obuilder_content = obuilder_to_string obuilder_content in
   Capnp_rpc_lwt.Sturdy_ref.connect_exn cap >>= fun service ->
   Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
-  let action = Cluster_api.Submission.obuilder_build (obuilder_to_string obuilder_content) in
-  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint:"") @@ fun ticket ->
+  let action = Cluster_api.Submission.obuilder_build obuilder_content in
+  let cache_hint = "opam-health-check-"^Digest.to_hex (Digest.string obuilder_content) in
+  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint) @@ fun ticket ->
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
   Capnp_rpc_lwt.Capability.wait_until_settled job >>= fun () ->
   let proc =
@@ -304,14 +306,15 @@ let get_commit_hash_extra_repos conf =
     (repository, hash)
   end (Server_configfile.extra_repositories conf)
 
-let move_tmpdirs_to_final logdir workdir =
-  let logdir_path = Server_workdirs.get_logdir_path logdir in
-  let tmplogdir = Server_workdirs.tmplogdir logdir in
+let move_tmpdirs_to_final ~switches logdir workdir =
   let metadatadir = Server_workdirs.metadatadir workdir in
   let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
-  Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir_path) >>= fun () ->
+  let tmplogdir = Server_workdirs.tmplogdir logdir in
+  let switches = List.map Intf.Switch.name switches in
+  Server_workdirs.logdir_move ~switches logdir >>= fun () ->
   Oca_lib.rm_rf metadatadir >>= fun () ->
-  Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir)
+  Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) >>= fun () ->
+  Oca_lib.rm_rf tmplogdir
 
 let run_jobs ~cap ~conf ~pool ~stderr logdir switches pkgs =
   let len_suffix = "/"^string_of_int (Pkg_set.cardinal pkgs * List.length switches) in
@@ -389,8 +392,9 @@ let run ~on_finished ~conf cache workdir =
       begin match switches with
       | switch::_ ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
+          let compressed = Server_configfile.enable_logs_compression conf in
           let old_logdir = List.head_opt old_logdir in
-          let new_logdir = Server_workdirs.new_logdir ~hash:opam_repo_commit ~start_time workdir in
+          let new_logdir = Server_workdirs.new_logdir ~compressed ~hash:opam_repo_commit ~start_time workdir in
           Server_workdirs.init_base_jobs ~switches:switches' new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (get_pkgs ~cap ~stderr ~conf) switches >>= fun pkgs ->
@@ -399,11 +403,12 @@ let run ~on_finished ~conf cache workdir =
           let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
           let (_, jobs) = get_metadata ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
           Lwt.join jobs >>= fun () ->
+          Oca_lib.timer_log timer stderr "Operation" >>= fun () ->
           Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
-          move_tmpdirs_to_final new_logdir workdir >>= fun () ->
+          move_tmpdirs_to_final ~switches:switches' new_logdir workdir >>= fun () ->
           on_finished workdir;
           trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
-          Oca_lib.timer_log timer stderr "Operation"
+          Oca_lib.timer_log timer stderr "Clean up"
       | [] ->
           Lwt_io.write_line stderr "No switches."
       end
