@@ -311,7 +311,7 @@ let move_tmpdirs_to_final ~switches logdir workdir =
   let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
   let tmplogdir = Server_workdirs.tmplogdir logdir in
   let switches = List.map Intf.Switch.name switches in
-  Server_workdirs.logdir_compress ~switches logdir >>= fun () ->
+  Server_workdirs.logdir_move ~switches logdir >>= fun () ->
   Oca_lib.rm_rf metadatadir >>= fun () ->
   Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) >>= fun () ->
   Oca_lib.rm_rf tmplogdir
@@ -392,8 +392,9 @@ let run ~on_finished ~conf cache workdir =
       begin match switches with
       | switch::_ ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
+          let compressed = Server_configfile.enable_logs_compression conf in
           let old_logdir = List.head_opt old_logdir in
-          let new_logdir = Server_workdirs.new_logdir ~hash:opam_repo_commit ~start_time workdir in
+          let new_logdir = Server_workdirs.new_logdir ~compressed ~hash:opam_repo_commit ~start_time workdir in
           Server_workdirs.init_base_jobs ~switches:switches' new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
           Lwt_list.map_p (get_pkgs ~cap ~stderr ~conf) switches >>= fun pkgs ->

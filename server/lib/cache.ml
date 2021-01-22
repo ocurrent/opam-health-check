@@ -96,13 +96,8 @@ let create () = {
   html_run_list = Lwt.return "";
 }
 
-let call_pkgs ~pkgs = function
-  | [] ->
-      Lwt.return_nil
-  | (logdir, compilers)::logdirs ->
-      let pkg = pkgs ~old:false ~compilers logdir in
-      let pkgs = List.map (fun (logdir, compilers) -> (logdir, pkgs ~old:true ~compilers logdir)) logdirs in
-      Lwt.return ((logdir, pkg) :: pkgs)
+let call_pkgs ~pkgs logdirs =
+  Lwt.return (List.map (fun (logdir, compilers) -> (logdir, pkgs ~compilers logdir)) logdirs)
 
 let call_generate_diff (new_logdir, new_pkgs) (old_logdir, old_pkgs) =
   let diff =

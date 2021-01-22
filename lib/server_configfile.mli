@@ -9,7 +9,7 @@ val admin_port : t -> int
 val auto_run_interval : t -> int
 val processes : t -> int
 val enable_dune_cache : t -> bool
-val enable_in_memory_logs : t -> bool
+val enable_logs_compression : t -> bool
 val extra_repositories : t -> Intf.Repository.t list
 val with_test : t -> bool
 val list_command : t -> string

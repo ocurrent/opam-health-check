@@ -7,7 +7,7 @@ val create : unit -> t
 
 val clear_and_init :
   t ->
-  pkgs:(old:bool -> compilers:Intf.Compiler.t list -> Server_workdirs.logdir -> Intf.Pkg.t list Lwt.t) ->
+  pkgs:(compilers:Intf.Compiler.t list -> Server_workdirs.logdir -> Intf.Pkg.t list Lwt.t) ->
   compilers:(Server_workdirs.logdir -> Intf.Compiler.t list Lwt.t) ->
   logdirs:(unit -> Server_workdirs.logdir list Lwt.t) ->
   maintainers:(unit -> string list Maintainers_cache.t Lwt.t) ->

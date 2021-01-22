@@ -7,7 +7,7 @@ val keyfile : username:string -> t -> Fpath.t
 
 type logdir
 
-val new_logdir : hash:string -> start_time:float -> t -> logdir
+val new_logdir : compressed:bool -> hash:string -> start_time:float -> t -> logdir
 val logdirs : t -> logdir list Lwt.t
 
 val logdir_equal : logdir -> logdir -> bool
@@ -22,7 +22,7 @@ val notavailablefiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
 val internalfailurefiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
 val logdir_get_content : comp:Intf.Compiler.t -> state:Intf.State.t -> pkg:string -> logdir -> string Lwt.t
 val logdir_get_compilers : logdir -> Intf.Compiler.t list Lwt.t
-val logdir_compress : switches:Intf.Compiler.t list -> logdir -> unit Lwt.t
+val logdir_move : switches:Intf.Compiler.t list -> logdir -> unit Lwt.t
 val logdir_search : switch:string -> regexp:string -> logdir -> string list Lwt.t
 
 val ilogdir : t -> Fpath.t

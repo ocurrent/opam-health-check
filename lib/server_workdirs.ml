@@ -23,7 +23,11 @@ type logdir = Logdir of (logdir_ty * float * string * t * logdir_files Lwt.t)
 
 let base_logdir workdir = workdir/"logs"
 let base_tmpdir workdir = workdir/"tmp"
-let new_logdir ~hash ~start_time workdir = Logdir (Compressed, start_time, hash, workdir, Lwt.return [])
+
+let new_logdir ~compressed ~hash ~start_time workdir =
+  let ty = if compressed then Compressed else Uncompressed in
+  Logdir (ty, start_time, hash, workdir, Lwt.return [])
+
 let logdirs workdir =
   let base_logdir = base_logdir workdir in
   Oca_lib.get_files base_logdir >|= fun dirs ->
@@ -104,11 +108,16 @@ let logdir_search ~switch ~regexp = function
 let tmplogdir (Logdir (_, _, _, workdir, _) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"logs"
 let tmpswitchlogdir ~switch logdir = tmplogdir logdir/Intf.Compiler.to_string switch
 
-let logdir_compress ~switches (Logdir (_, _, _, workdir, _) as logdir) =
-  let cwd = tmplogdir logdir in
-  let directories = List.map Intf.Compiler.to_string switches in
-  let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
-  Oca_lib.compress_tpxz_archive ~cwd ~directories archive
+let logdir_move ~switches (Logdir (ty, _, _, workdir, _) as logdir) = match ty with
+  | Compressed ->
+      let cwd = tmplogdir logdir in
+      let directories = List.map Intf.Compiler.to_string switches in
+      let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
+      Oca_lib.compress_tpxz_archive ~cwd ~directories archive
+  | Uncompressed ->
+      let tmplogdir = tmplogdir logdir in
+      let logdir = base_logdir workdir/get_logdir_name logdir in
+      Lwt_unix.rename (Fpath.to_string tmplogdir) (Fpath.to_string logdir)
 
 let ilogdir workdir = workdir/"ilogs"
 let new_ilogfile ~start_time workdir = ilogdir workdir/Printf.sprintf "%.0f" start_time
