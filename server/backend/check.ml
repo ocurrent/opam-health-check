@@ -26,7 +26,8 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
   let action = Cluster_api.Submission.obuilder_build obuilder_content in
   let cache_hint = "opam-health-check-"^Digest.to_hex (Digest.string obuilder_content) in
-  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool:"linux-x86_64" ~action ~cache_hint) @@ fun ticket ->
+  let pool = Server_configfile.platform_os conf ^ "-" ^ Server_configfile.platform_arch conf in
+  Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool ~action ~cache_hint) @@ fun ticket ->
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
   Capnp_rpc_lwt.Capability.wait_until_settled job >>= fun () ->
   let proc =
@@ -106,8 +107,6 @@ let failure_kind logfile =
     lookup `Other
   end
 
-let distribution_used = "debian-unstable"
-
 let with_test pkg = {|
 elif [ $res = 0 ]; then
     opam reinstall -vty "|}^pkg^{|"
@@ -127,7 +126,7 @@ let run_script ~conf pkg = {|
 opam install -vy "|}^pkg^{|"
 res=$?
 if [ $res = 31 ]; then
-    if opam show -f x-ci-accept-failures: "|}^pkg^{|" | grep -q '"|}^distribution_used^{|"'; then
+    if opam show -f x-ci-accept-failures: "|}^pkg^{|" | grep -q '"|}^Server_configfile.platform_distribution conf^{|"'; then
         echo "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field."
         exit 69
     fi
