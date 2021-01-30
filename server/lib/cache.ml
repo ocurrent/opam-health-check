@@ -155,10 +155,6 @@ let get_revdeps self k =
   self.revdeps >|= fun revdeps ->
   Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k)
 
-let call_html_diff ~html_diff ((old_logdir, old_pkgs), (new_logdir, new_pkgs)) =
-  let html_diff = generate_diff old_pkgs new_pkgs |> html_diff ~old_logdir ~new_logdir in
-  ((old_logdir, new_logdir), html_diff)
-
 let get_html_diff ~old_logdir ~new_logdir self =
   get_pkgs ~logdir:old_logdir self >>= fun old_pkgs ->
   get_pkgs ~logdir:new_logdir self >|= fun new_pkgs ->
