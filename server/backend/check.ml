@@ -123,6 +123,7 @@ let with_test ~conf pkg =
     ""
 
 let run_script ~conf pkg = {|
+set -e
 opam install -vy "|}^pkg^{|"
 res=$?
 if [ $res = 31 ]; then
@@ -180,21 +181,31 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
   in
   let open Obuilder_spec in
   let cache = cache ~conf in
-  stage ~from:("ocurrent/opam:"^distribution_used) begin
+  let from = match Server_configfile.platform_os conf with
+    | "linux" -> "ocurrent/opam:"^Server_configfile.platform_distribution conf
+    | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
+  in
+  stage ~from begin
     [ user ~uid:1000 ~gid:1000;
-      workdir "/home/opam";
-      run ~network "git clone git://github.com/kit-ty-kate/opam.git /tmp/opam && git -C /tmp/opam checkout %s" (Filename.quote opam_commit);
-      run ~network "sudo apt-get update";
-      run ~network "sudo apt-get install -yy m4";
-      run ~network "opam pin add -yn /tmp/opam";
-      run ~network "opam install -y opam-devel opam-0install-cudf";
-      run "sudo apt-get purge --autoremove -yy m4";
-      run {|sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam|};
-      run "rm -rf /tmp/opam";
-      run ~network "git -C opam-repository pull origin master && git -C opam-repository checkout %s" (Filename.quote opam_repo_commit);
+      run ~cache ~network {|
+        set -e
+        git clone git://github.com/kit-ty-kate/opam.git /tmp/opam
+        git -C /tmp/opam checkout %s
+        opam pin add -yn ocamlfind git://github.com/kit-ty-kate/ocamlfind.git
+        opam pin add -yn /tmp/opam
+        opam install -y opam-devel opam-0install-cudf
+        sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam
+        rm -rf /tmp/opam /tmp/depext.txt ~/.opam
+        if ! test -d ~/opam-repository; then
+          git clone git://github.com/ocaml/opam-repository.git ~/opam-repository
+        else
+          git -C ~/opam-repository pull origin master
+        fi
+        git -C ~/opam-repository checkout %s
+      |} (Filename.quote opam_commit) (Filename.quote opam_repo_commit);
     ] @
-    (if Server_configfile.enable_dune_cache conf then
-       [run ~network "git -C opam-repository pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
+    (if Server_configfile.enable_dune_cache conf then (* TODO: Replace this by a pin of the latest version of dune *)
+       [run ~network "git -C ~/opam-repository pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
      else
        []
     ) @ [
@@ -202,14 +213,14 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMDEPEXTYES" "1";
       env "OPAMDROPINSTALLEDPACKAGES" "1";
-      run "rm -rf /home/opam/.opam && opam init -ya --bare --disable-sandboxing opam-repository";
+      run "opam init -ya --bare --disable-sandboxing ~/opam-repository";
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
         let name = Filename.quote (Intf.Repository.name repo) in
         let github = Intf.Repository.github repo in
-        [ run ~network "git clone 'git://github.com/%s.git' %s && git -C %s checkout %s" github name name hash;
-          run "opam repository add --dont-select %s %s" name name;
+        [ run ~network "git clone 'git://github.com/%s.git' %s && git -C ~/%s checkout %s" github name name hash;
+          run "opam repository add --dont-select %s ~/%s" name name;
         ]
       ) extra_repos
     ) @ [
@@ -218,6 +229,7 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
         (Intf.Switch.switch switch);
       run ~network "sudo apt-get update";
     ] @
+    (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
     (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
        [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
        (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
