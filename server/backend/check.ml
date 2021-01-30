@@ -191,7 +191,7 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
         set -e
         git clone git://github.com/kit-ty-kate/opam.git /tmp/opam
         git -C /tmp/opam checkout %s
-        opam pin add -yn ocamlfind git://github.com/kit-ty-kate/ocamlfind.git
+        opam pin add -yn ocamlfind git://github.com/kit-ty-kate/ocamlfind.git#no-m4
         opam pin add -yn /tmp/opam
         opam install -y opam-devel opam-0install-cudf
         sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam
