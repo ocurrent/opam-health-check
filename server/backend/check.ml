@@ -187,7 +187,7 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
   in
   stage ~from begin
     [ user ~uid:1000 ~gid:1000;
-      run ~cache ~network {|
+      run ~network {|
         set -e
         git clone git://github.com/kit-ty-kate/opam.git /tmp/opam
         git -C /tmp/opam checkout %s
