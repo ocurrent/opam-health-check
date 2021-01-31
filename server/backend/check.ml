@@ -219,7 +219,7 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
       List.map (fun (repo, hash) ->
         let name = Filename.quote (Intf.Repository.name repo) in
         let github = Intf.Repository.github repo in
-        [ run ~network "git clone 'git://github.com/%s.git' %s && git -C ~/%s checkout %s" github name name hash;
+        [ run ~network "git clone 'git://github.com/%s.git' ~/%s && git -C ~/%s checkout %s" github name name hash;
           run "opam repository add --dont-select %s ~/%s" name name;
         ]
       ) extra_repos
