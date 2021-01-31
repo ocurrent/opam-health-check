@@ -154,6 +154,11 @@ let yaml_of_conf conf =
     "with-test", `Bool (Option.get_exn conf.with_test);
     "list-command", `String (Option.get_exn conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
+    "platform", `O [
+      "os", `String (Option.get_exn conf.platform_os);
+      "arch", `String (Option.get_exn conf.platform_arch);
+      "distribution", `String (Option.get_exn conf.platform_distribution);
+    ];
     "ocaml-switches", Option.map_or ~default:`Null yaml_of_ocaml_switches conf.ocaml_switches;
     "slack-webhooks", Option.map_or ~default:`Null yaml_of_slack_webhooks conf.slack_webhooks;
   ]
