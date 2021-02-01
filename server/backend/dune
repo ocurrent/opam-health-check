@@ -3,6 +3,7 @@
   (flags :standard -safe-string -w A-44-33-4 -open Containers)
   (libraries
     oca_lib
+    fmt
     cohttp-lwt-unix
     containers
     oca_server

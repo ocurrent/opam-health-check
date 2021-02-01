@@ -19,6 +19,7 @@ depends: [
   "mirage-crypto-rng" {>= "0.7.0"}
   "cmdliner"
   "fpath"
+  "fmt" {>= "0.8.7"}
   "re" {>= "1.7.2"}
   "yaml" {>= "2.0.0"}
   "ocaml-xdg-basedir"
