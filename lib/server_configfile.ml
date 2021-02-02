@@ -14,6 +14,9 @@ type t = {
   mutable with_test : bool option;
   mutable list_command : string option;
   mutable extra_command : string option;
+  mutable platform_os : string option;
+  mutable platform_arch : string option;
+  mutable platform_distribution : string option;
   mutable ocaml_switches : Intf.Switch.t list option;
   mutable slack_webhooks : Uri.t list option;
 }
@@ -32,6 +35,9 @@ let create_conf yamlfile = {
   with_test = None;
   list_command = None;
   extra_command = None;
+  platform_os = None;
+  platform_arch = None;
+  platform_distribution = None;
   ocaml_switches = None;
   slack_webhooks = None;
 }
@@ -95,6 +101,17 @@ let set_config conf = function
       set_field ~field (fun () -> conf.list_command <- Some list_command) conf.list_command
   | "extra-command" as field, `String extra_command ->
       set_field ~field (fun () -> conf.extra_command <- Some extra_command) conf.extra_command
+  | "platform", `O platform ->
+      List.iter (function
+        | "os" as field, `String os ->
+            set_field ~field (fun () -> conf.platform_os <- Some os) conf.platform_os
+        | "arch" as field, `String arch ->
+            set_field ~field (fun () -> conf.platform_arch <- Some arch) conf.platform_arch
+        | "distribution" as field, `String distribution ->
+            set_field ~field (fun () -> conf.platform_distribution <- Some distribution) conf.platform_distribution
+        | field, _ ->
+            failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
+      ) platform
   | "ocaml-switches" as field, `A switches ->
       let switches = List.map get_comp switches in
       set_field ~field (fun () -> conf.ocaml_switches <- Some switches) conf.ocaml_switches
@@ -137,6 +154,11 @@ let yaml_of_conf conf =
     "with-test", `Bool (Option.get_exn conf.with_test);
     "list-command", `String (Option.get_exn conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
+    "platform", `O [
+      "os", `String (Option.get_exn conf.platform_os);
+      "arch", `String (Option.get_exn conf.platform_arch);
+      "distribution", `String (Option.get_exn conf.platform_distribution);
+    ];
     "ocaml-switches", Option.map_or ~default:`Null yaml_of_ocaml_switches conf.ocaml_switches;
     "slack-webhooks", Option.map_or ~default:`Null yaml_of_slack_webhooks conf.slack_webhooks;
   ]
@@ -164,6 +186,12 @@ let set_defaults conf =
     conf.with_test <- Some false; (* TODO: Enable by default in the future (takes 1.5x the time) *)
   if Option.is_none conf.list_command then
     conf.list_command <- Some Oca_lib.default_list_command;
+  if Option.is_none conf.platform_os then
+    conf.platform_os <- Some "linux";
+  if Option.is_none conf.platform_arch then
+    conf.platform_arch <- Some "x86_64";
+  if Option.is_none conf.platform_distribution then
+    conf.platform_distribution <- Some "debian-unstable";
   if Option.is_none conf.slack_webhooks then
     conf.slack_webhooks <- Some [];
   let yaml = Result.get_exn (Yaml.to_string (yaml_of_conf conf)) in
@@ -231,5 +259,8 @@ let extra_repositories {extra_repositories; _} = Option.get_exn extra_repositori
 let with_test {with_test; _} = Option.get_exn with_test
 let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
+let platform_os {platform_os; _} = Option.get_exn platform_os
+let platform_arch {platform_arch; _} = Option.get_exn platform_arch
+let platform_distribution {platform_distribution; _} = Option.get_exn platform_distribution
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let slack_webhooks {slack_webhooks; _} = Option.get_exn slack_webhooks

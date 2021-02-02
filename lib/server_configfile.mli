@@ -14,6 +14,9 @@ val extra_repositories : t -> Intf.Repository.t list
 val with_test : t -> bool
 val list_command : t -> string
 val extra_command : t -> string option
+val platform_os : t -> string
+val platform_arch : t -> string
+val platform_distribution : t -> string
 val ocaml_switches : t -> Intf.Switch.t list option
 val slack_webhooks : t -> Uri.t list
 
