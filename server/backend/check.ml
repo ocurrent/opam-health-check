@@ -49,14 +49,21 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   let timeout =
     let hours = 2 in
     Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
-    Cluster_api.Job.cancel job >>= fun cancel_result ->
-    Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" >>= fun () ->
-    begin match cancel_result with
-    | Ok () ->
-        Lwt_io.write_line stdout "+++ Job cancelled +++"
-    | Error (`Capnp err) ->
-        Lwt_io.write_line stdout (Fmt.str "+++ Could not cancel job: %a +++" Capnp_rpc.Error.pp err)
-    end >>= fun () ->
+    let cancel =
+      Cluster_api.Job.cancel job >>= fun cancel_result ->
+      Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" >>= fun () ->
+      match cancel_result with
+      | Ok () ->
+          Lwt_io.write_line stdout "+++ Job cancelled +++"
+      | Error (`Capnp err) ->
+          Lwt_io.write_line stdout (Fmt.str "+++ Could not cancel job: %a +++" Capnp_rpc.Error.pp err)
+    in
+    let timeout =
+      let minute = 1 in
+      Lwt_unix.sleep (float_of_int (minute * 60)) >>= fun () ->
+      Lwt_io.write_line stdout "+++ Cancellation failed +++"
+    in
+    Lwt.pick [cancel; timeout] >>= fun () ->
     Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_int hours^" hours).") >>= fun () ->
     Lwt.return (Error ())
   in
