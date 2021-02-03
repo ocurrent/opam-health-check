@@ -130,7 +130,6 @@ let with_test ~conf pkg =
     ""
 
 let run_script ~conf pkg = {|
-set -e
 opam install -vy "|}^pkg^{|"
 res=$?
 if [ $res = 31 ]; then
