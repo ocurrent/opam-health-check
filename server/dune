@@ -2,7 +2,7 @@
   (name main)
   (public_name opam-health-serve)
   (flags :standard -safe-string -w A-44-33-4 -open Containers)
-  (libraries backend cmdliner oca_server))
+  (libraries backend lwt.unix containers cmdliner oca_server))
 
 (rule
   (with-stdout-to config.ml

@@ -4,9 +4,17 @@
   (flags :standard -safe-string -w A-44-33-4 -open Containers)
   (libraries
     mirage-crypto-pk
+    cohttp
+    cohttp-lwt
     cohttp-lwt-unix
     containers
     xdg-basedir
+    fpath
+    uri
+    lwt
+    lwt.unix
+    sexplib
+    cstruct
     oca_lib
     cmdliner
     yaml))

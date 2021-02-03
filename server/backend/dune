@@ -4,12 +4,25 @@
   (libraries
     oca_lib
     fmt
+    uri
+    lwt
+    lwt.unix
+    fpath
+    cohttp
+    cohttp-lwt
     cohttp-lwt-unix
+    sexplib
+    sexplib0
+    cstruct
     containers
     oca_server
+    opam-core
     obuilder-spec
     ocluster-api
+    capnp-rpc
+    capnp-rpc-lwt
     capnp-rpc-unix
+    github
     github-unix
     mirage-crypto-pk
     mirage-crypto-rng.lwt))
