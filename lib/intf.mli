@@ -63,7 +63,7 @@ module Pkg : sig
   val create :
     full_name:string ->
     instances:Instance.t list ->
-    maintainers:string list ->
+    opam:OpamFile.OPAM.t ->
     revdeps:int ->
     t
 
@@ -73,7 +73,7 @@ module Pkg : sig
   val full_name : t -> string
   val name : t -> string
   val version : t -> string
-  val maintainers : t -> string list
+  val opam : t -> OpamFile.OPAM.t
   val instances : t -> Instance.t list
   val revdeps : t -> int
 end

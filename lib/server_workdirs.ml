@@ -136,14 +136,14 @@ let tmpnotavailablelog ~pkg ~switch logdir = tmpnotavailabledir ~switch logdir/p
 let tmpinternalfailurelog ~pkg ~switch logdir = tmpinternalfailuredir ~switch logdir/pkg
 
 let metadatadir workdir = workdir/"metadata"
-let maintainersdir workdir = metadatadir workdir/"maintainers"
-let maintainersfile ~pkg workdir = maintainersdir workdir/pkg
+let opamsdir workdir = metadatadir workdir/"opams"
+let opamfile ~pkg workdir = opamsdir workdir/pkg
 let revdepsdir workdir = metadatadir workdir/"revdeps"
 let revdepsfile ~pkg workdir = revdepsdir workdir/pkg
 
 let tmpmetadatadir (Logdir (_, _, _, workdir, _) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"metadata"
-let tmpmaintainersdir logdir = tmpmetadatadir logdir/"maintainers"
-let tmpmaintainersfile ~pkg logdir = tmpmaintainersdir logdir/pkg
+let tmpopamsdir logdir = tmpmetadatadir logdir/"opams"
+let tmpopamfile ~pkg logdir = tmpopamsdir logdir/pkg
 let tmprevdepsdir logdir = tmpmetadatadir logdir/"revdeps"
 let tmprevdepsfile ~pkg logdir = tmprevdepsdir logdir/pkg
 
@@ -153,7 +153,7 @@ let init_base workdir =
   Oca_lib.mkdir_p (keysdir workdir) >>= fun () ->
   Oca_lib.mkdir_p (base_logdir workdir) >>= fun () ->
   Oca_lib.mkdir_p (ilogdir workdir) >>= fun () ->
-  Oca_lib.mkdir_p (maintainersdir workdir) >>= fun () ->
+  Oca_lib.mkdir_p (opamsdir workdir) >>= fun () ->
   Oca_lib.mkdir_p (revdepsdir workdir)
 
 let init_base_job ~switch logdir =
@@ -168,5 +168,5 @@ let init_base_jobs ~switches logdir =
   Oca_lib.mkdir_p (tmplogdir logdir) >>= fun () ->
   Oca_lib.mkdir_p (tmpmetadatadir logdir) >>= fun () ->
   Oca_lib.mkdir_p (tmprevdepsdir logdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpmaintainersdir logdir) >>= fun () ->
+  Oca_lib.mkdir_p (tmpopamsdir logdir) >>= fun () ->
   Lwt_list.iter_s (fun switch -> init_base_job ~switch logdir) switches

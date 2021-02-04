@@ -19,7 +19,7 @@ module Html_cache = Hashtbl.Make (struct
       Option.equal (fun (_, comp1) (_, comp2) -> Intf.Compiler.equal comp1 comp2) (snd logsearch) (snd y.Html.logsearch)
   end)
 
-module Maintainers_cache = Hashtbl.Make (String)
+module Opams_cache = Hashtbl.Make (String)
 module Revdeps_cache = Hashtbl.Make (String)
 
 type merge =
@@ -75,7 +75,7 @@ type t = {
   mutable logdirs : Server_workdirs.logdir list Lwt.t;
   mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t) list Lwt.t;
   mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list) list Lwt.t;
-  mutable maintainers : string list Maintainers_cache.t Lwt.t;
+  mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
   mutable pkgs_diff : ((Server_workdirs.logdir * Intf.Pkg.t list Lwt.t) * (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t)) list Lwt.t;
   mutable html_diff : old_logdir:Server_workdirs.logdir -> new_logdir:Server_workdirs.logdir -> Html.diff -> string;
@@ -88,7 +88,7 @@ let create () = {
   logdirs = Lwt.return_nil;
   pkgs = Lwt.return_nil;
   compilers = Lwt.return_nil;
-  maintainers = Lwt.return (Maintainers_cache.create 0);
+  opams = Lwt.return (Opams_cache.create 0);
   revdeps = Lwt.return (Revdeps_cache.create 0);
   pkgs_diff = Lwt.return_nil;
   html_diff = (fun ~old_logdir:_ ~new_logdir:_ _ -> "");
@@ -105,8 +105,8 @@ let call_html_diff_list diff =
 let call_html_run_list pkgs =
   Html.get_run_list (List.map fst pkgs)
 
-let clear_and_init self ~pkgs ~compilers ~logdirs ~maintainers ~revdeps ~html_diff =
-  self.maintainers <- maintainers ();
+let clear_and_init self ~pkgs ~compilers ~logdirs ~opams ~revdeps ~html_diff =
+  self.opams <- opams ();
   self.revdeps <- revdeps ();
   self.logdirs <- logdirs ();
   self.compilers <- self.logdirs >>= Lwt_list.map_s (fun logdir -> compilers logdir >|= fun c -> (logdir, c));
@@ -147,9 +147,9 @@ let get_pkgs ~logdir self =
 let get_compilers ~logdir self =
   self.compilers >|= List.assoc ~eq:Server_workdirs.logdir_equal logdir
 
-let get_maintainers self k =
-  self.maintainers >|= fun maintainers ->
-  Option.get_or ~default:[] (Maintainers_cache.find_opt maintainers k)
+let get_opam self k =
+  self.opams >|= fun opams ->
+  Option.get_or ~default:OpamFile.OPAM.empty (Opams_cache.find_opt opams k)
 
 let get_revdeps self k =
   self.revdeps >|= fun revdeps ->

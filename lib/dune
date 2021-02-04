@@ -6,6 +6,7 @@
     lwt
     lwt.unix
     opam-core
+    opam-format
     yaml
     fpath
     uri

@@ -270,7 +270,7 @@ let get_pkgs ~cap ~conf ~stderr (switch, base_obuilder) =
   ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
-    match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~maintainers:[] ~revdeps:0) with (* TODO: Remove this horror *)
+    match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) with (* TODO: Remove this horror *)
     | "ocaml" | "ocaml-base-compiler" | "ocaml-variants" | "ocaml-beta" | "ocaml-config" -> false
     | _ -> true
   end pkgs in
@@ -296,21 +296,21 @@ let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
       Lwt_io.write c (string_of_int (List.length revdeps - 1))
     )
   in
-  let get_maintainers ~base_obuilder ~pkgname ~logdir =
+  let get_latest_metadata ~base_obuilder ~pkgname ~logdir = (* TODO: Get this locally by merging all the repository and parsing the opam files using opam-core *)
     ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
-      ("(opam show -f maintainer: "^Filename.quote pkgname^{| | sed -E 's/^\"(.*)\"\$/\1/')|})
-    >>= fun maintainers ->
-    Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpmaintainersfile ~pkg:pkgname logdir)) (fun c ->
-      Lwt_io.write c (String.concat "\n" maintainers)
+      ("(opam show --raw "^Filename.quote pkgname)
+    >>= fun opam ->
+    Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpopamfile ~pkg:pkgname logdir)) (fun c ->
+      Lwt_io.write c (String.concat "\n" opam)
     )
   in
   Pkg_set.fold begin fun full_name (pkgs_set, jobs) ->
-    let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
+    let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) in (* TODO: Remove this horror *)
     let job =
       Lwt_pool.use pool begin fun () ->
         Lwt_io.write_line stderr ("Getting metadata for "^full_name) >>= fun () ->
         get_revdeps ~base_obuilder ~pkg:full_name ~logdir >>= fun () ->
-        if Pkg_set.mem pkgname pkgs_set then Lwt.return_unit else get_maintainers ~base_obuilder ~pkgname ~logdir
+        if Pkg_set.mem pkgname pkgs_set then Lwt.return_unit else get_latest_metadata ~base_obuilder ~pkgname ~logdir
       end
     in
     (Pkg_set.add pkgname pkgs_set, job :: jobs)

@@ -17,6 +17,7 @@
     containers
     oca_server
     opam-core
+    opam-format
     obuilder-spec
     ocluster-api
     capnp-rpc

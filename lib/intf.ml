@@ -99,18 +99,18 @@ module Pkg = struct
     full_name : string;
     name : string;
     version : string;
-    maintainers : string list;
+    opam : OpamFile.OPAM.t; (* TODO: Factorize this with the fields above *)
     instances : Instance.t list;
     revdeps : int;
   }
 
-  let create ~full_name ~instances ~maintainers ~revdeps =
+  let create ~full_name ~instances ~opam ~revdeps =
     let (name, version) =
       match String.Split.left ~by:"." full_name with
       | Some x -> x
       | None -> failwith "packages must have a version separated by a dot"
     in
-    {full_name; name; version; maintainers; instances; revdeps}
+    {full_name; name; version; opam; instances; revdeps}
 
   let equal x y =
     String.equal x.name y.name &&
@@ -124,7 +124,7 @@ module Pkg = struct
   let full_name x = x.full_name
   let name x = x.name
   let version x = x.version
-  let maintainers x = x.maintainers
+  let opam x = x.opam
   let instances x = x.instances
   let revdeps x = x.revdeps
 end

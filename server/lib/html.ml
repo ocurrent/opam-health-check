@@ -63,7 +63,7 @@ let (>>&&) x f =
   if x then f () else Lwt.return_false
 
 let must_show_package ~logsearch query ~last pkg =
-  let maintainers = Pkg.maintainers pkg in
+  let opam = Pkg.opam pkg in
   let instances' = Pkg.instances pkg in
   let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.compilers) instances' in
   begin
@@ -103,7 +103,7 @@ let must_show_package ~logsearch query ~last pkg =
   end >>&& begin fun () ->
     Lwt.return @@
     match snd query.maintainers with
-    | Some re -> List.exists (Re.execp re) maintainers
+    | Some re -> List.exists (Re.execp re) opam.OpamFile.OPAM.maintainer
     | None -> true
   end >>&& begin fun () ->
     match snd query.logsearch with
@@ -192,7 +192,7 @@ let get_logsearch ~query ~logdir =
       Server_workdirs.logdir_search ~switch ~regexp logdir >|=
       List.filter_map (fun s ->
         match String.split_on_char '/' s with
-        | [_switch; _state; full_name] -> Some (Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:(-1))
+        | [_switch; _state; full_name] -> Some (Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:(-1))
         | _ -> None
       )
 

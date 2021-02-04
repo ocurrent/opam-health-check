@@ -38,14 +38,14 @@ val tmpnotavailablelog : pkg:string -> switch:Intf.Compiler.t -> logdir -> Fpath
 val tmpinternalfailurelog : pkg:string -> switch:Intf.Compiler.t -> logdir -> Fpath.t
 
 val metadatadir : t -> Fpath.t
-val maintainersdir : t -> Fpath.t
-val maintainersfile : pkg:string -> t -> Fpath.t
+val opamsdir : t -> Fpath.t
+val opamfile : pkg:string -> t -> Fpath.t
 val revdepsdir : t -> Fpath.t
 val revdepsfile : pkg:string -> t -> Fpath.t
 
 val tmpmetadatadir : logdir -> Fpath.t
-val tmpmaintainersdir : logdir -> Fpath.t
-val tmpmaintainersfile : pkg:string -> logdir -> Fpath.t
+val tmpopamsdir : logdir -> Fpath.t
+val tmpopamfile : pkg:string -> logdir -> Fpath.t
 val tmprevdepsdir : logdir -> Fpath.t
 val tmprevdepsfile : pkg:string -> logdir -> Fpath.t
 

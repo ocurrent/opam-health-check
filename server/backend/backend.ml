@@ -35,11 +35,11 @@ let fill_pkgs_from_dir ~pool pkg_tbl logdir comp =
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.InternalFailure) internalfailure_files
 
 let add_pkg full_name instances acc =
-  let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~maintainers:[] ~revdeps:0) in (* TODO: Remove this horror *)
+  let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) in (* TODO: Remove this horror *)
   acc >>= fun acc ->
-  Oca_server.Cache.get_maintainers cache pkg >>= fun maintainers ->
+  Oca_server.Cache.get_opam cache pkg >>= fun opam ->
   Oca_server.Cache.get_revdeps cache full_name >|= fun revdeps ->
-  Intf.Pkg.create ~full_name ~instances ~maintainers ~revdeps :: acc
+  Intf.Pkg.create ~full_name ~instances ~opam ~revdeps :: acc
 
 let get_pkgs ~pool ~compilers logdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
@@ -53,18 +53,17 @@ let get_log _ ~logdir ~comp ~state ~pkg =
   let instance = List.find (fun inst -> Intf.Compiler.equal comp (Intf.Instance.compiler inst) && Intf.State.equal state (Intf.Instance.state inst)) (Intf.Pkg.instances pkg) in
   Intf.Instance.content instance
 
-let get_maintainers workdir =
-  let dir = Server_workdirs.maintainersdir workdir in
+let get_opams workdir =
+  let dir = Server_workdirs.opamsdir workdir in
   Oca_lib.get_files dir >>= fun files ->
-  let maintainers = Oca_server.Cache.Maintainers_cache.create 10_000 in
+  let opams = Oca_server.Cache.Opams_cache.create 10_000 in
   Lwt_list.iter_s begin fun pkg ->
-    let file = Server_workdirs.maintainersfile ~pkg workdir in
+    let file = Server_workdirs.opamfile ~pkg workdir in
     Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) >|= fun content ->
-    let content = String.split_on_char '\n' content in
-    let content = List.filter (fun pkg -> not (String.is_empty pkg)) content in
-    Oca_server.Cache.Maintainers_cache.add maintainers pkg content
+    let content = OpamFile.OPAM.read_from_string content in
+    Oca_server.Cache.Opams_cache.add opams pkg content
   end files >|= fun () ->
-  maintainers
+  opams
 
 let get_revdeps workdir =
   let dir = Server_workdirs.revdepsdir workdir in
@@ -94,7 +93,7 @@ let cache_clear_and_init workdir =
     ~pkgs:(fun ~compilers logdir -> get_pkgs ~pool ~compilers logdir)
     ~compilers:(fun logdir -> get_compilers logdir)
     ~logdirs:(fun () -> Server_workdirs.logdirs workdir)
-    ~maintainers:(fun () -> get_maintainers workdir)
+    ~opams:(fun () -> get_opams workdir)
     ~revdeps:(fun () -> get_revdeps workdir)
     ~html_diff:Oca_server.Html.get_diff
 
