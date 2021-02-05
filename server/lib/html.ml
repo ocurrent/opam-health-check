@@ -58,6 +58,9 @@ let instance_to_html ~pkg logdir instances comp =
       end
   | None -> td "cell-not-available" [txt "☐"] (* NOTE: Should not happen in the new versions but can happen with old data or custom runs *)
 
+let is_deprecated flag =
+  String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
+
 let (>>&&) x f =
   x >>= fun x ->
   if x then f () else Lwt.return_false
@@ -96,7 +99,7 @@ let must_show_package ~logsearch query ~last pkg =
     Lwt.return @@
     if query.show_latest_only then
       match last with
-      | None -> true
+      | None -> not (List.exists is_deprecated opam.OpamFile.OPAM.flags)
       | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
     else
       true
