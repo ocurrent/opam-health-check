@@ -298,7 +298,7 @@ let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   in
   let get_latest_metadata ~base_obuilder ~pkgname ~logdir = (* TODO: Get this locally by merging all the repository and parsing the opam files using opam-core *)
     ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
-      ("(opam show --raw "^Filename.quote pkgname)
+      ("opam show --raw "^Filename.quote pkgname)
     >>= fun opam ->
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpopamfile ~pkg:pkgname logdir)) (fun c ->
       Lwt_io.write c (String.concat "\n" opam)
