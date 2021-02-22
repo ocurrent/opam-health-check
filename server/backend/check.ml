@@ -113,8 +113,8 @@ let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
     let rec lookup res =
       Lwt_io.read_line_opt ic >>= function
-      | Some "+- The following actions failed" -> lookup `Failure
-      | Some "+- The following actions were aborted" -> Lwt.return `Partial
+      | Some "+- The following actions failed" | Some "┌─ The following actions failed" -> lookup `Failure
+      | Some "+- The following actions were aborted" | Some "┌─ The following actions were aborted" -> Lwt.return `Partial
       | Some "[ERROR] Package conflict!" -> lookup `NotAvailable
       | Some "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field." -> lookup `AcceptFailures
       | Some "+++ Timeout!! (2 hours) +++" -> Lwt.return `Timeout
@@ -140,6 +140,8 @@ let with_test ~conf pkg =
   else
     ""
 
+let install pkg = Fmt.str "opam install -vy %s" pkg
+
 let run_script ~conf pkg = {|
 opam install -vy "|}^pkg^{|"
 res=$?
@@ -159,7 +161,8 @@ let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
     Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) begin fun stdout ->
-      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg)
+      (* ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg) *)
+      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (install pkg)
     end >>= function
     | Ok () ->
         Lwt_io.write_line stderr ("["^num^"] succeeded.") >>= fun () ->
@@ -185,6 +188,81 @@ let () =
   Lwt.async_exception_hook := begin fun e ->
     let msg = Printexc.to_string e in
     prerr_endline ("Async exception raised: "^msg);
+  end
+
+let major_minor_ocaml s =
+  Ocaml_version.(to_string ~prerelease_sep:'~' ~sep:'+' @@ (of_string_exn s |> with_just_major_and_minor))
+
+let get_obuilder_macos ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
+  let extra_repos =
+    let switch = Intf.Switch.name switch in
+    List.filter (fun (repo, _) ->
+      match Intf.Repository.for_switches repo with
+      | None -> true
+      | Some for_switches -> List.exists (Intf.Compiler.equal switch) for_switches
+    ) extra_repos
+  in
+  let open Obuilder_spec in
+  let cache = cache ~conf in
+  let from = match Server_configfile.platform_os conf with
+    | "macos" -> Fmt.str "macos-%s-ocaml-%s" (Server_configfile.platform_distribution conf) (major_minor_ocaml (Intf.(Switch.name switch |> Compiler.to_string)))
+    | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
+  in
+  stage ~from begin
+    [
+      (* macOS can't cope with scripts... yet... *)
+      run ~network "opam init -ya --compiler=ocaml-system && \
+        mkdir -p ./tmp && \
+        git clone git://github.com/kit-ty-kate/opam.git ./tmp/opam && \
+        git -C ./tmp/opam checkout %s && \
+        opam pin add -yn ocamlfind git://github.com/kit-ty-kate/ocamlfind.git#no-m4 && \
+        opam pin add -yn ./tmp/opam && \
+        opam install -y opam-devel opam-0install-cudf && \
+        mv \"$(opam var opam-devel:lib)/opam\" ./local/bin/opam && \
+        rm -rf ./tmp/opam ./tmp/depext.txt ~/.opam && \
+        git clone git://github.com/ocaml/opam-repository.git ~/opam-repository && \
+        git -C ~/opam-repository checkout %s" (Filename.quote opam_commit) (Filename.quote opam_repo_commit);
+    ] @
+    (if Server_configfile.enable_dune_cache conf then (* TODO: Replace this by a pin of the latest version of dune *)
+       [run ~network "git -C ~/opam-repository pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
+     else
+       []
+    ) @ [
+      env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
+      env "OPAMEXTERNALSOLVER" "builtin-0install";
+      env "OPAMDEPEXTYES" "1";
+      env "OPAMDROPINSTALLEDPACKAGES" "1";
+      run "opam init -ya --compiler=ocaml-system ~/opam-repository";
+    ] @
+    List.flatten (
+      List.map (fun (repo, hash) ->
+        let name = Filename.quote (Intf.Repository.name repo) in
+        let github = Intf.Repository.github repo in
+        [ run ~network "git clone 'git://github.com/%s.git' ~/%s && git -C ~/%s checkout %s" github name name hash;
+          run "opam repository add --dont-select %s ~/%s" name name;
+        ]
+      ) extra_repos
+    ) @
+    (* TODO: Should this be removed now that it is part of the base docker images? What about macOS -- for now only test 4.08+ for macOS? *)
+    (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
+       [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
+       (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
+                and https://github.com/ocaml/opam-repository/pull/15642 *)
+     else
+       []
+    ) @
+    (match Server_configfile.extra_command conf with
+     | Some c -> [run ~cache ~network "%s" c]
+     | None -> []
+    ) @
+    (if Server_configfile.enable_dune_cache conf then
+       [ env "DUNE_CACHE" "enabled";
+         env "DUNE_CACHE_TRANSPORT" "direct";
+         env "DUNE_CACHE_DUPLICATION" "copy";
+       ]
+     else
+       []
+    )
   end
 
 let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
@@ -423,7 +501,8 @@ let run ~debug ~on_finished ~conf cache workdir =
       get_commit_hash ~user:"kit-ty-kate" ~repo:"opam" ~branch:"opam-health-check3" >>= fun opam_commit ->
       get_commit_hash_extra_repos conf >>= fun extra_repos ->
       let switches' = switches in
-      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch)) switches in
+      (* let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch)) switches in *)
+      let switches = List.map (fun switch -> (switch, get_obuilder_macos ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch)) switches in
       begin match switches with
       | switch::_ ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->

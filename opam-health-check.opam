@@ -28,7 +28,7 @@ depends: [
   "sexplib" {>= "v0.9.0"}
   "sexplib0" {>= "v0.9.0"}
   "ocaml-xdg-basedir"
-  "obuilder-spec" {>= "0.2"}
+  # "obuilder-spec" {>= "0.2"}
   "ocluster-api" {>= "0.1"}
   "github"
   "github-unix"

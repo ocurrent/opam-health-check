@@ -20,6 +20,7 @@
     opam-format
     obuilder-spec
     ocluster-api
+    ocaml-version
     capnp-rpc
     capnp-rpc-lwt
     capnp-rpc-unix
