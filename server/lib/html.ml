@@ -65,7 +65,7 @@ let (>>&&) x f =
   x >>= fun x ->
   if x then f () else Lwt.return_false
 
-let must_show_package ~logsearch query ~last pkg =
+let must_show_package ~logsearch query ~is_latest pkg =
   let opam = Pkg.opam pkg in
   let instances' = Pkg.instances pkg in
   let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.compilers) instances' in
@@ -98,9 +98,10 @@ let must_show_package ~logsearch query ~last pkg =
   end >>&& begin fun () ->
     Lwt.return @@
     if query.show_latest_only then
-      match last with
-      | None -> not (List.exists is_deprecated opam.OpamFile.OPAM.flags)
-      | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
+      if is_latest then
+        not (List.exists is_deprecated opam.OpamFile.OPAM.flags)
+      else
+        false
     else
       true
   end >>&& begin fun () ->
@@ -115,7 +116,11 @@ let must_show_package ~logsearch query ~last pkg =
   end
 
 let filter_pkg ~logsearch query (acc, last) pkg =
-  must_show_package ~logsearch query ~last pkg >|= function
+  let is_latest = match last with
+    | None -> true
+    | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
+  in
+  must_show_package ~logsearch query ~is_latest pkg >|= function
   | true -> (pkg :: acc, Some pkg)
   | false -> (acc, Some pkg)
 
