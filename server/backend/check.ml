@@ -295,11 +295,11 @@ let revdeps_script pkg =
   |}
 
 let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
-  let get_revdeps ~base_obuilder ~pkg ~logdir =
+  let get_revdeps ~base_obuilder ~pkgname ~pkg ~logdir =
     ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) >>= fun revdeps ->
     let module Set = Set.Make(String) in
     let revdeps = Set.of_list revdeps in
-    let revdeps = Set.remove pkg revdeps in (* https://github.com/ocaml/opam/issues/4446 *)
+    let revdeps = Set.remove pkgname revdeps in (* https://github.com/ocaml/opam/issues/4446 *)
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
       Lwt_io.write c (string_of_int (Set.cardinal revdeps))
     )
@@ -317,7 +317,7 @@ let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
     let job =
       Lwt_pool.use pool begin fun () ->
         Lwt_io.write_line stderr ("Getting metadata for "^full_name) >>= fun () ->
-        get_revdeps ~base_obuilder ~pkg:full_name ~logdir >>= fun () ->
+        get_revdeps ~base_obuilder ~pkgname ~pkg:full_name ~logdir >>= fun () ->
         if Pkg_set.mem pkgname pkgs_set then Lwt.return_unit else get_latest_metadata ~base_obuilder ~pkgname ~logdir
       end
     in
