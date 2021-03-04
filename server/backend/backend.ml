@@ -60,7 +60,7 @@ let get_opams workdir =
   Lwt_list.iter_s begin fun pkg ->
     let file = Server_workdirs.opamfile ~pkg workdir in
     Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) >|= fun content ->
-    let content = OpamFile.OPAM.read_from_string content in
+    let content = try OpamFile.OPAM.read_from_string content with _ -> OpamFile.OPAM.empty in
     Oca_server.Cache.Opams_cache.add opams pkg content
   end files >|= fun () ->
   opams
