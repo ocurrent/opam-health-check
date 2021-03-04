@@ -287,13 +287,21 @@ let with_stderr ~start_time workdir f =
 
 module Pkg_set = Set.Make (String)
 
+let revdeps_script pkg =
+  let pkg = Filename.quote pkg in
+  {|
+    opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| &&
+    opam list --color=never -s --with-test --with-doc --depopts --depends-on |}^pkg^{|
+  |}
+
 let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkg ~logdir =
-    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
-      ("opam list -s --recursive --depopts --with-test --with-doc --depends-on "^Filename.quote pkg)
-    >>= fun revdeps ->
+    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) >>= fun revdeps ->
+    let module Set = Set.Make(String) in
+    let revdeps = Set.of_list revdeps in
+    let revdeps = Set.remove pkg revdeps in (* https://github.com/ocaml/opam/issues/4446 *)
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmprevdepsfile ~pkg logdir)) (fun c ->
-      Lwt_io.write c (string_of_int (List.length revdeps - 1))
+      Lwt_io.write c (string_of_int (Set.cardinal revdeps))
     )
   in
   let get_latest_metadata ~base_obuilder ~pkgname ~logdir = (* TODO: Get this locally by merging all the repository and parsing the opam files using opam-core *)
