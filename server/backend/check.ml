@@ -26,7 +26,7 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
   let action = Cluster_api.Submission.obuilder_build obuilder_content in
   let cache_hint = "opam-health-check-"^Digest.to_hex (Digest.string obuilder_content) in
-  let pool = Server_configfile.platform_os conf ^ "-" ^ Server_configfile.platform_arch conf in
+  let pool = Server_configfile.platform_pool conf in
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool ~action ~cache_hint) @@ fun ticket ->
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
   Capnp_rpc_lwt.Capability.wait_until_settled job >>= fun () ->

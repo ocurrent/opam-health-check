@@ -16,6 +16,7 @@ type t = {
   mutable extra_command : string option;
   mutable platform_os : string option;
   mutable platform_arch : string option;
+  mutable platform_pool : string option;
   mutable platform_distribution : string option;
   mutable ocaml_switches : Intf.Switch.t list option;
   mutable slack_webhooks : Uri.t list option;
@@ -37,6 +38,7 @@ let create_conf yamlfile = {
   extra_command = None;
   platform_os = None;
   platform_arch = None;
+  platform_pool = None;
   platform_distribution = None;
   ocaml_switches = None;
   slack_webhooks = None;
@@ -107,6 +109,8 @@ let set_config conf = function
             set_field ~field (fun () -> conf.platform_os <- Some os) conf.platform_os
         | "arch" as field, `String arch ->
             set_field ~field (fun () -> conf.platform_arch <- Some arch) conf.platform_arch
+        | "custom-pool" as field, `String pool ->
+            set_field ~field (fun () -> conf.platform_pool <- Some pool) conf.platform_pool
         | "distribution" as field, `String distribution ->
             set_field ~field (fun () -> conf.platform_distribution <- Some distribution) conf.platform_distribution
         | field, _ ->
@@ -140,6 +144,10 @@ let yaml_of_ocaml_switches l =
 let yaml_of_slack_webhooks l =
   `A (List.map (fun s -> `String (Uri.to_string s)) l)
 
+let yaml_of_str_opt = function
+  | None -> `Null
+  | Some x -> `String x
+
 let yaml_of_conf conf =
   `O [
     "name", `String (Option.get_exn conf.name);
@@ -157,6 +165,7 @@ let yaml_of_conf conf =
     "platform", `O [
       "os", `String (Option.get_exn conf.platform_os);
       "arch", `String (Option.get_exn conf.platform_arch);
+      "custom-pool", yaml_of_str_opt conf.platform_pool;
       "distribution", `String (Option.get_exn conf.platform_distribution);
     ];
     "ocaml-switches", Option.map_or ~default:`Null yaml_of_ocaml_switches conf.ocaml_switches;
@@ -261,6 +270,9 @@ let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
 let platform_os {platform_os; _} = Option.get_exn platform_os
 let platform_arch {platform_arch; _} = Option.get_exn platform_arch
+let platform_pool ({platform_pool; _} as conf) = match platform_pool with
+  | None -> platform_os conf^"-"^platform_arch conf
+  | Some pool -> pool
 let platform_distribution {platform_distribution; _} = Option.get_exn platform_distribution
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let slack_webhooks {slack_webhooks; _} = Option.get_exn slack_webhooks
