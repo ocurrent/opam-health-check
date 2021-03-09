@@ -290,7 +290,7 @@ module Pkg_set = Set.Make (String)
 let revdeps_script pkg =
   let pkg = Filename.quote pkg in
   {|
-    opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| &&
+    opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| && \
     opam list --color=never -s --with-test --with-doc --depopts --depends-on |}^pkg^{|
   |}
 
