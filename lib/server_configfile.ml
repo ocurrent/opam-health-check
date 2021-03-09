@@ -75,8 +75,7 @@ let check_is_docker_compatible name =
     failwith "name field has to contain only alphanumerical characters and '.'"
 
 let set_config conf = function
-  | _, `Null ->
-      ()
+  | _, `Null -> ()
   | "name" as field, `String name ->
       check_is_docker_compatible name;
       set_field ~field (fun () -> conf.name <- Some name) conf.name
@@ -105,6 +104,7 @@ let set_config conf = function
       set_field ~field (fun () -> conf.extra_command <- Some extra_command) conf.extra_command
   | "platform", `O platform ->
       List.iter (function
+        | _, `Null -> ()
         | "os" as field, `String os ->
             set_field ~field (fun () -> conf.platform_os <- Some os) conf.platform_os
         | "arch" as field, `String arch ->
