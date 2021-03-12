@@ -289,10 +289,8 @@ module Pkg_set = Set.Make (String)
 
 let revdeps_script pkg =
   let pkg = Filename.quote pkg in
-  {|
-    opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| && \
-    opam list --color=never -s --with-test --with-doc --depopts --depends-on |}^pkg^{|
-  |}
+  {|opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| && \
+    opam list --color=never -s --with-test --with-doc --depopts --depends-on |}^pkg
 
 let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkgname ~pkg ~logdir =
