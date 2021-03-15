@@ -135,7 +135,7 @@ module Make (Backend : Backend_intf.S) = struct
     Server_workdirs.init_base workdir >>= fun () ->
     let conf = Server_configfile.from_workdir workdir in
     let port = Server_configfile.port conf in
-    Backend.start conf workdir >>= fun (backend, backend_task) ->
+    Backend.start ~debug conf workdir >>= fun (backend, backend_task) ->
     Lwt.join [
       tcp_server ~debug port (callback ~debug backend);
       backend_task ();

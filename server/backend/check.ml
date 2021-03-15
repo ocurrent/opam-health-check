@@ -81,9 +81,10 @@ let exec_out ~fexec ~fout =
   proc >|= fun r ->
   (r, res)
 
-let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default c =
+let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
   let rec aux ~stdin =
-    Lwt_io.read_line_opt stdin >>= function
+    Lwt_io.read_line_opt stdin >>= fun line ->
+    match line with
     | Some "@@@" ->
         let rec aux acc =
           Lwt_io.read_line_opt stdin >>= function
@@ -92,7 +93,9 @@ let ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default c =
           | None -> Lwt.return_nil (* Something went wrong, ignore. *)
         in
         aux []
-    | Some _ -> aux ~stdin
+    | Some line ->
+        (if debug then Lwt_io.write_line stderr line else Lwt.return_unit) >>= fun () ->
+        aux ~stdin
     | None -> Lwt.return_nil
   in
   exec_out ~fout:aux ~fexec:begin fun ~stdout ->
@@ -264,10 +267,10 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
     )
   end
 
-let get_pkgs ~cap ~conf ~stderr (switch, base_obuilder) =
+let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
   let switch = Intf.Compiler.to_string (Intf.Switch.name switch) in
   Lwt_io.write_line stderr ("Getting packages list for "^switch^"...") >>= fun () ->
-  ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) >>= fun pkgs ->
+  ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) >>= fun pkgs ->
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) with (* TODO: Remove this horror *)
@@ -292,9 +295,9 @@ let revdeps_script pkg =
   {|opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| && \
     opam list --color=never -s --with-test --with-doc --depopts --depends-on |}^pkg
 
-let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
+let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkgname ~pkg ~logdir =
-    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) >>= fun revdeps ->
+    ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) >>= fun revdeps ->
     let module Set = Set.Make(String) in
     let revdeps = Set.of_list revdeps in
     let revdeps = Set.remove pkgname revdeps in (* https://github.com/ocaml/opam/issues/4446 *)
@@ -303,7 +306,7 @@ let get_metadata ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
     )
   in
   let get_latest_metadata ~base_obuilder ~pkgname ~logdir = (* TODO: Get this locally by merging all the repository and parsing the opam files using opam-core *)
-    ocluster_build_str ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
+    ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
       ("opam show --raw "^Filename.quote pkgname)
     >>= fun opam ->
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpopamfile ~pkg:pkgname logdir)) (fun c ->
@@ -404,7 +407,7 @@ let wait_current_run_to_finish =
   in
   loop
 
-let run ~on_finished ~conf cache workdir =
+let run ~debug ~on_finished ~conf cache workdir =
   let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
   if !run_locked then
     failwith "operation locked";
@@ -427,11 +430,11 @@ let run ~on_finished ~conf cache workdir =
           let new_logdir = Server_workdirs.new_logdir ~compressed ~hash:opam_repo_commit ~start_time workdir in
           Server_workdirs.init_base_jobs ~switches:switches' new_logdir >>= fun () ->
           let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
-          Lwt_list.map_p (get_pkgs ~cap ~stderr ~conf) switches >>= fun pkgs ->
+          Lwt_list.map_p (get_pkgs ~debug ~cap ~stderr ~conf) switches >>= fun pkgs ->
           let pkgs = Pkg_set.of_list (List.concat pkgs) in
           Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
           let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
-          let (_, jobs) = get_metadata ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
+          let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
           Lwt.join jobs >>= fun () ->
           Oca_lib.timer_log timer stderr "Operation" >>= fun () ->
           Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
