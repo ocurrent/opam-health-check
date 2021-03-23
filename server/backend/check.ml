@@ -118,6 +118,7 @@ let failure_kind logfile =
       | Some "[ERROR] Package conflict!" -> lookup `NotAvailable
       | Some "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field." -> lookup `AcceptFailures
       | Some "+++ Timeout!! (2 hours) +++" -> Lwt.return `Timeout
+      | Some line when String.prefix ~pre:"#=== ERROR while fetching sources for " line -> Lwt.return `Other
       | Some _ -> lookup res
       | None -> Lwt.return res
     in
