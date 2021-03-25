@@ -85,10 +85,10 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
   let rec aux ~stdin =
     Lwt_io.read_line_opt stdin >>= fun line ->
     match line with
-    | Some "@@@" ->
+    | Some "@@@OUTPUT" ->
         let rec aux acc =
           Lwt_io.read_line_opt stdin >>= function
-          | Some "@@@" -> Lwt.return (List.rev acc)
+          | Some "@@@OUTPUT" -> Lwt.return (List.rev acc)
           | Some x -> aux (x :: acc)
           | None -> Lwt.return_nil (* Something went wrong, ignore. *)
         in
@@ -99,7 +99,7 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
     | None -> Lwt.return_nil
   in
   exec_out ~fout:aux ~fexec:begin fun ~stdout ->
-    ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@ && "^c^" && echo @@@")
+    ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@OUTPUT && "^c^" && echo @@@OUTPUT")
   end >>= function
   | (Ok (), r) ->
       Lwt.return r
