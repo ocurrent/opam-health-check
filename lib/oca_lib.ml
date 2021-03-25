@@ -96,8 +96,10 @@ let ugrep_dir ~switch ~regexp ~cwd =
   pread ~timeout:60. ~cwd ["ugrep"; "-Rl"; "--include="^switch^"/**"; "--regexp="^regexp; "."] read_unordered_lines
 
 let ugrep_tpxz ~switch ~regexp ~archive =
-  let archive = Fpath.to_string archive in
-  pread ~timeout:60. ["ugrep"; "-zl"; "--include="^switch^"/**"; "--format=%z%~"; "--regexp="^regexp; archive] read_unordered_lines
+  let switch = Filename.quote switch in
+  let regexp = Filename.quote regexp in
+  let archive = Filename.quote (Fpath.to_string archive) in
+  pread ~timeout:60. ["sh"; "-c"; "pixz -x "^switch^" -i "^archive^" | ugrep -zl --format='%z%~' --regexp="^regexp] read_unordered_lines
 
 let mkdir_p dir =
   let rec aux base = function
