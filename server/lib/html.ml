@@ -511,5 +511,5 @@ let get_log ~comp ~pkg log =
   let title = title (txt ("opam-health-check log - "^pkg^" on "^Intf.Compiler.to_string comp)) in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
-  let doc = html head (body [style [Unsafe.data Current_ansi.css]; Unsafe.data log]) in
+  let doc = html head (body [style [Unsafe.data Current_ansi.css]; pre [Unsafe.data log]]) in
   Format.sprintf "%a\n" (pp ()) doc
