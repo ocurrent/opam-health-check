@@ -28,7 +28,16 @@ All subcommands are listed with `opam-health-check --help`
 
 opam-health-check now uses OCluster for its daily use. This means you need access to an
 OCluster instance and you also need to place its dedicated capability file to `~/ocluster.cap`
-on the server (will change in the future)
+on the server (will change in the future).
+
+To set this up locally, you will need to get run the OCluster scheduler and one or more workers. The
+sequence of steps is:
+
+1. Run the OCluster scheduler probably with the public address `tcp:127.0.0.1:9000`.
+2. Use the OCluster admin command to generate the submission capability for opam-health-check, it will most likely be something like `ocluster-admin add-client ./capnp-secrets/admin.cap opam-health-check > ~/ocluster.cap`.
+3. Add a new worker to the pool you are using.
+4. Run the opam-health-check server.
+5. Initialise opam-health-check as described above, add some switches and then run the checks.
 
 ### How to use opam-health-check remotely:
 
