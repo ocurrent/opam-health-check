@@ -209,12 +209,13 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
       env "OPAMDEPEXTYES" "1";
       env "OPAMDROPINSTALLEDPACKAGES" "1";
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
+      (* TODO: Remove the > /dev/null to opam pin when switching to opam 2.1 by default *)
       run ~network {|
         set -e
         git clone -q git://github.com/kit-ty-kate/opam.git /tmp/opam
         git -C /tmp/opam checkout -q %s
         opam remote set-url default git://github.com/ocaml/opam-repository.git
-        opam pin add -yn /tmp/opam
+        opam pin add -yn /tmp/opam > /dev/null
         opam install -y opam-devel opam-0install-cudf 'ocamlfind>=1.9'
         sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam
         rm -rf /tmp/opam /tmp/depext.txt ~/.opam
