@@ -244,7 +244,7 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
       run ~cache ~network "opam switch create --repositories=%sdefault %s"
         (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
         (Intf.Switch.switch switch);
-      run ~network "sudo apt-get update";
+      run ~network "opam update --depexts";
     ] @
     (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
     (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
