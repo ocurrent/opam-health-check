@@ -193,7 +193,7 @@ let () =
 let major_minor_ocaml s =
   Ocaml_version.(to_string ~prerelease_sep:'~' ~sep:'+' @@ (of_string_exn s |> with_just_major_and_minor))
 
-let get_obuilder_macos ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
+let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
     List.filter (fun (repo, _) ->
@@ -210,6 +210,11 @@ let get_obuilder_macos ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch 
   in
   stage ~from begin
     [
+      env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
+      env "OPAMEXTERNALSOLVER" "builtin-0install";
+      env "OPAMDEPEXTYES" "1";
+      env "OPAMDROPINSTALLEDPACKAGES" "1";
+      env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
       (* macOS can't cope with scripts... yet... *)
       run ~network "opam --version && opam init -ya --compiler=ocaml-system && \
         git clone git://github.com/kit-ty-kate/opam.git ./tmp/opam && \
@@ -223,93 +228,11 @@ let get_obuilder_macos ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch 
         git -C ~/opam-repository checkout %s" (Filename.quote opam_commit) (Filename.quote opam_repo_commit);
     ] @
     (if Server_configfile.enable_dune_cache conf then (* TODO: Replace this by a pin of the latest version of dune *)
-       [run ~network "git -C ~/opam-repository pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
-     else
-       []
-    ) @ [
-      env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
-      env "OPAMEXTERNALSOLVER" "builtin-0install";
-      env "OPAMDEPEXTYES" "1";
-      env "OPAMDROPINSTALLEDPACKAGES" "1";
-      env "HOMEBREW_VERBOSE" "1";
-      run "opam init -ya --compiler=ocaml-system ~/opam-repository";
-    ] @
-    List.flatten (
-      List.map (fun (repo, hash) ->
-        let name = Filename.quote (Intf.Repository.name repo) in
-        let github = Intf.Repository.github repo in
-        [ run ~network "git clone 'git://github.com/%s.git' ~/%s && git -C ~/%s checkout %s" github name name hash;
-          run "opam repository add --dont-select %s ~/%s" name name;
-        ]
-      ) extra_repos
-    ) @
-    (* TODO: Should this be removed now that it is part of the base docker images? What about macOS -- for now only test 4.08+ for macOS? *)
-    (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
-       [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
-       (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
-                and https://github.com/ocaml/opam-repository/pull/15642 *)
-     else
-       []
-    ) @
-    (match Server_configfile.extra_command conf with
-     | Some c -> [run ~cache ~network "%s" c]
-     | None -> []
-    ) @
-    (if Server_configfile.enable_dune_cache conf then
-       [ env "DUNE_CACHE" "enabled";
-         env "DUNE_CACHE_TRANSPORT" "direct";
-         env "DUNE_CACHE_DUPLICATION" "copy";
-       ]
-     else
-       []
-    )
-  end
-
-let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
-  let extra_repos =
-    let switch = Intf.Switch.name switch in
-    List.filter (fun (repo, _) ->
-      match Intf.Repository.for_switches repo with
-      | None -> true
-      | Some for_switches -> List.exists (Intf.Compiler.equal switch) for_switches
-    ) extra_repos
-  in
-  let open Obuilder_spec in
-  let cache = cache ~conf in
-  let from = match Server_configfile.platform_os conf with
-    | "linux" -> "ocurrent/opam:"^Server_configfile.platform_distribution conf
-    | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
-  in
-  stage ~from begin
-    [ user ~uid:1000 ~gid:1000;
-      env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
-      env "OPAMEXTERNALSOLVER" "builtin-0install";
-      env "OPAMDEPEXTYES" "1";
-      env "OPAMDROPINSTALLEDPACKAGES" "1";
-      env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
-      run ~network {|
-        set -e
-        git clone -q git://github.com/kit-ty-kate/opam.git /tmp/opam
-        git -C /tmp/opam checkout -q %s
-        opam remote set-url default git://github.com/ocaml/opam-repository.git
-        opam pin add -yn /tmp/opam
-        opam install -y opam-devel opam-0install-cudf 'ocamlfind>=1.9'
-        sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam
-        rm -rf /tmp/opam /tmp/depext.txt ~/.opam
-        if ! test -d ~/opam-repository; then
-          git clone -q git://github.com/ocaml/opam-repository.git ~/opam-repository
-        else
-          git -C ~/opam-repository pull -q origin master
-        fi
-        git -C ~/opam-repository checkout -q %s
-      |} (Filename.quote opam_commit) (Filename.quote opam_repo_commit);
-    ] @
-    (if Server_configfile.enable_dune_cache conf then (* TODO: Replace this by a pin of the latest version of dune *)
        [run ~network "git -C ~/opam-repository pull -q git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
      else
        []
     ) @ [
-      run "rm -rf ~/.opam && opam init -ya --bare --disable-sandboxing ~/opam-repository";
+      run "opam init -ya --compiler=ocaml-system ~/opam-repository";
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
@@ -319,13 +242,8 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
           run "opam repository add --dont-select %s ~/%s" name name;
         ]
       ) extra_repos
-    ) @ [
-      run ~cache ~network "opam switch create --repositories=%sdefault %s"
-        (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
-        (Intf.Switch.switch switch);
-      run ~network "opam update --depexts";
-    ] @
-    (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
+    ) @
+    (* TODO: Should this be removed now that it is part of the base docker images? What about macOS -- for now only test 4.08+ for macOS? *)
     (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
        [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
        (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
@@ -502,8 +420,7 @@ let run ~debug ~on_finished ~conf cache workdir =
       get_commit_hash ~user:"kit-ty-kate" ~repo:"opam" ~branch:"opam-health-check3" >>= fun opam_commit ->
       get_commit_hash_extra_repos conf >>= fun extra_repos ->
       let switches' = switches in
-      (* let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch)) switches in *)
-      let switches = List.map (fun switch -> (switch, get_obuilder_macos ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch)) switches in
+      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch)) switches in
       begin match switches with
       | switch::_ ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
