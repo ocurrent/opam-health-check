@@ -204,6 +204,11 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
   in
   stage ~from begin
     [ user ~uid:1000 ~gid:1000;
+      env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
+      env "OPAMEXTERNALSOLVER" "builtin-0install";
+      env "OPAMDEPEXTYES" "1";
+      env "OPAMDROPINSTALLEDPACKAGES" "1";
+      env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
       run ~network {|
         set -e
         git clone -q git://github.com/kit-ty-kate/opam.git /tmp/opam
@@ -226,10 +231,6 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
      else
        []
     ) @ [
-      env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
-      env "OPAMEXTERNALSOLVER" "builtin-0install";
-      env "OPAMDEPEXTYES" "1";
-      env "OPAMDROPINSTALLEDPACKAGES" "1";
       run "rm -rf ~/.opam && opam init -ya --bare --disable-sandboxing ~/opam-repository";
     ] @
     List.flatten (
