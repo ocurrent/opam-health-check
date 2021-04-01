@@ -142,7 +142,7 @@ let with_test ~conf pkg =
 
 let install pkg = Fmt.str "opam install -vy %s" pkg
 
-let run_script ~conf pkg = {|
+let _run_script ~conf pkg = {|
 opam install -vy "|}^pkg^{|"
 res=$?
 if [ $res = 31 ]; then
@@ -232,7 +232,11 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
      else
        []
     ) @ [
-      run "opam init -ya --compiler=ocaml-system ~/opam-repository";
+      run "rm -rf ~/.opam && opam init -ya --bare%s ~/opam-repository"
+        (match Server_configfile.platform_os conf with
+         | "macos" -> ""
+         | "linux" -> " --disable-sandboxing"
+         | _ -> assert false);
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
@@ -242,7 +246,12 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
           run "opam repository add --dont-select %s ~/%s" name name;
         ]
       ) extra_repos
-    ) @
+    ) @ [
+      run ~cache ~network "opam switch create --repositories=%sdefault %s"
+        (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
+        (Intf.Switch.switch switch);
+      run ~network "opam update --depexts";
+    ] @
     (* TODO: Should this be removed now that it is part of the base docker images? What about macOS -- for now only test 4.08+ for macOS? *)
     (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
        [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
