@@ -84,7 +84,8 @@ module Make (Backend : Backend_intf.S) = struct
       let comp = Intf.Compiler.from_string comp in
       let state = Intf.State.from_string state in
       Backend.get_log backend ~logdir ~comp ~state ~pkg >>= fun log ->
-      serv_text ~content_type:"text/plain; charset=utf-8" log
+      let html = Html.get_log ~comp ~pkg log in
+      serv_text ~content_type:"text/html; charset=utf-8" html
     in
     match path_from_uri uri with
     | [] ->

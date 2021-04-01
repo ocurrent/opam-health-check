@@ -30,6 +30,7 @@ depends: [
   "ocaml-xdg-basedir"
   "obuilder-spec" {>= "0.2"}
   "ocluster-api" {>= "0.1"}
+  "current_ansi" {>= "0.1"}
   "github"
   "github-unix"
   "cstruct"
