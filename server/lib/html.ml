@@ -504,3 +504,12 @@ let get_run_list logdirs =
   let runs = List.map map_logdir logdirs in
   let doc = html head (body [common_header; hr (); h2 [txt "Available runs:"]; ul runs]) in
   Format.sprintf "%a\n" (pp ()) doc
+
+let get_log ~comp ~pkg log =
+  let open Tyxml.Html in
+  let log = Current_ansi.process (Current_ansi.create ()) log in
+  let title = title (txt ("opam-health-check log - "^pkg^" on "^Intf.Compiler.to_string comp)) in
+  let charset = meta ~a:[a_charset "utf-8"] () in
+  let head = head title [charset] in
+  let doc = html head (body [style [Unsafe.data Current_ansi.css]; Unsafe.data log]) in
+  Format.sprintf "%a\n" (pp ()) doc

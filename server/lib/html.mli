@@ -29,3 +29,5 @@ val get_diff_list :
   string
 
 val get_run_list : Server_workdirs.logdir list -> string
+
+val get_log : comp:Intf.Compiler.t -> pkg:string -> string -> string
