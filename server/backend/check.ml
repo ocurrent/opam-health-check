@@ -206,23 +206,23 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
     [ user ~uid:1000 ~gid:1000;
       run ~network {|
         set -e
-        git clone git://github.com/kit-ty-kate/opam.git /tmp/opam
-        git -C /tmp/opam checkout %s
+        git clone -q git://github.com/kit-ty-kate/opam.git /tmp/opam
+        git -C /tmp/opam checkout -q %s
         opam remote set-url default git://github.com/ocaml/opam-repository.git
         opam pin add -yn /tmp/opam
         opam install -y opam-devel opam-0install-cudf 'ocamlfind>=1.9'
         sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam
         rm -rf /tmp/opam /tmp/depext.txt ~/.opam
         if ! test -d ~/opam-repository; then
-          git clone git://github.com/ocaml/opam-repository.git ~/opam-repository
+          git clone -q git://github.com/ocaml/opam-repository.git ~/opam-repository
         else
-          git -C ~/opam-repository pull origin master
+          git -C ~/opam-repository pull -q origin master
         fi
-        git -C ~/opam-repository checkout %s
+        git -C ~/opam-repository checkout -q %s
       |} (Filename.quote opam_commit) (Filename.quote opam_repo_commit);
     ] @
     (if Server_configfile.enable_dune_cache conf then (* TODO: Replace this by a pin of the latest version of dune *)
-       [run ~network "git -C ~/opam-repository pull git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
+       [run ~network "git -C ~/opam-repository pull -q git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
      else
        []
     ) @ [
@@ -236,7 +236,7 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
       List.map (fun (repo, hash) ->
         let name = Filename.quote (Intf.Repository.name repo) in
         let github = Intf.Repository.github repo in
-        [ run ~network "git clone 'git://github.com/%s.git' ~/%s && git -C ~/%s checkout %s" github name name hash;
+        [ run ~network "git clone -q 'git://github.com/%s.git' ~/%s && git -C ~/%s checkout -q %s" github name name hash;
           run "opam repository add --dont-select %s ~/%s" name name;
         ]
       ) extra_repos
