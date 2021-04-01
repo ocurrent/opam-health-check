@@ -113,8 +113,8 @@ let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
     let rec lookup res =
       Lwt_io.read_line_opt ic >>= function
-      | Some "+- The following actions failed" | Some "┌─ The following actions failed" -> lookup `Failure
-      | Some "+- The following actions were aborted" | Some "┌─ The following actions were aborted" -> Lwt.return `Partial
+      | Some "+- The following actions failed" -> lookup `Failure
+      | Some "+- The following actions were aborted" -> Lwt.return `Partial
       | Some "[ERROR] Package conflict!" -> lookup `NotAvailable
       | Some "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field." -> lookup `AcceptFailures
       | Some "+++ Timeout!! (2 hours) +++" -> Lwt.return `Timeout
