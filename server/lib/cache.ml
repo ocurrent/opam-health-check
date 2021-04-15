@@ -77,10 +77,6 @@ type t = {
   mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list) list Lwt.t;
   mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
-  mutable pkgs_diff : ((Server_workdirs.logdir * Intf.Pkg.t list Lwt.t) * (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t)) list Lwt.t;
-  mutable html_diff : old_logdir:Server_workdirs.logdir -> new_logdir:Server_workdirs.logdir -> Html.diff -> string;
-  mutable html_diff_list : string Lwt.t;
-  mutable html_run_list : string Lwt.t;
 }
 
 let create () = {
@@ -90,31 +86,14 @@ let create () = {
   compilers = Lwt.return_nil;
   opams = Lwt.return (Opams_cache.create 0);
   revdeps = Lwt.return (Revdeps_cache.create 0);
-  pkgs_diff = Lwt.return_nil;
-  html_diff = (fun ~old_logdir:_ ~new_logdir:_ _ -> "");
-  html_diff_list = Lwt.return "";
-  html_run_list = Lwt.return "";
 }
 
-let call_pkgs ~pkgs logdirs =
-  Lwt.return (List.map (fun (logdir, compilers) -> (logdir, pkgs ~compilers logdir)) logdirs)
-
-let call_html_diff_list diff =
-  Html.get_diff_list (List.map (fun ((x, _), (y, _)) -> (x, y)) diff)
-
-let call_html_run_list pkgs =
-  Html.get_run_list (List.map fst pkgs)
-
-let clear_and_init self ~pkgs ~compilers ~logdirs ~opams ~revdeps ~html_diff =
+let clear_and_init self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   self.opams <- opams ();
   self.revdeps <- revdeps ();
   self.logdirs <- logdirs ();
   self.compilers <- self.logdirs >>= Lwt_list.map_s (fun logdir -> compilers logdir >|= fun c -> (logdir, c));
-  self.pkgs <- self.compilers >>= call_pkgs ~pkgs;
-  self.pkgs_diff <- self.pkgs >|= Oca_lib.list_map_cube (fun x y -> (x, y));
-  self.html_diff <- html_diff;
-  self.html_diff_list <- self.pkgs_diff >|= call_html_diff_list;
-  self.html_run_list <- self.pkgs >|= call_html_run_list;
+  self.pkgs <- self.compilers >|= List.map (fun (logdir, compilers) -> (logdir, pkgs ~compilers logdir));
   Html_cache.clear self.html_tbl
 
 let get_html self query logdir =
@@ -159,10 +138,13 @@ let get_html_diff ~old_logdir ~new_logdir self =
   get_pkgs ~logdir:old_logdir self >>= fun old_pkgs ->
   get_pkgs ~logdir:new_logdir self >|= fun new_pkgs ->
   generate_diff old_pkgs new_pkgs |>
-  self.html_diff ~old_logdir ~new_logdir
+  Html.get_diff ~old_logdir ~new_logdir
 
 let get_html_diff_list self =
-  self.html_diff_list
+  self.pkgs >|= fun pkgs ->
+  Oca_lib.list_map_cube (fun (x, _) (y, _) -> (x, y)) pkgs |>
+  Html.get_diff_list
 
 let get_html_run_list self =
-  self.html_run_list
+  self.pkgs >|= fun pkgs ->
+  Html.get_run_list (List.map fst pkgs)

@@ -95,7 +95,6 @@ let cache_clear_and_init workdir =
     ~logdirs:(fun () -> Server_workdirs.logdirs workdir)
     ~opams:(fun () -> get_opams workdir)
     ~revdeps:(fun () -> get_revdeps workdir)
-    ~html_diff:Oca_server.Html.get_diff
 
 let run_action_loop ~conf ~run_trigger f =
   let rec loop () =
