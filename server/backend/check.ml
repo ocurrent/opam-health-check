@@ -247,7 +247,7 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
     ) @ [
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
-      run "rm -rf ~/.opam && opam init -ya --bare --disable-sandboxing ~/opam-repository";
+      run "rm -rf ~/.opam && opam init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository";
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
