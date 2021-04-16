@@ -126,12 +126,13 @@ let failure_kind logfile =
   end
 
 let with_test pkg = {|
-elif [ $res = 0 ]; then
+if [ $res = 0 ]; then
     opam reinstall -vty "|}^pkg^{|"
     res=$?
     if [ $res = 20 ]; then
         res=0
     fi
+fi
 |}
 
 let with_test ~conf pkg =
@@ -161,9 +162,9 @@ if [ $res = 31 ]; then
         echo "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field."
         exit 69
     fi
+fi
 |}^with_test ~conf pkg^{|
 |}^with_lower_bound ~conf pkg^{|
-fi
 exit $res
 |}
 
