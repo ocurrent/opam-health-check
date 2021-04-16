@@ -140,6 +140,19 @@ let with_test ~conf pkg =
   else
     ""
 
+let with_lower_bound pkg = {|
+if [ $res = 0 ]; then
+    env OPAMCRITERIA="+removed,+count[version-lag,solution]" opam reinstall -vy "|}^pkg^{|"
+    res=$?
+fi
+|}
+
+let with_lower_bound ~conf pkg =
+  if Server_configfile.with_lower_bound conf then
+    with_lower_bound pkg
+  else
+    ""
+
 let run_script ~conf pkg = {|
 opam install -vy "|}^pkg^{|"
 res=$?
@@ -149,6 +162,7 @@ if [ $res = 31 ]; then
         exit 69
     fi
 |}^with_test ~conf pkg^{|
+|}^with_lower_bound ~conf pkg^{|
 fi
 exit $res
 |}

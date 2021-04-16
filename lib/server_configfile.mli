@@ -12,6 +12,7 @@ val enable_dune_cache : t -> bool
 val enable_logs_compression : t -> bool
 val extra_repositories : t -> Intf.Repository.t list
 val with_test : t -> bool
+val with_lower_bound : t -> bool
 val list_command : t -> string
 val extra_command : t -> string option
 val platform_os : t -> string

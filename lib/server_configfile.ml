@@ -12,6 +12,7 @@ type t = {
   mutable enable_logs_compression : bool option;
   mutable extra_repositories : Intf.Repository.t list option;
   mutable with_test : bool option;
+  mutable with_lower_bound : bool option;
   mutable list_command : string option;
   mutable extra_command : string option;
   mutable platform_os : string option;
@@ -34,6 +35,7 @@ let create_conf yamlfile = {
   enable_logs_compression = None;
   extra_repositories = None;
   with_test = None;
+  with_lower_bound = None;
   list_command = None;
   extra_command = None;
   platform_os = None;
@@ -96,6 +98,8 @@ let set_config conf = function
       set_field ~field (fun () -> conf.extra_repositories <- Some repositories) conf.extra_repositories
   | "with-test" as field, `Bool with_test ->
       set_field ~field (fun () -> conf.with_test <- Some with_test) conf.with_test
+  | "with-lower-bound" as field, `Bool with_lower_bound ->
+      set_field ~field (fun () -> conf.with_lower_bound <- Some with_lower_bound) conf.with_lower_bound
   | "processes" as field, `Float processes ->
       set_field ~field (fun () -> conf.processes <- Some (int_of_float processes)) conf.processes
   | "list-command" as field, `String list_command ->
@@ -160,6 +164,7 @@ let yaml_of_conf conf =
     "enable-logs-compression", `Bool (Option.get_exn conf.enable_logs_compression);
     "extra-repositories", Option.map_or ~default:`Null yaml_of_extra_repositories conf.extra_repositories;
     "with-test", `Bool (Option.get_exn conf.with_test);
+    "with-lower-bound", `Bool (Option.get_exn conf.with_lower_bound);
     "list-command", `String (Option.get_exn conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
     "platform", `O [
@@ -193,6 +198,8 @@ let set_defaults conf =
     conf.extra_repositories <- Some [Intf.Repository.create ~name:"beta" ~github:"ocaml/ocaml-beta-repository" ~for_switches:None];
   if Option.is_none conf.with_test then
     conf.with_test <- Some false; (* TODO: Enable by default in the future (takes 1.5x the time) *)
+  if Option.is_none conf.with_lower_bound then
+    conf.with_lower_bound <- Some false; (* TODO: Enable by default in the future (takes 2x the time) *)
   if Option.is_none conf.list_command then
     conf.list_command <- Some Oca_lib.default_list_command;
   if Option.is_none conf.platform_os then
@@ -266,6 +273,7 @@ let enable_dune_cache {enable_dune_cache; _} = Option.get_exn enable_dune_cache
 let enable_logs_compression {enable_logs_compression; _} = Option.get_exn enable_logs_compression
 let extra_repositories {extra_repositories; _} = Option.get_exn extra_repositories
 let with_test {with_test; _} = Option.get_exn with_test
+let with_lower_bound {with_lower_bound; _} = Option.get_exn with_lower_bound
 let list_command {list_command; _} = Option.get_exn list_command
 let extra_command {extra_command; _} = extra_command
 let platform_os {platform_os; _} = Option.get_exn platform_os
