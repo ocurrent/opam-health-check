@@ -143,7 +143,8 @@ let with_test ~conf pkg =
 
 let with_lower_bound pkg = {|
 if [ $res = 0 ]; then
-    env OPAMCRITERIA="+removed,+count[version-lag,solution]" opam reinstall -vy "|}^pkg^{|"
+    opam remove -y "|}^pkg^{|"
+    env OPAMCRITERIA="+removed,+count[version-lag,solution]" opam install -vy "|}^pkg^{|"
     res=$?
 fi
 |}
