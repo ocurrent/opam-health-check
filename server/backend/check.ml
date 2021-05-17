@@ -127,7 +127,8 @@ let failure_kind logfile =
 
 let with_test pkg = {|
 if [ $res = 0 ]; then
-    opam reinstall -vty "|}^pkg^{|"
+    opam remove -y "|}^pkg^{|"
+    opam install -vty "|}^pkg^{|"
     res=$?
     if [ $res = 20 ]; then
         res=0
@@ -156,6 +157,7 @@ let with_lower_bound ~conf pkg =
     ""
 
 let run_script ~conf pkg = {|
+opam remove -y "|}^pkg^{|"
 opam install -vy "|}^pkg^{|"
 res=$?
 if [ $res = 31 ]; then
