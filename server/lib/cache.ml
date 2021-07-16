@@ -142,7 +142,7 @@ let get_html_diff ~old_logdir ~new_logdir self =
 
 let get_html_diff_list self =
   self.pkgs >|= fun pkgs ->
-  Oca_lib.list_map_cube (fun (x, _) (y, _) -> (x, y)) pkgs |>
+  Oca_lib.list_map_cube (fun (new_logdir, _) (old_logdir, _) -> (old_logdir, new_logdir)) pkgs |>
   Html.get_diff_list
 
 let get_html_run_list self =
