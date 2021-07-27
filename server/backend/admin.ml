@@ -35,7 +35,7 @@ let get_log workdir =
   let ilogdir = Server_workdirs.ilogdir workdir in
   Oca_lib.get_files ilogdir >>= fun logs ->
   let logs = List.sort String.compare logs in
-  let logfile = Option.get_exn (List.last_opt logs) in
+  let logfile = Option.get_exn_or "no last log" (List.last_opt logs) in
   let logfile = Fpath.(ilogdir / logfile) in
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_RDONLY] 0o644 >>= fun fd ->
   let off = ref 0 in
@@ -81,7 +81,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
   | ["set-ocaml-switch";name;switch] ->
       let switch = Intf.Switch.create ~name ~switch in
       let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
-      let idx, _ = Option.get_exn (List.find_idx (Intf.Switch.equal switch) switches) in
+      let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
       let switches = List.set_at_idx idx switch switches in
       Server_configfile.set_ocaml_switches conf switches >|= fun () ->
       (fun () -> Lwt.return_none)

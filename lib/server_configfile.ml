@@ -154,24 +154,24 @@ let yaml_of_str_opt = function
 
 let yaml_of_conf conf =
   `O [
-    "name", `String (Option.get_exn conf.name);
-    "port", `Float (float_of_int (Option.get_exn conf.port));
-    "public-url", `String (Option.get_exn conf.public_url);
-    "admin-port", `Float (float_of_int (Option.get_exn conf.admin_port));
-    "auto-run-interval", `Float (float_of_int (Option.get_exn conf.auto_run_interval));
-    "processes", `Float (float_of_int (Option.get_exn conf.processes));
-    "enable-dune-cache", `Bool (Option.get_exn conf.enable_dune_cache);
-    "enable-logs-compression", `Bool (Option.get_exn conf.enable_logs_compression);
+    "name", `String (Option.get_exn_or "conf.name" conf.name);
+    "port", `Float (float_of_int (Option.get_exn_or "conf.port" conf.port));
+    "public-url", `String (Option.get_exn_or "conf.public_url" conf.public_url);
+    "admin-port", `Float (float_of_int (Option.get_exn_or "conf.admin_port" conf.admin_port));
+    "auto-run-interval", `Float (float_of_int (Option.get_exn_or "conf.auto_run_interval" conf.auto_run_interval));
+    "processes", `Float (float_of_int (Option.get_exn_or "conf.processes" conf.processes));
+    "enable-dune-cache", `Bool (Option.get_exn_or "conf.enable_dune_cache" conf.enable_dune_cache);
+    "enable-logs-compression", `Bool (Option.get_exn_or "conf.enable_logs_compression" conf.enable_logs_compression);
     "extra-repositories", Option.map_or ~default:`Null yaml_of_extra_repositories conf.extra_repositories;
-    "with-test", `Bool (Option.get_exn conf.with_test);
-    "with-lower-bound", `Bool (Option.get_exn conf.with_lower_bound);
-    "list-command", `String (Option.get_exn conf.list_command);
+    "with-test", `Bool (Option.get_exn_or "conf.with_test" conf.with_test);
+    "with-lower-bound", `Bool (Option.get_exn_or "conf.with_lower_bound" conf.with_lower_bound);
+    "list-command", `String (Option.get_exn_or "conf.list_command" conf.list_command);
     "extra-command", Option.map_or ~default:`Null (fun s -> `String s) conf.extra_command;
     "platform", `O [
-      "os", `String (Option.get_exn conf.platform_os);
-      "arch", `String (Option.get_exn conf.platform_arch);
+      "os", `String (Option.get_exn_or "conf.platform_os" conf.platform_os);
+      "arch", `String (Option.get_exn_or "conf.platform_arch" conf.platform_arch);
       "custom-pool", yaml_of_str_opt conf.platform_pool;
-      "distribution", `String (Option.get_exn conf.platform_distribution);
+      "distribution", `String (Option.get_exn_or "conf.platform_distribution" conf.platform_distribution);
     ];
     "ocaml-switches", Option.map_or ~default:`Null yaml_of_ocaml_switches conf.ocaml_switches;
     "slack-webhooks", Option.map_or ~default:`Null yaml_of_slack_webhooks conf.slack_webhooks;
@@ -263,24 +263,24 @@ let from_workdir workdir =
   | `String "" | `Null -> create yamlfile []
   | _ -> failwith "Config parser: unrecognized config file"
 
-let name {name; _} = Option.get_exn name
-let port {port; _} = Option.get_exn port
-let public_url {public_url; _} = Option.get_exn public_url
-let admin_port {admin_port; _} = Option.get_exn admin_port
-let auto_run_interval {auto_run_interval; _} = Option.get_exn auto_run_interval
-let processes {processes; _} = Option.get_exn processes
-let enable_dune_cache {enable_dune_cache; _} = Option.get_exn enable_dune_cache
-let enable_logs_compression {enable_logs_compression; _} = Option.get_exn enable_logs_compression
-let extra_repositories {extra_repositories; _} = Option.get_exn extra_repositories
-let with_test {with_test; _} = Option.get_exn with_test
-let with_lower_bound {with_lower_bound; _} = Option.get_exn with_lower_bound
-let list_command {list_command; _} = Option.get_exn list_command
+let name {name; _} = Option.get_exn_or "name" name
+let port {port; _} = Option.get_exn_or "name" port
+let public_url {public_url; _} = Option.get_exn_or "public_url" public_url
+let admin_port {admin_port; _} = Option.get_exn_or "admin_port" admin_port
+let auto_run_interval {auto_run_interval; _} = Option.get_exn_or "auto_run_interval" auto_run_interval
+let processes {processes; _} = Option.get_exn_or "processes" processes
+let enable_dune_cache {enable_dune_cache; _} = Option.get_exn_or "enable_dune_cache" enable_dune_cache
+let enable_logs_compression {enable_logs_compression; _} = Option.get_exn_or "enable_logs_compression" enable_logs_compression
+let extra_repositories {extra_repositories; _} = Option.get_exn_or "extra_repositories" extra_repositories
+let with_test {with_test; _} = Option.get_exn_or "with_test" with_test
+let with_lower_bound {with_lower_bound; _} = Option.get_exn_or "with_lower_bound" with_lower_bound
+let list_command {list_command; _} = Option.get_exn_or "list_command" list_command
 let extra_command {extra_command; _} = extra_command
-let platform_os {platform_os; _} = Option.get_exn platform_os
-let platform_arch {platform_arch; _} = Option.get_exn platform_arch
+let platform_os {platform_os; _} = Option.get_exn_or "platform_os" platform_os
+let platform_arch {platform_arch; _} = Option.get_exn_or "platform_arch" platform_arch
 let platform_pool ({platform_pool; _} as conf) = match platform_pool with
   | None -> platform_os conf^"-"^platform_arch conf
   | Some pool -> pool
-let platform_distribution {platform_distribution; _} = Option.get_exn platform_distribution
+let platform_distribution {platform_distribution; _} = Option.get_exn_or "platform_distribution" platform_distribution
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
-let slack_webhooks {slack_webhooks; _} = Option.get_exn slack_webhooks
+let slack_webhooks {slack_webhooks; _} = Option.get_exn_or "slack_webhooks" slack_webhooks

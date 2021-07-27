@@ -429,7 +429,7 @@ let wait_current_run_to_finish =
   loop
 
 let run ~debug ~on_finished ~conf cache workdir =
-  let switches = Option.get_exn (Server_configfile.ocaml_switches conf) in
+  let switches = Option.get_exn_or "no switches" (Server_configfile.ocaml_switches conf) in
   if !run_locked then
     failwith "operation locked";
   run_locked := true;

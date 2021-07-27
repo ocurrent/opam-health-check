@@ -99,7 +99,7 @@ let from_file ~confdir yamlfile =
 let profile ~profilename conf =
   Map.find profilename conf
 
-let hostname {hostname; _} = Option.get_exn hostname
-let port {port; _} = Option.get_exn port
-let username {username; _} = Option.get_exn username
+let hostname {hostname; _} = Option.get_exn_or "hostname" hostname
+let port {port; _} = Option.get_exn_or "port" port
+let username {username; _} = Option.get_exn_or "username" username
 let keyfile {keyfile; _} = keyfile

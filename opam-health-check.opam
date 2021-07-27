@@ -15,7 +15,7 @@ depends: [
   "cohttp"
   "cohttp-lwt"
   "cohttp-lwt-unix"
-  "containers" {>= "2.2"}
+  "containers" {>= "3.4"}
   "opam-core"
   "opam-format"
   "mirage-crypto-pk" {>= "0.7.0"}
