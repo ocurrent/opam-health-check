@@ -29,45 +29,49 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   let pool = Server_configfile.platform_pool conf in
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool ~action ~cache_hint) @@ fun ticket ->
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
-  Capnp_rpc_lwt.Capability.wait_until_settled job >>= fun () ->
-  let proc =
-    let rec tail job start =
-      Cluster_api.Job.log job start >>= function
-      | Error (`Capnp e) -> Lwt_io.write stderr (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
-      | Ok ("", _) -> Lwt.return_unit
-      | Ok (data, next) -> Lwt_io.write stdout data >>= fun () -> tail job next
-    in
-    tail job 0L >>= fun () ->
-    Cluster_api.Job.result job >>= function
-    | Ok _ ->
-        Lwt.return (Ok ())
-    | Error (`Capnp e) ->
-        Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e) >>= fun () ->
+  Capnp_rpc_lwt.Capability.await_settled job >>= function
+  | Ok () ->
+      let proc =
+        let rec tail job start =
+          Cluster_api.Job.log job start >>= function
+          | Error (`Capnp e) -> Lwt_io.write stderr (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
+          | Ok ("", _) -> Lwt.return_unit
+          | Ok (data, next) -> Lwt_io.write stdout data >>= fun () -> tail job next
+        in
+        tail job 0L >>= fun () ->
+        Cluster_api.Job.result job >>= function
+        | Ok _ ->
+            Lwt.return (Ok ())
+        | Error (`Capnp e) ->
+            Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e) >>= fun () ->
+            Lwt.return (Error ())
+      in
+      (* NOTE: any processes shouldn't take more than 2 hours *)
+      let timeout =
+        let hours = 2 in
+        Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
+        let cancel =
+          Cluster_api.Job.cancel job >>= fun cancel_result ->
+          Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" >>= fun () ->
+          match cancel_result with
+          | Ok () ->
+              Lwt_io.write_line stdout "+++ Job cancelled +++"
+          | Error (`Capnp err) ->
+              Lwt_io.write_line stdout (Fmt.str "+++ Could not cancel job: %a +++" Capnp_rpc.Error.pp err)
+        in
+        let timeout =
+          let minute = 1 in
+          Lwt_unix.sleep (float_of_int (minute * 60)) >>= fun () ->
+          Lwt_io.write_line stdout "+++ Cancellation failed +++"
+        in
+        Lwt.pick [cancel; timeout] >>= fun () ->
+        Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_int hours^" hours).") >>= fun () ->
         Lwt.return (Error ())
-  in
-  (* NOTE: any processes shouldn't take more than 2 hours *)
-  let timeout =
-    let hours = 2 in
-    Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
-    let cancel =
-      Cluster_api.Job.cancel job >>= fun cancel_result ->
-      Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" >>= fun () ->
-      match cancel_result with
-      | Ok () ->
-          Lwt_io.write_line stdout "+++ Job cancelled +++"
-      | Error (`Capnp err) ->
-          Lwt_io.write_line stdout (Fmt.str "+++ Could not cancel job: %a +++" Capnp_rpc.Error.pp err)
-    in
-    let timeout =
-      let minute = 1 in
-      Lwt_unix.sleep (float_of_int (minute * 60)) >>= fun () ->
-      Lwt_io.write_line stdout "+++ Cancellation failed +++"
-    in
-    Lwt.pick [cancel; timeout] >>= fun () ->
-    Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_int hours^" hours).") >>= fun () ->
-    Lwt.return (Error ())
-  in
-  Lwt.pick [timeout; proc]
+      in
+      Lwt.pick [timeout; proc]
+  | Error {Capnp_rpc.Exception.reason; _} ->
+      Lwt_io.write_line stderr ("capnp-rpc failed to settle: "^reason) >>= fun () ->
+      Lwt.return (Error ())
 
 let exec_out ~fexec ~fout =
   let stdin, stdout = Lwt_io.pipe () in
