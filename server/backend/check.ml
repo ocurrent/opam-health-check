@@ -230,12 +230,6 @@ let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
-    ] @
-    (if Server_configfile.enable_dune_cache conf then (* TODO: Replace this by a pin of the latest version of dune *)
-       [run ~network "git -C ~/opam-repository pull -q git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
-     else
-       []
-    ) @ [
       run "sudo ln -f /usr/bin/opam-2.1 /usr/bin/opam";
       run ~network "rm -rf ~/opam-repository && git clone -q 'git://github.com/ocaml/opam-repository.git' ~/opam-repository && git -C ~/opam-repository checkout -q %s" opam_repo_commit;
       run "rm -rf ~/.opam && opam init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository";
@@ -267,7 +261,8 @@ let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
      | None -> []
     ) @
     (if Server_configfile.enable_dune_cache conf then
-       [ env "DUNE_CACHE" "enabled";
+       [ run "opam pin add -k version dune $(opam show -f version dune)";
+         env "DUNE_CACHE" "enabled";
          env "DUNE_CACHE_TRANSPORT" "direct";
          env "DUNE_CACHE_DUPLICATION" "copy";
        ]
