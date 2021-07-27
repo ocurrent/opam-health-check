@@ -205,7 +205,7 @@ let () =
     prerr_endline ("Async exception raised: "^msg);
   end
 
-let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
+let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
     List.filter (fun (repo, _) ->
@@ -217,39 +217,23 @@ let get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch =
   let open Obuilder_spec in
   let cache = cache ~conf in
   let from = match Server_configfile.platform_os conf with
-    | "linux" -> "ocurrent/opam:"^Server_configfile.platform_distribution conf
+    | "linux" -> "ocaml/opam:"^Server_configfile.platform_distribution conf
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
   stage ~from begin
     [ user ~uid:1000 ~gid:1000;
       env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
-      env "OPAMDEPEXTYES" "1";
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
-      (* TODO: Remove the > /dev/null to opam pin when switching to opam 2.1 by default *)
-      run ~network {|
-        set -e
-        git clone -q git://github.com/kit-ty-kate/opam.git /tmp/opam
-        git -C /tmp/opam checkout -q %s
-        opam remote set-url default git://github.com/ocaml/opam-repository.git
-        opam pin add -yn /tmp/opam > /dev/null
-        opam install -y opam-devel opam-0install-cudf 'ocamlfind>=1.9'
-        sudo mv "$(opam var opam-devel:lib)/opam" /usr/bin/opam
-        rm -rf /tmp/opam /tmp/depext.txt ~/.opam
-        if ! test -d ~/opam-repository; then
-          git clone -q git://github.com/ocaml/opam-repository.git ~/opam-repository
-        else
-          git -C ~/opam-repository pull -q origin master
-        fi
-        git -C ~/opam-repository checkout -q %s
-      |} (Filename.quote opam_commit) (Filename.quote opam_repo_commit);
+      env "OPAMEXTERNALSOLVER" "builtin-0install";
+      env "OPAMCRITERIA" "+removed";
     ] @
     (if Server_configfile.enable_dune_cache conf then (* TODO: Replace this by a pin of the latest version of dune *)
        [run ~network "git -C ~/opam-repository pull -q git://github.com/kit-ty-kate/opam-repository.git opam-health-check"]
      else
        []
     ) @ [
-      env "OPAMEXTERNALSOLVER" "builtin-0install";
-      env "OPAMCRITERIA" "+removed";
+      run "sudo ln -f /usr/bin/opam-2.1 /usr/bin/opam";
+      run ~network "rm -rf ~/opam-repository && git clone -q 'git://github.com/ocaml/opam-repository.git' ~/opam-repository && git -C ~/opam-repository checkout -q %s" opam_repo_commit;
       run "rm -rf ~/.opam && opam init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository";
     ] @
     List.flatten (
@@ -439,10 +423,9 @@ let run ~debug ~on_finished ~conf cache workdir =
       let timer = Oca_lib.timer_start () in
       get_cap ~stderr >>= fun cap ->
       get_commit_hash ~user:"ocaml" ~repo:"opam-repository" ~branch:"master" >>= fun opam_repo_commit ->
-      get_commit_hash ~user:"kit-ty-kate" ~repo:"opam" ~branch:"opam-health-check5" >>= fun opam_commit ->
       get_commit_hash_extra_repos conf >>= fun extra_repos ->
       let switches' = switches in
-      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_commit ~opam_repo_commit ~extra_repos switch)) switches in
+      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo_commit ~extra_repos switch)) switches in
       begin match switches with
       | switch::_ ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
