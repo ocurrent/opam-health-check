@@ -3,7 +3,7 @@ open Lwt.Infix
 let cache ~conf =
   let opam_cache = Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache" in
   if Server_configfile.enable_dune_cache conf then
-    let dune_cache = Obuilder_spec.Cache.v "dune-cache" ~target:"/home/opam/.config/dune" in
+    let dune_cache = Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune" in
     [opam_cache; dune_cache]
   else
     [opam_cache]
