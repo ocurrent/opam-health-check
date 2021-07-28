@@ -261,7 +261,7 @@ let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
      | None -> []
     ) @
     (if Server_configfile.enable_dune_cache conf then
-       [ run "opam pin add -k version dune $(opam show -f version dune)";
+       [ run ~cache ~network "opam pin add -k version dune $(opam show -f version dune)";
          env "DUNE_CACHE" "enabled";
          env "DUNE_CACHE_TRANSPORT" "direct";
          env "DUNE_CACHE_DUPLICATION" "copy";
