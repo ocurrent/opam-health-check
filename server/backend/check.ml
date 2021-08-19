@@ -375,7 +375,7 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
         Printf.sprintf {|{"text":"The first check is done. Check out %s to discover which packages are now broken or fixed"}|} public_url
   in
   Server_configfile.slack_webhooks conf |>
-  Lwt_list.iter_p begin fun webhook ->
+  Lwt_list.iter_s begin fun webhook ->
     Lwt_io.write_line stderr ("Triggering Slack webhook "^Uri.to_string webhook) >>= fun () ->
     Cohttp_lwt_unix.Client.post
       ~headers:(Cohttp.Header.of_list ["Content-type", "application/json"])
