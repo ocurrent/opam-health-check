@@ -86,7 +86,8 @@ let random_access_tpxz_archive ~file archive =
 
 let compress_tpxz_archive ~cwd ~directories archive =
   let cwd = Fpath.to_string cwd in
-  pread ~timeout:3600. ~cwd ("tar" :: "-Ipixz" :: "-cf" :: Fpath.to_string archive :: directories) begin fun _ ->
+  let timeout = 3. *. 3600. in (* 3 hours *)
+  pread ~timeout ~cwd ("tar" :: "-Ipixz" :: "-cf" :: Fpath.to_string archive :: directories) begin fun _ ->
     (* TODO: Do not use pread *)
     Lwt.return ()
   end
