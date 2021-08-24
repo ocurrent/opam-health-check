@@ -204,6 +204,24 @@ let get_logsearch ~query ~logdir =
         | _ -> None
       )
 
+let common_header =
+  let open Tyxml.Html in
+  h3 [
+    a ~a:[a_href "/"] [
+      img
+        ~a:[a_style "border-radius: 8px; width: 50px; vertical-align: middle;"]
+        ~src:"http://ocamllabs.io/assets/img/origami-camel.png"
+        ~alt:"OCamllabs icon" ()
+        (* TODO: Integrate the image in each instances *)
+    ];
+    txt " ";
+    span ~a:[a_style "vertical-align: middle; padding-left: 0.4%;"] [a ~a:[a_href "/"] [txt "Home"]];
+    span ~a:[a_style "vertical-align: middle; padding: 1%;"] [txt "|"];
+    span ~a:[a_style "vertical-align: middle;"] [a ~a:[a_href "/diff"] [txt "Differences with the last checks"]];
+    span ~a:[a_style "vertical-align: middle; padding: 1%;"] [txt "|"];
+    span ~a:[a_style "vertical-align: middle;"] [a ~a:[a_href "/run"] [txt "Previous runs"]];
+  ]
+
 let get_html ~logdir query pkgs =
   let open Tyxml.Html in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
@@ -359,7 +377,7 @@ let get_html ~logdir query pkgs =
     ([], [submit_form]);
   ] in
   let doc = table ~a:[a_id "results"] ~thead:(thead [tr dirs]) pkgs in
-  let doc = html head (body [filter_form; br (); doc; script javascript]) in
+  let doc = html head (body [common_header; filter_form; br (); doc; script javascript]) in
   Format.sprintf "%a\n" (pp ()) doc
 
 let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; diff} =
@@ -400,20 +418,6 @@ let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; d
   li (prefix @ diff)
 
 type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list)
-
-let common_header =
-  let open Tyxml.Html in
-  h3 [
-    a ~a:[a_href "/"] [
-      img
-        ~a:[a_style "border-radius: 8px; width: 50px; vertical-align: middle;"]
-        ~src:"http://ocamllabs.io/assets/img/origami-camel.png"
-        ~alt:"OCamllabs icon" ()
-        (* TODO: Integrate the image in each instances *)
-    ];
-    txt " ";
-    span ~a:[a_style "vertical-align: middle;"] [a ~a:[a_href "/"] [txt "Home"]];
-  ]
 
 let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_failure, good) =
   let open Tyxml.Html in
@@ -511,5 +515,5 @@ let get_log ~comp ~pkg log =
   let title = title (txt ("opam-health-check log - "^pkg^" on "^Intf.Compiler.to_string comp)) in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
-  let doc = html head (body [style [Unsafe.data Current_ansi.css]; pre [Unsafe.data log]]) in
+  let doc = html head (body [common_header; hr (); style [Unsafe.data Current_ansi.css]; pre [Unsafe.data log]]) in
   Format.sprintf "%a\n" (pp ()) doc
