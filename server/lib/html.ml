@@ -177,14 +177,14 @@ let run_info ~logdir ~pkgs =
   let date = date_to_string date in
   let legend = legend [b [txt "About this run:"]] in
   let number_pkgs, number_hard_fail, number_soft_fail = get_run_info pkgs in
-  fieldset ~legend ~a:[a_style "width: 65%; float: right;"] [
+  fieldset ~legend ~a:[a_style "float: right;"] [
     div ~a:[a_style "text-align: right;"] [opam_repo_uri];
     p ~a:[a_style "text-align: right;"] [
-      txt ("Packages with current filters: "^string_of_int number_pkgs);
+      b [txt "Packages with current filters: "]; txt (string_of_int number_pkgs);
       br ();
-      txt ("Packages failing with current filters: "^string_of_int number_hard_fail);
+      b [txt "Packages failing with current filters: "]; txt (string_of_int number_hard_fail);
       br ();
-      txt ("Packages whose dependencies failed with current filters: "^string_of_int number_soft_fail);
+      b [txt "Packages whose dependencies failed with current filters: "]; txt (string_of_int number_soft_fail);
     ];
     p ~a:[a_style "text-align: right;"] [i [small [txt ("Run made on the "^date)]]];
   ]
