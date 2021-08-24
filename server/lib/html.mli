@@ -14,7 +14,7 @@ val get_html :
   logdir:Server_workdirs.logdir ->
   query ->
   Intf.Pkg.t list ->
-  string Lwt.t
+  string
 
 type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list)
 

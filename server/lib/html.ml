@@ -58,72 +58,6 @@ let instance_to_html ~pkg logdir instances comp =
       end
   | None -> td "cell-not-available" [txt "☐"] (* NOTE: Should not happen in the new versions but can happen with old data or custom runs *)
 
-let is_deprecated flag =
-  String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
-
-let (>>&&) x f =
-  x >>= fun x ->
-  if x then f () else Lwt.return_false
-
-let must_show_package ~logsearch query ~is_latest pkg =
-  let opam = Pkg.opam pkg in
-  let instances' = Pkg.instances pkg in
-  let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.compilers) instances' in
-  begin
-    Lwt.return @@
-    List.exists (fun comp ->
-      match List.find_opt (fun inst -> Compiler.equal comp (Instance.compiler inst)) instances' with
-      | None -> true (* TODO: Maybe switch to assert false? *)
-      | Some inst -> match Instance.state inst with
-        | State.NotAvailable -> false
-        | State.(Good | Partial | Bad | InternalFailure) -> true
-    ) query.show_available
-  end >>&& begin fun () ->
-    Lwt.return @@
-    if query.show_failures_only then
-      List.exists (fun instance -> match Instance.state instance with
-        | State.Bad | State.Partial -> true
-        | State.Good | State.NotAvailable | State.InternalFailure -> false
-      ) instances
-    else
-      true
-  end >>&& begin fun () ->
-    Lwt.return @@
-    match instances with
-    | hd::tl when query.show_diff_only ->
-        let state = Instance.state hd in
-        List.exists (fun x -> not (State.equal state (Instance.state x))) tl
-    | [] | _::_ ->
-        true
-  end >>&& begin fun () ->
-    Lwt.return @@
-    if query.show_latest_only then
-      if is_latest then
-        not (List.exists is_deprecated opam.OpamFile.OPAM.flags)
-      else
-        false
-    else
-      true
-  end >>&& begin fun () ->
-    Lwt.return @@
-    match snd query.maintainers with
-    | Some re -> List.exists (Re.execp re) opam.OpamFile.OPAM.maintainer
-    | None -> true
-  end >>&& begin fun () ->
-    match snd query.logsearch with
-    | Some _ -> logsearch >|= List.exists (Pkg.equal pkg)
-    | None -> Lwt.return_true
-  end
-
-let filter_pkg ~logsearch query (acc, last) pkg =
-  let is_latest = match last with
-    | None -> true
-    | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
-  in
-  must_show_package ~logsearch query ~is_latest pkg >|= function
-  | true -> (pkg :: acc, Some pkg)
-  | false -> (acc, Some pkg)
-
 let pkg_to_html logdir query pkg =
   let open Tyxml.Html in
   let tr = tr ~a:[a_class ["results-row"]] in
@@ -217,22 +151,6 @@ let comp_checkboxes ~name checked query =
     end query.available_compilers
   end
 
-let revdeps_cmp p1 p2 =
-  Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
-
-(* TODO: Put this function in the Cache module (and make use of it) *)
-let get_logsearch ~query ~logdir =
-  match query.logsearch with
-  | _, None -> Lwt.return []
-  | regexp, Some (_, comp) ->
-      let switch = Compiler.to_string comp in
-      Server_workdirs.logdir_search ~switch ~regexp logdir >|=
-      List.filter_map (fun s ->
-        match String.split_on_char '/' s with
-        | [_switch; _state; full_name] -> Some (Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:(-1))
-        | _ -> None
-      )
-
 let common_header =
   let open Tyxml.Html in
   h3 [
@@ -255,9 +173,6 @@ let get_html ~logdir query pkgs =
   let open Tyxml.Html in
   let pkgs' = pkgs in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
-  let logsearch = get_logsearch ~query ~logdir in
-  Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
-  let pkgs = if query.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
   let pkgs = List.map (pkg_to_html logdir query) pkgs in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers @ [th [txt "number of revdeps"]] in
