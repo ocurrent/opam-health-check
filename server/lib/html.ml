@@ -323,21 +323,21 @@ let get_html ~logdir query pkgs =
       }
     |}]
   ] in
-  let compilers_text = [txt "Show only:"] in
+  let compilers_text = [txt "Only show these compilers:"] in
   let compilers = comp_checkboxes ~name:"comp" query.compilers query in
-  let show_available_text = [txt "Show only packages available in:"] in
+  let show_available_text = [txt "Only show packages available in:"] in
   let show_available = comp_checkboxes ~name:"available" query.show_available query in
   let show_failures_only_text = [txt "Show failures only:"] in
   let show_failures_only = input ~a:(a_input_type `Checkbox::a_name "show-failures-only"::a_value "true"::if query.show_failures_only then [a_checked ()] else []) () in
-  let show_diff_only_text = [txt "Only show packages that have different build status between each compilers:"] in
+  let show_diff_only_text = [txt "Only show packages whose build status differs between each compilers:"] in
   let show_diff_only = input ~a:(a_input_type `Checkbox::a_name "show-diff-only"::a_value "true"::if query.show_diff_only then [a_checked ()] else []) () in
   let show_latest_only_text = [txt "Only show the latest version of each packages:"] in
   let show_latest_only = input ~a:(a_input_type `Checkbox::a_name "show-latest-only"::a_value "true"::if query.show_latest_only then [a_checked ()] else []) () in
   let sort_by_revdeps_text = [txt "Sort by number of revdeps:"] in
   let sort_by_revdeps = input ~a:(a_input_type `Checkbox::a_name "sort-by-revdeps"::a_value "true"::if query.sort_by_revdeps then [a_checked ()] else []) () in
-  let maintainers_text = [txt "Show only packages maintained by [posix regexp]:"] in
+  let maintainers_text = [txt "Only show packages maintained by [posix regexp]:"] in
   let maintainers = input ~a:[a_input_type `Text; a_name "maintainers"; a_value (fst query.maintainers)] () in
-  let logsearch_text = [txt "Show only packages where one of the logs matches [posix regexp]:"] in
+  let logsearch_text = [txt "Only show packages whose log matches [posix regexp]:"] in
   let logsearch = input ~a:[a_input_type `Text; a_name "logsearch"; a_value (fst query.logsearch)] () in
   let opts_comp = List.map begin fun comp ->
     let comp_str = Intf.Compiler.to_string comp in
