@@ -146,27 +146,56 @@ let get_opam_repository_commit_url ~hash ~content =
   let open Tyxml.Html in
   a ~a:[a_href (github_url^"/commit/"^hash)] [content]
 
-let gen_table_form ~logdir l =
+let get_run_info pkgs =
+  List.fold_left (fun (number_pkgs, number_hard_fail, number_soft_fail) pkg ->
+    let first_fail =
+      List.find_map (fun instance -> match Instance.state instance with
+        | State.Good -> None
+        | State.Partial -> Some `Soft
+        | State.Bad -> Some `Hard
+        | State.NotAvailable -> None
+        | State.InternalFailure -> None
+      ) (Intf.Pkg.instances pkg)
+    in
+    let (number_hard_fail, number_soft_fail) =
+      match first_fail with
+      | None -> (number_hard_fail, number_soft_fail)
+      | Some `Soft -> (number_hard_fail, succ number_soft_fail)
+      | Some `Hard -> (succ number_hard_fail, number_soft_fail)
+    in
+    (succ number_pkgs, number_hard_fail, number_soft_fail)
+  ) (0, 0, 0) pkgs
+
+let run_info ~logdir ~pkgs =
   let open Tyxml.Html in
-  let aux (txt, elts) = tr [td txt; td elts] in
-  let legend = legend [b [txt "Filter form:"]] in
   let opam_repo_uri =
     let content = b [txt "🔗 opam-repository commit hash"] in
     let hash = Server_workdirs.get_logdir_hash logdir in
     get_opam_repository_commit_url ~hash ~content
   in
-  let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last checks"]] in
-  let opam_previous_runs_uri = a ~a:[a_href "/run"] [b [txt "🔗 Previous runs"]] in
   let date = Server_workdirs.get_logdir_time logdir in
   let date = date_to_string date in
+  let legend = legend [b [txt "About this run:"]] in
+  let number_pkgs, number_hard_fail, number_soft_fail = get_run_info pkgs in
+  fieldset ~legend ~a:[a_style "width: 65%; float: right;"] [
+    div ~a:[a_style "text-align: right;"] [opam_repo_uri];
+    p ~a:[a_style "text-align: right;"] [
+      txt ("Packages with current filters: "^string_of_int number_pkgs);
+      br ();
+      txt ("Packages failing with current filters: "^string_of_int number_hard_fail);
+      br ();
+      txt ("Packages whose dependencies failed with current filters: "^string_of_int number_soft_fail);
+    ];
+    p ~a:[a_style "text-align: right;"] [i [small [txt ("Run made on the "^date)]]];
+  ]
+
+let gen_table_form ~logdir ~pkgs l =
+  let open Tyxml.Html in
+  let aux (txt, elts) = tr [td txt; td elts] in
+  let legend = legend [b [txt "Filter form:"]] in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
-    td [result_legend;
-        p ~a:[a_style "text-align: right;"] [opam_repo_uri];
-        p ~a:[a_style "text-align: right;"] [opam_diff_uri];
-        p ~a:[a_style "text-align: right;"] [opam_previous_runs_uri];
-        p ~a:[a_style "text-align: right;"] [i [small [txt ("Run made on the "^date)]]];
-       ]
+    td [result_legend; run_info ~logdir ~pkgs]
   ]]]]
 
 let comp_checkboxes ~name checked query =
@@ -224,6 +253,7 @@ let common_header =
 
 let get_html ~logdir query pkgs =
   let open Tyxml.Html in
+  let pkgs' = pkgs in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
   let logsearch = get_logsearch ~query ~logdir in
   Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
@@ -365,7 +395,7 @@ let get_html ~logdir query pkgs =
   end query.compilers in
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form ~logdir [
+  let filter_form = gen_table_form ~pkgs:pkgs' ~logdir [
     (compilers_text, [compilers]);
     (show_available_text, [show_available]);
     (show_failures_only_text, [show_failures_only]);
