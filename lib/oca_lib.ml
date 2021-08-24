@@ -52,16 +52,21 @@ let rec scan_dir ~full_path dirname =
 
 let scan_dir dirname = scan_dir ~full_path:dirname (Fpath.v ".")
 
-let pread ?cwd ~timeout cmd f =
+let pread ?cwd ?exit1 ~timeout cmd f =
   Lwt_process.with_process_in ?cwd ~timeout ~stdin:`Close ("", Array.of_list cmd) begin fun proc ->
     f proc#stdout >>= fun res ->
     proc#close >>= function
-    | Unix.WEXITED 0 ->
-        Lwt.return res
     | Unix.WEXITED n ->
-        let cmd = String.concat " " cmd in
-        prerr_endline ("Command '"^cmd^"' failed (exit status: "^string_of_int n^".");
-        Lwt.fail (Failure "process failure")
+        begin match n, exit1 with
+        | 0, _ ->
+            Lwt.return res
+        | 1, Some default_val ->
+            Lwt.return default_val
+        | _, _ ->
+            let cmd = String.concat " " cmd in
+            prerr_endline ("Command '"^cmd^"' failed (exit status: "^string_of_int n^".");
+            Lwt.fail (Failure "process failure")
+        end
     | Unix.WSIGNALED n | Unix.WSTOPPED n ->
         let cmd = String.concat " " cmd in
         prerr_endline ("Command '"^cmd^"' killed by a signal (n°"^string_of_int n^")");
@@ -94,13 +99,13 @@ let compress_tpxz_archive ~cwd ~directories archive =
 
 let ugrep_dir ~switch ~regexp ~cwd =
   let cwd = Fpath.to_string cwd in
-  pread ~timeout:60. ~cwd ["ugrep"; "-Rl"; "--include="^switch^"/**"; "--regexp="^regexp; "."] read_unordered_lines
+  pread ~timeout:60. ~cwd ~exit1:[] ["ugrep"; "-Rl"; "--include="^switch^"/**"; "--regexp="^regexp; "."] read_unordered_lines
 
 let ugrep_tpxz ~switch ~regexp ~archive =
   let switch = Filename.quote switch in
   let regexp = Filename.quote regexp in
   let archive = Filename.quote (Fpath.to_string archive) in
-  pread ~timeout:60. ["sh"; "-c"; "pixz -x "^switch^" -i "^archive^" | (ugrep -zl --format='%z%~' --regexp="^regexp^"; test $? = 0 -o $? = 1)"] read_unordered_lines
+  pread ~timeout:60. ~exit1:[] ["sh"; "-c"; "pixz -x "^switch^" -i "^archive^" | ugrep -zl --format='%z%~' --regexp="^regexp] read_unordered_lines
 
 let mkdir_p dir =
   let rec aux base = function
