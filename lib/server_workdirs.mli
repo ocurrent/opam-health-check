@@ -28,6 +28,8 @@ val logdir_search : switch:string -> regexp:string -> logdir -> string list Lwt.
 val ilogdir : t -> Fpath.t
 val new_ilogfile : start_time:float -> t -> Fpath.t
 
+val tmpdir : logdir -> Fpath.t
+
 val tmplogdir : logdir -> Fpath.t
 val tmplogfile : pkg:string -> switch:Intf.Compiler.t -> logdir -> Fpath.t
 

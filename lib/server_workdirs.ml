@@ -105,7 +105,9 @@ let logdir_search ~switch ~regexp = function
       let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
       Oca_lib.ugrep_tpxz ~switch ~regexp ~archive
 
-let tmplogdir (Logdir (_, _, _, workdir, _) as logdir) = base_tmpdir workdir/get_logdir_name logdir/"logs"
+let tmpdir (Logdir (_, _, _, workdir, _) as logdir) = base_tmpdir workdir/get_logdir_name logdir
+
+let tmplogdir logdir = tmpdir logdir/"logs"
 let tmpswitchlogdir ~switch logdir = tmplogdir logdir/Intf.Compiler.to_string switch
 
 let logdir_move ~switches (Logdir (ty, _, _, workdir, _) as logdir) = match ty with
@@ -113,7 +115,8 @@ let logdir_move ~switches (Logdir (ty, _, _, workdir, _) as logdir) = match ty w
       let cwd = tmplogdir logdir in
       let directories = List.map Intf.Compiler.to_string switches in
       let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
-      Oca_lib.compress_tpxz_archive ~cwd ~directories archive
+      Oca_lib.compress_tpxz_archive ~cwd ~directories archive >>= fun () ->
+      Oca_lib.rm_rf cwd
   | Uncompressed ->
       let tmplogdir = tmplogdir logdir in
       let logdir = base_logdir workdir/get_logdir_name logdir in
