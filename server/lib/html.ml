@@ -58,72 +58,6 @@ let instance_to_html ~pkg logdir instances comp =
       end
   | None -> td "cell-not-available" [txt "☐"] (* NOTE: Should not happen in the new versions but can happen with old data or custom runs *)
 
-let is_deprecated flag =
-  String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
-
-let (>>&&) x f =
-  x >>= fun x ->
-  if x then f () else Lwt.return_false
-
-let must_show_package ~logsearch query ~is_latest pkg =
-  let opam = Pkg.opam pkg in
-  let instances' = Pkg.instances pkg in
-  let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.compilers) instances' in
-  begin
-    Lwt.return @@
-    List.exists (fun comp ->
-      match List.find_opt (fun inst -> Compiler.equal comp (Instance.compiler inst)) instances' with
-      | None -> true (* TODO: Maybe switch to assert false? *)
-      | Some inst -> match Instance.state inst with
-        | State.NotAvailable -> false
-        | State.(Good | Partial | Bad | InternalFailure) -> true
-    ) query.show_available
-  end >>&& begin fun () ->
-    Lwt.return @@
-    if query.show_failures_only then
-      List.exists (fun instance -> match Instance.state instance with
-        | State.Bad | State.Partial -> true
-        | State.Good | State.NotAvailable | State.InternalFailure -> false
-      ) instances
-    else
-      true
-  end >>&& begin fun () ->
-    Lwt.return @@
-    match instances with
-    | hd::tl when query.show_diff_only ->
-        let state = Instance.state hd in
-        List.exists (fun x -> not (State.equal state (Instance.state x))) tl
-    | [] | _::_ ->
-        true
-  end >>&& begin fun () ->
-    Lwt.return @@
-    if query.show_latest_only then
-      if is_latest then
-        not (List.exists is_deprecated opam.OpamFile.OPAM.flags)
-      else
-        false
-    else
-      true
-  end >>&& begin fun () ->
-    Lwt.return @@
-    match snd query.maintainers with
-    | Some re -> List.exists (Re.execp re) opam.OpamFile.OPAM.maintainer
-    | None -> true
-  end >>&& begin fun () ->
-    match snd query.logsearch with
-    | Some _ -> logsearch >|= List.exists (Pkg.equal pkg)
-    | None -> Lwt.return_true
-  end
-
-let filter_pkg ~logsearch query (acc, last) pkg =
-  let is_latest = match last with
-    | None -> true
-    | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
-  in
-  must_show_package ~logsearch query ~is_latest pkg >|= function
-  | true -> (pkg :: acc, Some pkg)
-  | false -> (acc, Some pkg)
-
 let pkg_to_html logdir query pkg =
   let open Tyxml.Html in
   let tr = tr ~a:[a_class ["results-row"]] in
@@ -146,27 +80,56 @@ let get_opam_repository_commit_url ~hash ~content =
   let open Tyxml.Html in
   a ~a:[a_href (github_url^"/commit/"^hash)] [content]
 
-let gen_table_form ~logdir l =
+let get_run_info pkgs =
+  List.fold_left (fun (number_pkgs, number_hard_fail, number_soft_fail) pkg ->
+    let first_fail =
+      List.find_map (fun instance -> match Instance.state instance with
+        | State.Good -> None
+        | State.Partial -> Some `Soft
+        | State.Bad -> Some `Hard
+        | State.NotAvailable -> None
+        | State.InternalFailure -> None
+      ) (Intf.Pkg.instances pkg)
+    in
+    let (number_hard_fail, number_soft_fail) =
+      match first_fail with
+      | None -> (number_hard_fail, number_soft_fail)
+      | Some `Soft -> (number_hard_fail, succ number_soft_fail)
+      | Some `Hard -> (succ number_hard_fail, number_soft_fail)
+    in
+    (succ number_pkgs, number_hard_fail, number_soft_fail)
+  ) (0, 0, 0) pkgs
+
+let run_info ~logdir ~pkgs =
   let open Tyxml.Html in
-  let aux (txt, elts) = tr [td txt; td elts] in
-  let legend = legend [b [txt "Filter form:"]] in
   let opam_repo_uri =
     let content = b [txt "🔗 opam-repository commit hash"] in
     let hash = Server_workdirs.get_logdir_hash logdir in
     get_opam_repository_commit_url ~hash ~content
   in
-  let opam_diff_uri = a ~a:[a_href "/diff"] [b [txt "🔗 Differences with the last checks"]] in
-  let opam_previous_runs_uri = a ~a:[a_href "/run"] [b [txt "🔗 Previous runs"]] in
   let date = Server_workdirs.get_logdir_time logdir in
   let date = date_to_string date in
+  let legend = legend [b [txt "About this run:"]] in
+  let number_pkgs, number_hard_fail, number_soft_fail = get_run_info pkgs in
+  fieldset ~legend ~a:[a_style "float: right;"] [
+    div ~a:[a_style "text-align: right;"] [opam_repo_uri];
+    p ~a:[a_style "text-align: right;"] [
+      b [txt "Packages with current filters: "]; txt (string_of_int number_pkgs);
+      br ();
+      b [txt "Packages failing with current filters: "]; txt (string_of_int number_hard_fail);
+      br ();
+      b [txt "Packages whose dependencies failed with current filters: "]; txt (string_of_int number_soft_fail);
+    ];
+    p ~a:[a_style "text-align: right;"] [i [small [txt ("Run made on the "^date)]]];
+  ]
+
+let gen_table_form ~logdir ~pkgs l =
+  let open Tyxml.Html in
+  let aux (txt, elts) = tr [td txt; td elts] in
+  let legend = legend [b [txt "Filter form:"]] in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
-    td [result_legend;
-        p ~a:[a_style "text-align: right;"] [opam_repo_uri];
-        p ~a:[a_style "text-align: right;"] [opam_diff_uri];
-        p ~a:[a_style "text-align: right;"] [opam_previous_runs_uri];
-        p ~a:[a_style "text-align: right;"] [i [small [txt ("Run made on the "^date)]]];
-       ]
+    td [result_legend; run_info ~logdir ~pkgs]
   ]]]]
 
 let comp_checkboxes ~name checked query =
@@ -188,28 +151,28 @@ let comp_checkboxes ~name checked query =
     end query.available_compilers
   end
 
-let revdeps_cmp p1 p2 =
-  Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
-
-(* TODO: Put this function in the Cache module (and make use of it) *)
-let get_logsearch ~query ~logdir =
-  match query.logsearch with
-  | _, None -> Lwt.return []
-  | regexp, Some (_, comp) ->
-      let switch = Compiler.to_string comp in
-      Server_workdirs.logdir_search ~switch ~regexp logdir >|=
-      List.filter_map (fun s ->
-        match String.split_on_char '/' s with
-        | [_switch; _state; full_name] -> Some (Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:(-1))
-        | _ -> None
-      )
+let common_header =
+  let open Tyxml.Html in
+  h3 [
+    a ~a:[a_href "/"] [
+      img
+        ~a:[a_style "border-radius: 8px; width: 50px; vertical-align: middle;"]
+        ~src:"http://ocamllabs.io/assets/img/origami-camel.png"
+        ~alt:"OCamllabs icon" ()
+        (* TODO: Integrate the image in each instances *)
+    ];
+    txt " ";
+    span ~a:[a_style "vertical-align: middle; padding-left: 0.4%;"] [a ~a:[a_href "/"] [txt "Home"]];
+    span ~a:[a_style "vertical-align: middle; padding: 1%;"] [txt "|"];
+    span ~a:[a_style "vertical-align: middle;"] [a ~a:[a_href "/diff"] [txt "Differences with the last checks"]];
+    span ~a:[a_style "vertical-align: middle; padding: 1%;"] [txt "|"];
+    span ~a:[a_style "vertical-align: middle;"] [a ~a:[a_href "/run"] [txt "Previous runs"]];
+  ]
 
 let get_html ~logdir query pkgs =
   let open Tyxml.Html in
+  let pkgs' = pkgs in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
-  let logsearch = get_logsearch ~query ~logdir in
-  Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) >|= fun (pkgs, _) ->
-  let pkgs = if query.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
   let pkgs = List.map (pkg_to_html logdir query) pkgs in
   let th ?(a=[]) = th ~a:(a_class ["results-cell"]::a) in
   let dirs = th [] :: List.map (fun comp -> th ~a:[a_class ["result-col"]] [txt (Compiler.to_string comp)]) query.compilers @ [th [txt "number of revdeps"]] in
@@ -323,21 +286,21 @@ let get_html ~logdir query pkgs =
       }
     |}]
   ] in
-  let compilers_text = [txt "Show only:"] in
+  let compilers_text = [txt "Only show these compilers:"] in
   let compilers = comp_checkboxes ~name:"comp" query.compilers query in
-  let show_available_text = [txt "Show only packages available in:"] in
+  let show_available_text = [txt "Only show packages available in:"] in
   let show_available = comp_checkboxes ~name:"available" query.show_available query in
   let show_failures_only_text = [txt "Show failures only:"] in
   let show_failures_only = input ~a:(a_input_type `Checkbox::a_name "show-failures-only"::a_value "true"::if query.show_failures_only then [a_checked ()] else []) () in
-  let show_diff_only_text = [txt "Only show packages that have different build status between each compilers:"] in
+  let show_diff_only_text = [txt "Only show packages whose build status differs between each compilers:"] in
   let show_diff_only = input ~a:(a_input_type `Checkbox::a_name "show-diff-only"::a_value "true"::if query.show_diff_only then [a_checked ()] else []) () in
   let show_latest_only_text = [txt "Only show the latest version of each packages:"] in
   let show_latest_only = input ~a:(a_input_type `Checkbox::a_name "show-latest-only"::a_value "true"::if query.show_latest_only then [a_checked ()] else []) () in
   let sort_by_revdeps_text = [txt "Sort by number of revdeps:"] in
   let sort_by_revdeps = input ~a:(a_input_type `Checkbox::a_name "sort-by-revdeps"::a_value "true"::if query.sort_by_revdeps then [a_checked ()] else []) () in
-  let maintainers_text = [txt "Show only packages maintained by [posix regexp]:"] in
+  let maintainers_text = [txt "Only show packages maintained by [posix regexp]:"] in
   let maintainers = input ~a:[a_input_type `Text; a_name "maintainers"; a_value (fst query.maintainers)] () in
-  let logsearch_text = [txt "Show only packages where one of the logs matches [posix regexp]:"] in
+  let logsearch_text = [txt "Only show packages whose log matches [posix regexp]:"] in
   let logsearch = input ~a:[a_input_type `Text; a_name "logsearch"; a_value (fst query.logsearch)] () in
   let opts_comp = List.map begin fun comp ->
     let comp_str = Intf.Compiler.to_string comp in
@@ -347,7 +310,7 @@ let get_html ~logdir query pkgs =
   end query.compilers in
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form ~logdir [
+  let filter_form = gen_table_form ~pkgs:pkgs' ~logdir [
     (compilers_text, [compilers]);
     (show_available_text, [show_available]);
     (show_failures_only_text, [show_failures_only]);
@@ -359,7 +322,7 @@ let get_html ~logdir query pkgs =
     ([], [submit_form]);
   ] in
   let doc = table ~a:[a_id "results"] ~thead:(thead [tr dirs]) pkgs in
-  let doc = html head (body [filter_form; br (); doc; script javascript]) in
+  let doc = html head (body [common_header; filter_form; br (); doc; script javascript]) in
   Format.sprintf "%a\n" (pp ()) doc
 
 let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; diff} =
@@ -400,20 +363,6 @@ let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; d
   li (prefix @ diff)
 
 type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list)
-
-let common_header =
-  let open Tyxml.Html in
-  h3 [
-    a ~a:[a_href "/"] [
-      img
-        ~a:[a_style "border-radius: 8px; width: 50px; vertical-align: middle;"]
-        ~src:"http://ocamllabs.io/assets/img/origami-camel.png"
-        ~alt:"OCamllabs icon" ()
-        (* TODO: Integrate the image in each instances *)
-    ];
-    txt " ";
-    span ~a:[a_style "vertical-align: middle;"] [a ~a:[a_href "/"] [txt "Home"]];
-  ]
 
 let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_failure, good) =
   let open Tyxml.Html in
@@ -511,5 +460,5 @@ let get_log ~comp ~pkg log =
   let title = title (txt ("opam-health-check log - "^pkg^" on "^Intf.Compiler.to_string comp)) in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
-  let doc = html head (body [style [Unsafe.data Current_ansi.css]; pre [Unsafe.data log]]) in
+  let doc = html head (body [common_header; hr (); style [Unsafe.data Current_ansi.css]; pre [Unsafe.data log]]) in
   Format.sprintf "%a\n" (pp ()) doc

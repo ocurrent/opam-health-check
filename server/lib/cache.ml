@@ -96,10 +96,95 @@ let clear_and_init self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   self.pkgs <- self.compilers >|= List.map (fun (logdir, compilers) -> (logdir, pkgs ~compilers logdir));
   Html_cache.clear self.html_tbl
 
+let is_deprecated flag =
+  String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
+
+let (>>&&) x f =
+  x >>= fun x ->
+  if x then f () else Lwt.return_false
+
+let must_show_package ~logsearch query ~is_latest pkg =
+  let opam = Pkg.opam pkg in
+  let instances' = Pkg.instances pkg in
+  let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.Html.compilers) instances' in
+  begin
+    Lwt.return @@
+    List.exists (fun comp ->
+      match List.find_opt (fun inst -> Compiler.equal comp (Instance.compiler inst)) instances' with
+      | None -> true (* TODO: Maybe switch to assert false? *)
+      | Some inst -> match Instance.state inst with
+        | State.NotAvailable -> false
+        | State.(Good | Partial | Bad | InternalFailure) -> true
+    ) query.Html.show_available
+  end >>&& begin fun () ->
+    Lwt.return @@
+    if query.Html.show_failures_only then
+      List.exists (fun instance -> match Instance.state instance with
+        | State.Bad | State.Partial -> true
+        | State.Good | State.NotAvailable | State.InternalFailure -> false
+      ) instances
+    else
+      true
+  end >>&& begin fun () ->
+    Lwt.return @@
+    match instances with
+    | hd::tl when query.Html.show_diff_only ->
+        let state = Instance.state hd in
+        List.exists (fun x -> not (State.equal state (Instance.state x))) tl
+    | [] | _::_ ->
+        true
+  end >>&& begin fun () ->
+    Lwt.return @@
+    if query.Html.show_latest_only then
+      if is_latest then
+        not (List.exists is_deprecated opam.OpamFile.OPAM.flags)
+      else
+        false
+    else
+      true
+  end >>&& begin fun () ->
+    Lwt.return @@
+    match snd query.Html.maintainers with
+    | Some re -> List.exists (Re.execp re) opam.OpamFile.OPAM.maintainer
+    | None -> true
+  end >>&& begin fun () ->
+    match snd query.Html.logsearch with
+    | Some _ -> logsearch >|= List.exists (Pkg.equal pkg)
+    | None -> Lwt.return_true
+  end
+
+let filter_pkg ~logsearch query (acc, last) pkg =
+  let is_latest = match last with
+    | None -> true
+    | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
+  in
+  must_show_package ~logsearch query ~is_latest pkg >|= function
+  | true -> (pkg :: acc, Some pkg)
+  | false -> (acc, Some pkg)
+
+(* TODO: Make use of the cache *)
+let get_logsearch ~query ~logdir =
+  match query.Html.logsearch with
+  | _, None -> Lwt.return []
+  | regexp, Some (_, comp) ->
+      let switch = Compiler.to_string comp in
+      Server_workdirs.logdir_search ~switch ~regexp logdir >|=
+      List.filter_map (fun s ->
+        match String.split_on_char '/' s with
+        | [_switch; _state; full_name] -> Some (Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:(-1))
+        | _ -> None
+      )
+
+let revdeps_cmp p1 p2 =
+  Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
+
 let get_html self query logdir =
   let aux ~logdir pkgs =
     pkgs >>= fun pkgs ->
-    Html.get_html ~logdir query pkgs >>= fun html ->
+    let logsearch = get_logsearch ~query ~logdir in
+    Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) >>= fun (pkgs, _) ->
+    let pkgs = if query.Html.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
+    let html = Html.get_html ~logdir query pkgs in
     Html_cache.add self.html_tbl (logdir, query) html;
     Lwt.return html
   in
