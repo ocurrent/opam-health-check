@@ -329,8 +329,14 @@ let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder)
     (Pkg_set.add pkgname pkgs_set, job :: jobs)
   end pkgs (Pkg_set.empty, jobs)
 
-let get_commit_hash ~user ~repo ~branch =
-  Github.Monad.run (Github.Repo.get_ref ~user ~repo ~name:("heads/"^branch) ()) >|= fun r ->
+let get_commit_hash ~user ~repo =
+  Github.Monad.run begin
+    let ( >>= ) = Github.Monad.( >>= ) in
+    Github.Repo.info ~user ~repo () >>= fun info ->
+    let branch = info#value.Github_t.repository_default_branch in
+    let branch = Option.value ~default:"master" branch in
+    Github.Repo.get_ref ~user ~repo ~name:("heads/"^branch) ()
+  end >|= fun r ->
   let r = Github.Response.value r in
   r.Github_t.git_ref_obj.Github_t.obj_sha
 
@@ -338,8 +344,7 @@ let get_commit_hash_extra_repos conf =
   Lwt_list.map_s begin fun repository ->
     let user = Intf.Repository.github_user repository in
     let repo = Intf.Repository.github_repo repository in
-    let branch = "master" in
-    get_commit_hash ~user ~repo ~branch >|= fun hash ->
+    get_commit_hash ~user ~repo >|= fun hash ->
     (repository, hash)
   end (Server_configfile.extra_repositories conf)
 
@@ -421,7 +426,7 @@ let run ~debug ~on_finished ~conf cache workdir =
     with_stderr ~start_time workdir begin fun ~stderr ->
       let timer = Oca_lib.timer_start () in
       get_cap ~stderr >>= fun cap ->
-      get_commit_hash ~user:"ocaml" ~repo:"opam-repository" ~branch:"master" >>= fun opam_repo_commit ->
+      get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
       get_commit_hash_extra_repos conf >>= fun extra_repos ->
       let switches' = switches in
       let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo_commit ~extra_repos switch)) switches in
