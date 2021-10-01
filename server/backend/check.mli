@@ -1,5 +1,6 @@
 val run :
   debug:bool ->
+  cap_file:string ->
   on_finished:(Server_workdirs.t -> unit) ->
   conf:Server_configfile.t ->
   Oca_server.Cache.t ->

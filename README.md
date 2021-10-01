@@ -8,36 +8,42 @@ $ opam pin add opam-health-check .
 
 For opam-health-check to work you need to start the server like so:
 ```
-$ opam-health-serve <a new clean path or a path to an existing work directory>
+$ opam-health-serve --connect "$ocluster_cap" "$workdir"
 ```
 For instance:
 ```
-$ opam-health-serve /tmp/opam-health-check
+$ workdir=/tmp/opam-health-check
+$ ocluster_cap="$HOME/ocluster.cap"
+$ opam-health-serve --connect "$ocluster_cap" "$workdir"
 ```
 
-Now simply use the `opam-health-check` command. First we need to initialize it like so:
+Now simply use the `opam-health-check` command. First you need to initialize it like so:
 ```
-$ opam-health-check init --from-local-workdir /tmp/opam-health-check
+$ opam-health-check init --from-local-workdir "$workdir"
 ```
-or used any custom path given to the server.
 
 Now you can send any command to the server using the `opam-health-check` command.
-All subcommands are listed with `opam-health-check --help`
+All subcommands may be listed with `opam-health-check --help`
 
 ### OCluster capability file
 
-opam-health-check now uses OCluster for its daily use. This means you need access to an
-OCluster instance and you also need to place its dedicated capability file to `~/ocluster.cap`
-on the server (will change in the future).
+opam-health-check now uses OCluster for its daily use. This means you need
+access to an OCluster instance with its dedicated capability file, which is
+given to the server through the `--connect` option.
 
 To set this up locally, you will need to get run the OCluster scheduler and one or more workers. The
 sequence of steps is:
 
 1. Run the OCluster scheduler probably with the public address `tcp:127.0.0.1:9000`.
-2. Use the OCluster admin command to generate the submission capability for opam-health-check, it will most likely be something like `ocluster-admin add-client ./capnp-secrets/admin.cap opam-health-check > ~/ocluster.cap`.
+2. Use the OCluster admin command to generate the submission capability for
+   opam-health-check, it will most likely be something like
+   ```
+   $ ocluster-admin add-client --connect ./capnp-secrets/admin.cap opam-health-check > ~/ocluster.cap`.
+   ```
 3. Add a new worker to the pool you are using.
-4. Run the opam-health-check server.
-5. Initialise opam-health-check as described above, add some switches and then run the checks.
+4. Run `opam-health-serve`.
+5. Initialise `opam-health-check` as described above, add some opam switches and
+   then run the checks.
 
 ### How to use opam-health-check remotely:
 
@@ -51,11 +57,11 @@ To connect to the server remotely just you first need to retreive the `admin.key
 in `<workdir>/keys/admin.key` and do `opam-health-check init`.
 From there, answer all the questions (hostname, admin-port (default: 6666), username (admin)
 and the path to the user key you just retreived).
-You now have your client tool configured with an admin user !
+You now have your client tool configured with an admin user!
 
 To add new users, just use the `opam-health-check add-user <username>` command as the admin and
 give the key to your new user. She now just need to do the same procedure but with her username.
 
-Side note: every users have the same rights and can add new users.
+Side note: every user have the same rights and can add new users.
 
 Enjoy.

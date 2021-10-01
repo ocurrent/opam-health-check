@@ -130,13 +130,13 @@ module Make (Backend : Backend_intf.S) = struct
       ~mode:(`TCP (`Port port))
       (Cohttp_lwt_unix.Server.make ~callback ())
 
-  let main ~debug ~workdir =
+  let main ~debug ~cap_file ~workdir =
     Lwt_unix.getcwd () >>= fun cwd ->
     let workdir = Server_workdirs.create ~cwd ~workdir in
     Server_workdirs.init_base workdir >>= fun () ->
     let conf = Server_configfile.from_workdir workdir in
     let port = Server_configfile.port conf in
-    Backend.start ~debug conf workdir >>= fun (backend, backend_task) ->
+    Backend.start ~debug ~cap_file conf workdir >>= fun (backend, backend_task) ->
     Lwt.join [
       tcp_server ~debug port (callback ~debug backend);
       backend_task ();

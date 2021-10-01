@@ -392,9 +392,7 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
     | _ -> Lwt_io.write_line stderr ("Something when wrong with slack webhook "^Uri.to_string webhook)
   end
 
-let get_cap ~stderr =
-  let home = Sys.getenv "HOME" in
-  let cap_file = home^"/ocluster.cap" in (* TODO: fix that *)
+let get_cap ~stderr ~cap_file =
   let vat = Capnp_rpc_unix.client_only_vat () in
   match Capnp_rpc_unix.Cap_file.load vat cap_file with
   | Ok sr ->
@@ -416,7 +414,7 @@ let wait_current_run_to_finish =
   in
   loop
 
-let run ~debug ~on_finished ~conf cache workdir =
+let run ~debug ~cap_file ~on_finished ~conf cache workdir =
   let switches = Option.get_exn_or "no switches" (Server_configfile.ocaml_switches conf) in
   if !run_locked then
     failwith "operation locked";
@@ -425,7 +423,7 @@ let run ~debug ~on_finished ~conf cache workdir =
     let start_time = Unix.time () in
     with_stderr ~start_time workdir begin fun ~stderr ->
       let timer = Oca_lib.timer_start () in
-      get_cap ~stderr >>= fun cap ->
+      get_cap ~stderr ~cap_file >>= fun cap ->
       get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
       get_commit_hash_extra_repos conf >>= fun extra_repos ->
       let switches' = switches in
