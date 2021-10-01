@@ -117,7 +117,7 @@ let run_action_loop ~conf ~run_trigger f =
   in
   loop ()
 
-let start ~debug conf workdir =
+let start ~debug ~cap_file conf workdir =
   let port = Server_configfile.admin_port conf in
   let on_finished = cache_clear_and_init in
   let run_trigger = Lwt_mvar.create_empty () in
@@ -128,7 +128,7 @@ let start ~debug conf workdir =
   let task () =
     Lwt.join [
       tcp_server port callback;
-      run_action_loop ~conf ~run_trigger (fun () -> Check.run ~debug ~on_finished ~conf cache workdir);
+      run_action_loop ~conf ~run_trigger (fun () -> Check.run ~debug ~cap_file ~on_finished ~conf cache workdir);
     ]
   in
   (workdir, task)
