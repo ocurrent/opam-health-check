@@ -1,6 +1,5 @@
 (library
   (name backend)
-  (flags :standard -w A-44-33-4 -open Containers)
   (libraries
     oca_lib
     fmt

@@ -1,7 +1,6 @@
 (executable
   (name client)
   (public_name opam-health-check)
-  (flags :standard -w A-44-33-4 -open Containers)
   (libraries
     mirage-crypto-pk
     cohttp

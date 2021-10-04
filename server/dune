@@ -1,7 +1,6 @@
 (executable
   (name main)
   (public_name opam-health-serve)
-  (flags :standard -w A-44-33-4 -open Containers)
   (libraries backend lwt.unix containers cmdliner oca_server))
 
 (rule

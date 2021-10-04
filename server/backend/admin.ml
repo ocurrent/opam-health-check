@@ -1,5 +1,7 @@
 open Lwt.Infix
 
+let ( // ) = Fpath.( / )
+
 let with_file_out ~flags file f =
   let flags = Unix.O_WRONLY::Unix.O_CREAT::Unix.O_TRUNC::Unix.O_NONBLOCK::flags in
   Lwt_io.with_file ~flags ~mode:Lwt_io.Output file f
@@ -36,7 +38,7 @@ let get_log workdir =
   Oca_lib.get_files ilogdir >>= fun logs ->
   let logs = List.sort String.compare logs in
   let logfile = Option.get_exn_or "no last log" (List.last_opt logs) in
-  let logfile = Fpath.(ilogdir / logfile) in
+  let logfile = ilogdir // logfile in
   Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_RDONLY] 0o644 >>= fun fd ->
   let off = ref 0 in
   let rec loop () =

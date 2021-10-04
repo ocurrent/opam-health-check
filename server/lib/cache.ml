@@ -42,6 +42,7 @@ let add_diff htbl acc ((full_name, comp) as pkg) =
   | [(New, new_state); (Old, old_state)] when Intf.State.equal new_state old_state -> acc
   | [(New, new_state); (Old, old_state)] -> Intf.Pkg_diff.{full_name; comp; diff = StatusChanged (old_state, new_state)} :: acc
   | _ -> assert false
+  [@@ocaml.warning "-fragile-match"]
 
 let split_diff (bad, partial, not_available, internal_failure, good) diff =
   let open Intf.State in
