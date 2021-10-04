@@ -9,6 +9,7 @@
     tyxml.functor
     cohttp
     cohttp-lwt-unix
+    ; conduit-lwt-unix ; TODO: Remove this. Not required explicitly but uncomment if you use (implicit_transitive_deps false)
     opam-format
     containers
     fpath
