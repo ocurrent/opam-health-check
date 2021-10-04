@@ -9,6 +9,7 @@
     tyxml.functor
     cohttp
     cohttp-lwt-unix
+    conduit-lwt-unix
     opam-format
     containers
     fpath

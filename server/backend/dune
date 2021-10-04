@@ -11,6 +11,7 @@
     cohttp
     cohttp-lwt
     cohttp-lwt-unix
+    conduit-lwt-unix
     sexplib
     sexplib0
     cstruct
@@ -24,6 +25,8 @@
     capnp-rpc-lwt
     capnp-rpc-unix
     github
+    github-data
     github-unix
     mirage-crypto-pk
-    mirage-crypto-rng.lwt))
+    mirage-crypto-rng.lwt
+    result))

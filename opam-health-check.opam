@@ -16,6 +16,7 @@ depends: [
   "cohttp-lwt"
   "cohttp-lwt-unix"
   "containers" {>= "3.4"}
+  "conduit-lwt-unix" {>= "4.0.1"}
   "opam-core"
   "opam-format"
   "mirage-crypto-pk" {>= "0.7.0"}
@@ -31,17 +32,20 @@ depends: [
   "obuilder-spec" {>= "0.2"}
   "ocluster-api" {>= "0.1"}
   "current_ansi" {>= "0.1"}
-  "github"
-  "github-unix"
+  "github" {>= "4.4.0"}
+  "github-unix" {>= "4.4.0"}
+  "github-data" {>= "4.4.0"}
   "cstruct"
   "capnp-rpc" {>= "1.2"}
   "capnp-rpc-lwt" {>= "1.2"}
   "capnp-rpc-unix" {>= "1.2"}
   "lwt"
   "uri"
+  "result" {>= "1.5"}
   "tls" {>= "0.12.0"} # activate conduit with TLS for slack webhooks
   "conf-libev" # Required for lwt to avoid hitting the limits of select(2)
   "conf-pixz" # TODO: Make it a library
   # TODO: Add conf-ugrep
+  "odoc" {with-doc}
 ]
 synopsis: "A toolchain to check for broken opam packages"
