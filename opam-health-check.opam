@@ -33,6 +33,7 @@ depends: [
   "current_ansi" {>= "0.1"}
   "github"
   "github-unix"
+  "github-data"
   "cstruct"
   "capnp-rpc" {>= "1.2"}
   "capnp-rpc-lwt" {>= "1.2"}

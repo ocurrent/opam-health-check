@@ -25,5 +25,6 @@
     capnp-rpc-unix
     github
     github-unix
+    github-data
     mirage-crypto-pk
     mirage-crypto-rng.lwt))
