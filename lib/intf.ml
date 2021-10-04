@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 module State = struct
   type t = Good | Partial | Bad | NotAvailable | InternalFailure
 
