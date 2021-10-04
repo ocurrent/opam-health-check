@@ -210,7 +210,7 @@ let set_defaults conf =
     conf.platform_distribution <- Some "debian-unstable";
   if Option.is_none conf.slack_webhooks then
     conf.slack_webhooks <- Some [];
-  let yaml = Result.get_exn (Yaml.to_string (yaml_of_conf conf)) in
+  let yaml = Yaml.to_string_exn (yaml_of_conf conf) in
   IO.with_out (Fpath.to_string conf.yamlfile) (fun out -> output_string out yaml)
 
 let set_auto_run_interval conf i =
