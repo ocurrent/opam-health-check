@@ -47,7 +47,8 @@ let rec scan_dir ~full_path dirname =
         Fpath.to_string (Fpath.add_seg file "") :: files @ acc
     | {Unix.st_kind = Unix.S_REG; _} ->
         Lwt.return (Fpath.to_string file :: acc)
-    | _ -> assert false
+    | {Unix.st_kind = Unix.(S_CHR | S_BLK | S_LNK | S_FIFO | S_SOCK); _} ->
+        assert false
   ) [] files
 
 let scan_dir dirname = scan_dir ~full_path:dirname (Fpath.v ".")
@@ -118,7 +119,7 @@ let mkdir_p dir =
         end begin function
         | Unix.Unix_error (Unix.EEXIST, _, _) -> Lwt.return_unit
         | e -> Lwt.fail e
-        end >>= fun () ->
+        end [@ocaml.warning "-fragile-match"] >>= fun () ->
         aux dir xs
   in
   match Fpath.segs dir with
@@ -136,7 +137,8 @@ let rec rm_rf dirname =
           Lwt_unix.stat (Fpath.to_string file) >>= fun stat ->
           begin match stat.Unix.st_kind with
           | Unix.S_DIR -> rm_rf file
-          | _ -> Lwt_unix.unlink (Fpath.to_string file)
+          | Unix.S_REG -> Lwt_unix.unlink (Fpath.to_string file)
+          | Unix.(S_CHR | S_BLK | S_LNK | S_FIFO | S_SOCK) -> assert false
           end >>= fun () ->
           rm_files ()
     in

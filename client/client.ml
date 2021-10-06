@@ -54,14 +54,19 @@ let send_msg ~profilename ~confdir ~conffile msg =
 let set_auto_run_interval ~confdir ~conffile profilename i =
   send_msg ~profilename ~confdir ~conffile ["set-auto-run-interval"; i]
 
+module Term = Cmdliner.Term
+module Arg = Cmdliner.Arg
+
+let ( $ ) = Term.( $ )
+let ( & ) = Arg.( & )
+
 let set_auto_run_interval_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (set_auto_run_interval ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"HOURS" [])
+    Term.const (set_auto_run_interval ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    (Arg.required & Arg.pos 0 (Arg.some Arg.string) None & Arg.info ~docv:"HOURS" [])
   in
-  let info = Cmdliner.Term.info "set-auto-run-interval" in
+  let info = Term.info "set-auto-run-interval" in
   (term, info)
 
 let set_processes ~confdir ~conffile profilename i =
@@ -69,12 +74,11 @@ let set_processes ~confdir ~conffile profilename i =
 
 let set_processes_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (set_processes ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAT" [])
+    Term.const (set_processes ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    (Arg.required & Arg.pos 0 (Arg.some Arg.string) None & Arg.info ~docv:"NAT" [])
   in
-  let info = Cmdliner.Term.info "set-processes" in
+  let info = Term.info "set-processes" in
   (term, info)
 
 let add_ocaml_switch ~confdir ~conffile profilename name switch =
@@ -82,13 +86,12 @@ let add_ocaml_switch ~confdir ~conffile profilename name switch =
 
 let add_ocaml_switch_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (add_ocaml_switch ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" []) $
-    Cmdliner.Arg.(required & pos 1 (some string) None & info ~docv:"SWITCH" [])
+    Term.const (add_ocaml_switch ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    (Arg.required & Arg.pos 0 (Arg.some Arg.string) None & Arg.info ~docv:"NAME" []) $
+    (Arg.required & Arg.pos 1 (Arg.some Arg.string) None & Arg.info ~docv:"SWITCH" [])
   in
-  let info = Cmdliner.Term.info "add-ocaml-switch" in
+  let info = Term.info "add-ocaml-switch" in
   (term, info)
 
 let set_ocaml_switch ~confdir ~conffile profilename name switch =
@@ -96,13 +99,12 @@ let set_ocaml_switch ~confdir ~conffile profilename name switch =
 
 let set_ocaml_switch_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (set_ocaml_switch ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" []) $
-    Cmdliner.Arg.(required & pos 1 (some string) None & info ~docv:"SWITCH" [])
+    Term.const (set_ocaml_switch ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    (Arg.required & Arg.pos 0 (Arg.some Arg.string) None & Arg.info ~docv:"NAME" []) $
+    (Arg.required & Arg.pos 1 (Arg.some Arg.string) None & Arg.info ~docv:"SWITCH" [])
   in
-  let info = Cmdliner.Term.info "set-ocaml-switch" in
+  let info = Term.info "set-ocaml-switch" in
   (term, info)
 
 let rm_ocaml_switch ~confdir ~conffile profilename name =
@@ -110,12 +112,11 @@ let rm_ocaml_switch ~confdir ~conffile profilename name =
 
 let rm_ocaml_switch_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (rm_ocaml_switch ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"NAME" [])
+    Term.const (rm_ocaml_switch ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    (Arg.required & Arg.pos 0 (Arg.some Arg.string) None & Arg.info ~docv:"NAME" [])
   in
-  let info = Cmdliner.Term.info "rm-ocaml-switch" in
+  let info = Term.info "rm-ocaml-switch" in
   (term, info)
 
 let set_slack_webhooks ~confdir ~conffile profilename webhooks =
@@ -123,12 +124,11 @@ let set_slack_webhooks ~confdir ~conffile profilename webhooks =
 
 let set_slack_webhooks_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (set_slack_webhooks ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Arg.(value & pos_all string [] & info ~docv:"WEBHOOKS" [])
+    Term.const (set_slack_webhooks ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    (Arg.value & Arg.pos_all Arg.string [] & Arg.info ~docv:"WEBHOOKS" [])
   in
-  let info = Cmdliner.Term.info "set-slack-webhooks" in
+  let info = Term.info "set-slack-webhooks" in
   (term, info)
 
 let set_list_command ~confdir ~conffile profilename cmd =
@@ -136,12 +136,11 @@ let set_list_command ~confdir ~conffile profilename cmd =
 
 let set_list_command_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (set_list_command ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"CMD" [])
+    Term.const (set_list_command ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    (Arg.required & Arg.pos 0 (Arg.some Arg.string) None & Arg.info ~docv:"CMD" [])
   in
-  let info = Cmdliner.Term.info "set-list-command" in
+  let info = Term.info "set-list-command" in
   (term, info)
 
 let run ~confdir ~conffile profilename () =
@@ -150,12 +149,11 @@ let run ~confdir ~conffile profilename () =
 
 let run_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (run ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Term.const ()
+    Term.const (run ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Term.const ()
   in
-  let info = Cmdliner.Term.info "run" in
+  let info = Term.info "run" in
   (term, info)
 
 let add_user ~confdir ~conffile profilename username =
@@ -163,12 +161,11 @@ let add_user ~confdir ~conffile profilename username =
 
 let add_user_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (add_user ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Arg.(required & pos 0 (some string) None & info ~docv:"USERNAME" [])
+    Term.const (add_user ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    (Arg.required & Arg.pos 0 (Arg.some Arg.string) None & Arg.info ~docv:"USERNAME" [])
   in
-  let info = Cmdliner.Term.info "add-user" in
+  let info = Term.info "add-user" in
   (term, info)
 
 let init ~confdir ~conffile = function
@@ -187,11 +184,10 @@ let init ~confdir ~conffile = function
 
 let init_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (init ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt (some dir) None & info ["from-local-workdir"])
+    Term.const (init ~confdir ~conffile) $
+    (Arg.value & Arg.opt (Arg.some Arg.dir) None & Arg.info ["from-local-workdir"])
   in
-  let info = Cmdliner.Term.info "init" in
+  let info = Term.info "init" in
   (term, info)
 
 let clear_cache ~confdir ~conffile profilename () =
@@ -199,12 +195,11 @@ let clear_cache ~confdir ~conffile profilename () =
 
 let clear_cache_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (clear_cache ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Term.const ()
+    Term.const (clear_cache ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Term.const ()
   in
-  let info = Cmdliner.Term.info "clear-cache" in
+  let info = Term.info "clear-cache" in
   (term, info)
 
 let log ~confdir ~conffile profilename () =
@@ -212,12 +207,11 @@ let log ~confdir ~conffile profilename () =
 
 let log_cmd ~confdir ~conffile =
   let term =
-    let ($) = Cmdliner.Term.($) in
-    Cmdliner.Term.const (log ~confdir ~conffile) $
-    Cmdliner.Arg.(value & opt string "default" & info ~docv:"PROFILENAME" ["profile"; "p"]) $
-    Cmdliner.Term.const ()
+    Term.const (log ~confdir ~conffile) $
+    (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
+    Term.const ()
   in
-  let info = Cmdliner.Term.info "log" in
+  let info = Term.info "log" in
   (term, info)
 
 let cmds =
@@ -241,12 +235,12 @@ let cmds =
   ]
 
 let () =
-  let term = Cmdliner.Term.const () in
+  let term = Term.const () in
   let info =
-    Cmdliner.Term.info
+    Term.info
       ~version:Config.version
       Config.name
   in
-  let eval = Cmdliner.Term.eval_choice ~catch:false in
-  try Cmdliner.Term.exit (eval (term, info) cmds) with
+  let eval = Term.eval_choice ~catch:false in
+  try Term.exit (eval (term, info) cmds) with
   | Exit -> exit 1

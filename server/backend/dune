@@ -1,6 +1,5 @@
 (library
   (name backend)
-  (flags :standard -safe-string -w A-44-33-4 -open Containers)
   (libraries
     oca_lib
     fmt
@@ -23,7 +22,10 @@
     capnp-rpc
     capnp-rpc-lwt
     capnp-rpc-unix
+    ; conduit-lwt-unix ; TODO: Remove this. Not required explicitly but uncomment if you use (implicit_transitive_deps false)
+    ; result ; TODO: Remove this. Not required explicitly but uncomment if you use (implicit_transitive_deps false)
     github
     github-unix
+    github-data
     mirage-crypto-pk
     mirage-crypto-rng.lwt))

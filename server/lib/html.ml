@@ -1,4 +1,3 @@
-open Lwt.Infix
 open Intf
 
 type query = {
@@ -133,7 +132,7 @@ let gen_table_form ~logdir ~pkgs l =
   ]]]]
 
 let comp_checkboxes ~name checked query =
-  let open Tyxml.Html in
+  let open! Tyxml.Html in
   ul ~a:[a_class ["ks-cboxtags"]] begin
     List.map begin fun comp ->
       let comp_str = Compiler.to_string comp in
@@ -170,7 +169,7 @@ let common_header =
   ]
 
 let get_html ~logdir query pkgs =
-  let open Tyxml.Html in
+  let open! Tyxml.Html in
   let pkgs' = pkgs in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
   let pkgs = List.map (pkg_to_html logdir query) pkgs in
