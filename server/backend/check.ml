@@ -243,8 +243,9 @@ let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
         ]
       ) extra_repos
     ) @ [
-      run ~cache ~network "opam switch create --repositories=%sdefault %s"
+      run ~cache ~network "opam switch create --repositories=%sdefault '%s' '%s'"
         (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
+        (Intf.Compiler.to_string (Intf.Switch.name switch))
         (Intf.Switch.switch switch);
       run ~network "opam update --depexts";
     ] @
