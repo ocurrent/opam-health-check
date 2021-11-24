@@ -209,7 +209,7 @@ let () =
     prerr_endline ("Async exception raised: "^msg);
   end
 
-let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
+let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
     List.filter (fun (repo, _) ->
@@ -231,14 +231,14 @@ let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
       run "sudo ln -f /usr/bin/opam-2.1 /usr/bin/opam";
-      run ~network "rm -rf ~/opam-repository && git clone -q 'git://github.com/ocaml/opam-repository.git' ~/opam-repository && git -C ~/opam-repository checkout -q %s" opam_repo_commit;
+      run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
       run "rm -rf ~/.opam && opam init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository";
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
         let name = Filename.quote (Intf.Repository.name repo) in
-        let github = Intf.Repository.github repo in
-        [ run ~network "git clone -q 'git://github.com/%s.git' ~/%s && git -C ~/%s checkout -q %s" github name name hash;
+        let url = Intf.Github.url (Intf.Repository.github repo) in
+        [ run ~network "git clone -q '%s' ~/%s && git -C ~/%s checkout -q %s" url name name hash;
           run "opam repository add --dont-select %s ~/%s" name name;
         ]
       ) extra_repos
@@ -330,22 +330,32 @@ let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder)
     (Pkg_set.add pkgname pkgs_set, job :: jobs)
   end pkgs (Pkg_set.empty, jobs)
 
-let get_commit_hash ~user ~repo =
+let get_commit_hash github =
+  let user = Intf.Github.user github in
+  let repo = Intf.Github.repo github in
+  let branch = Intf.Github.branch github in
   Github.Monad.run begin
     let ( >>= ) = Github.Monad.( >>= ) in
     Github.Repo.info ~user ~repo () >>= fun info ->
-    let branch = info#value.Github_t.repository_default_branch in
+    let branch = match branch with
+      | None -> info#value.Github_t.repository_default_branch
+      | Some _ -> branch
+    in
     let branch = Option.value ~default:"master" branch in
     Github.Repo.get_ref ~user ~repo ~name:("heads/"^branch) ()
   end >|= fun r ->
   let r = Github.Response.value r in
   r.Github_t.git_ref_obj.Github_t.obj_sha
 
+let get_commit_hash_default conf =
+  let github = Server_configfile.default_repository conf in
+  get_commit_hash github >|= fun hash ->
+  (github, hash)
+
 let get_commit_hash_extra_repos conf =
   Lwt_list.map_s begin fun repository ->
-    let user = Intf.Repository.github_user repository in
-    let repo = Intf.Repository.github_repo repository in
-    get_commit_hash ~user ~repo >|= fun hash ->
+    let github = Intf.Repository.github repository in
+    get_commit_hash github >|= fun hash ->
     (repository, hash)
   end (Server_configfile.extra_repositories conf)
 
@@ -425,10 +435,10 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
     with_stderr ~start_time workdir begin fun ~stderr ->
       let timer = Oca_lib.timer_start () in
       get_cap ~stderr ~cap_file >>= fun cap ->
-      get_commit_hash ~user:"ocaml" ~repo:"opam-repository" >>= fun opam_repo_commit ->
+      get_commit_hash_default conf >>= fun (opam_repo, opam_repo_commit) ->
       get_commit_hash_extra_repos conf >>= fun extra_repos ->
       let switches' = switches in
-      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo_commit ~extra_repos switch)) switches in
+      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
       begin match switches with
       | switch::_ ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->

@@ -12,7 +12,8 @@ type query = {
   logsearch : string * (Re.re * Compiler.t) option; (* TODO: Remove Re.re? (unused?) *)
 }
 
-let github_url = "https://github.com/ocaml/opam-repository"
+let github_url conf =
+  Github.url (Server_configfile.default_repository conf)
 
 (* NOTE: Attempt at finding the right set of colors unambiguous to both colorblinds and non-colorblinds.
    Base work:
@@ -75,9 +76,9 @@ let result_legend =
     tr [td ~a:[a_class ["cell-internal-failure"]; a_style "border: 2px solid black;"] [txt "☒"]; td [txt "Internal failure"]];
   ]]
 
-let get_opam_repository_commit_url ~hash ~content =
+let get_opam_repository_commit_url ~hash ~content conf =
   let open Tyxml.Html in
-  a ~a:[a_href (github_url^"/commit/"^hash)] [content]
+  a ~a:[a_href (github_url conf^"/commit/"^hash)] [content]
 
 let get_run_info pkgs =
   List.fold_left (fun (number_pkgs, number_hard_fail, number_soft_fail) pkg ->
@@ -99,12 +100,12 @@ let get_run_info pkgs =
     (succ number_pkgs, number_hard_fail, number_soft_fail)
   ) (0, 0, 0) pkgs
 
-let run_info ~logdir ~pkgs =
+let run_info ~logdir ~pkgs conf =
   let open Tyxml.Html in
   let opam_repo_uri =
     let content = b [txt "🔗 opam-repository commit hash"] in
     let hash = Server_workdirs.get_logdir_hash logdir in
-    get_opam_repository_commit_url ~hash ~content
+    get_opam_repository_commit_url ~hash ~content conf
   in
   let date = Server_workdirs.get_logdir_time logdir in
   let date = date_to_string date in
@@ -122,13 +123,13 @@ let run_info ~logdir ~pkgs =
     p ~a:[a_style "text-align: right;"] [i [small [txt ("Run made on the "^date)]]];
   ]
 
-let gen_table_form ~logdir ~pkgs l =
+let gen_table_form ~logdir ~pkgs ~conf l =
   let open Tyxml.Html in
   let aux (txt, elts) = tr [td txt; td elts] in
   let legend = legend [b [txt "Filter form:"]] in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
-    td [result_legend; run_info ~logdir ~pkgs]
+    td [result_legend; run_info ~logdir ~pkgs conf]
   ]]]]
 
 let comp_checkboxes ~name checked query =
@@ -168,7 +169,7 @@ let common_header =
     span ~a:[a_style "vertical-align: middle;"] [a ~a:[a_href "/run"] [txt "Previous runs"]];
   ]
 
-let get_html ~logdir query pkgs =
+let get_html ~logdir ~conf query pkgs =
   let open! Tyxml.Html in
   let pkgs' = pkgs in
   let col_width = string_of_int (100 / max 1 (List.length query.compilers)) in
@@ -309,7 +310,7 @@ let get_html ~logdir query pkgs =
   end query.compilers in
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form ~pkgs:pkgs' ~logdir [
+  let filter_form = gen_table_form ~pkgs:pkgs' ~logdir ~conf [
     (compilers_text, [compilers]);
     (show_available_text, [show_available]);
     (show_failures_only_text, [show_failures_only]);
@@ -363,20 +364,20 @@ let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; d
 
 type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list)
 
-let get_diff ~old_logdir ~new_logdir (bad, partial, not_available, internal_failure, good) =
+let get_diff ~old_logdir ~new_logdir ~conf (bad, partial, not_available, internal_failure, good) =
   let open Tyxml.Html in
   let title = title (txt "opam-health-check diff") in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
   let get_hash_elm hash =
     let hash = String.take 7 hash in
-    get_opam_repository_commit_url ~hash ~content:(b [txt hash])
+    get_opam_repository_commit_url ~hash ~content:(b [txt hash]) conf
   in
   let old_hash = Server_workdirs.get_logdir_hash old_logdir in
   let old_hash_elm = get_hash_elm old_hash in
   let new_hash = Server_workdirs.get_logdir_hash new_logdir in
   let new_hash_elm = get_hash_elm new_hash in
-  let git_diff = a ~a:[a_href (github_url^"/compare/"^old_hash^"..."^new_hash)] [txt "git diff"] in
+  let git_diff = a ~a:[a_href (github_url conf^"/compare/"^old_hash^"..."^new_hash)] [txt "git diff"] in
   let good_txt = span ~a:[a_style ("color: "^CUD_pallette.green^";")] [txt "passing"] in
   let bad_txt = span ~a:[a_style ("color: "^CUD_pallette.red^";")] [txt "failing"] in
   let partial_txt = span ~a:[a_style ("color: "^CUD_pallette.orange^";")] [txt "partially failing"] in

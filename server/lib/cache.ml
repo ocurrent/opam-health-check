@@ -179,13 +179,13 @@ let get_logsearch ~query ~logdir =
 let revdeps_cmp p1 p2 =
   Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
 
-let get_html self query logdir =
+let get_html ~conf self query logdir =
   let aux ~logdir pkgs =
     pkgs >>= fun pkgs ->
     let logsearch = get_logsearch ~query ~logdir in
     Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) >>= fun (pkgs, _) ->
     let pkgs = if query.Html.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
-    let html = Html.get_html ~logdir query pkgs in
+    let html = Html.get_html ~logdir ~conf query pkgs in
     Html_cache.add self.html_tbl (logdir, query) html;
     Lwt.return html
   in
@@ -198,10 +198,10 @@ let get_latest_logdir self =
   | [] -> Lwt.fail Not_found
   | logdir::_ -> Lwt.return logdir
 
-let get_html self query logdir =
+let get_html ~conf self query logdir =
   match Html_cache.find_opt self.html_tbl (logdir, query) with
   | Some html -> Lwt.return html
-  | None -> get_html self query logdir
+  | None -> get_html ~conf self query logdir
 
 let get_logdirs self =
   self.logdirs
@@ -220,11 +220,11 @@ let get_revdeps self k =
   self.revdeps >|= fun revdeps ->
   Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k)
 
-let get_html_diff ~old_logdir ~new_logdir self =
+let get_html_diff ~conf ~old_logdir ~new_logdir self =
   get_pkgs ~logdir:old_logdir self >>= fun old_pkgs ->
   get_pkgs ~logdir:new_logdir self >|= fun new_pkgs ->
   generate_diff old_pkgs new_pkgs |>
-  Html.get_diff ~old_logdir ~new_logdir
+  Html.get_diff ~conf ~old_logdir ~new_logdir
 
 let get_html_diff_list self =
   self.pkgs >|= fun pkgs ->

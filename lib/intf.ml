@@ -47,26 +47,47 @@ module Switch = struct
   let compare (Switch (x, _)) (Switch (y, _)) = Compiler.compare x y
 end
 
+module Github = struct
+  type t = {
+    user : string;
+    repo : string;
+    branch : string option;
+  }
+
+  let create github =
+    match String.split_on_char '/' github with
+    | [user; repo] ->
+        begin match String.split_on_char '#' repo with
+        | [repo; branch] -> {user; repo; branch = Some branch}
+        | [repo] -> {user; repo; branch = None}
+        | _ -> failwith "Ill-formed Github repository (expected: user/repo#branch)"
+        end
+    | _ -> failwith "Ill-formed Github repository (expected: user/repo#branch)"
+
+  let to_string = function
+    | {user; repo; branch = None; _} -> user^"/"^repo
+    | {user; repo; branch = Some branch; _} -> user^"/"^repo^"#"^branch
+
+  let url {user; repo; _} = "https://github.com/"^user^"/"^repo
+
+  let user {user; _} = user
+  let repo {repo; _} = repo
+  let branch {branch; _} = branch
+end
+
 module Repository = struct
   type t = {
     name : string;
-    github_user : string;
-    github_repo : string;
+    github : Github.t;
     for_switches : Compiler.t list option;
   }
 
   let create ~name ~github ~for_switches =
-    let github_user, github_repo =
-      match String.split_on_char '/' github with
-      | [user; repo] -> (user, repo)
-      | _ -> failwith "Ill-formed Github repository (expected: user/repo)"
-    in
-    {name; github_user; github_repo; for_switches}
+    let github = Github.create github in
+    {name; github; for_switches}
 
   let name {name; _} = name
-  let github {github_user; github_repo; _} = github_user^"/"^github_repo
-  let github_user {github_user; _} = github_user
-  let github_repo {github_repo; _} = github_repo
+  let github {github; _} = github
   let for_switches {for_switches; _} = for_switches
 end
 

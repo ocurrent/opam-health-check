@@ -12,6 +12,7 @@ type query = {
 
 val get_html :
   logdir:Server_workdirs.logdir ->
+  conf:Server_configfile.t ->
   query ->
   Intf.Pkg.t list ->
   string
@@ -21,6 +22,7 @@ type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list 
 val get_diff :
   old_logdir:Server_workdirs.logdir ->
   new_logdir:Server_workdirs.logdir ->
+  conf:Server_configfile.t ->
   diff ->
   string
 
