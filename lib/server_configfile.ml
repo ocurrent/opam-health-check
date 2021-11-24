@@ -10,6 +10,7 @@ type t = {
   mutable processes : int option;
   mutable enable_dune_cache : bool option;
   mutable enable_logs_compression : bool option;
+  mutable default_repository : Intf.Repository.t option;
   mutable extra_repositories : Intf.Repository.t list option;
   mutable with_test : bool option;
   mutable with_lower_bound : bool option;
@@ -33,6 +34,7 @@ let create_conf yamlfile = {
   processes = None;
   enable_dune_cache = None;
   enable_logs_compression = None;
+  default_repository = None;
   extra_repositories = None;
   with_test = None;
   with_lower_bound = None;
@@ -93,6 +95,9 @@ let set_config conf = function
       set_field ~field (fun () -> conf.enable_dune_cache <- Some dune_cache) conf.enable_dune_cache
   | "enable-logs-compression" as field, `Bool logs_compression ->
       set_field ~field (fun () -> conf.enable_logs_compression <- Some logs_compression) conf.enable_logs_compression
+  | "default-repository" as field, `String github ->
+      let repo = Intf.Repository.create ~name:"" ~github ~for_switches:None in (* TODO: do something about the ugly ~name:"" *)
+      set_field ~field (fun () -> conf.default_repository <- Some repo) conf.default_repository
   | "extra-repositories" as field, `A repositories ->
       let repositories = List.map get_repo repositories in
       set_field ~field (fun () -> conf.extra_repositories <- Some repositories) conf.extra_repositories
@@ -162,6 +167,7 @@ let yaml_of_conf conf =
     "processes", `Float (float_of_int (Option.get_exn_or "conf.processes" conf.processes));
     "enable-dune-cache", `Bool (Option.get_exn_or "conf.enable_dune_cache" conf.enable_dune_cache);
     "enable-logs-compression", `Bool (Option.get_exn_or "conf.enable_logs_compression" conf.enable_logs_compression);
+    "default-repository", `String (Intf.Repository.github (Option.get_exn_or "conf.default_repository" conf.default_repository));
     "extra-repositories", Option.map_or ~default:`Null yaml_of_extra_repositories conf.extra_repositories;
     "with-test", `Bool (Option.get_exn_or "conf.with_test" conf.with_test);
     "with-lower-bound", `Bool (Option.get_exn_or "conf.with_lower_bound" conf.with_lower_bound);
@@ -194,6 +200,8 @@ let set_defaults conf =
     conf.enable_dune_cache <- Some false; (* NOTE: Too unstable to enable by default *)
   if Option.is_none conf.enable_logs_compression then
     conf.enable_logs_compression <- Some true; (* NOTE: Requires too much disk space for regular users *)
+  if Option.is_none conf.default_repository then
+    conf.default_repository <- Some (Intf.Repository.create ~name:"" ~github:"ocaml/opam-repository" ~for_switches:None);
   if Option.is_none conf.extra_repositories then
     conf.extra_repositories <- Some [Intf.Repository.create ~name:"beta" ~github:"ocaml/ocaml-beta-repository" ~for_switches:None];
   if Option.is_none conf.with_test then
@@ -271,6 +279,7 @@ let auto_run_interval {auto_run_interval; _} = Option.get_exn_or "auto_run_inter
 let processes {processes; _} = Option.get_exn_or "processes" processes
 let enable_dune_cache {enable_dune_cache; _} = Option.get_exn_or "enable_dune_cache" enable_dune_cache
 let enable_logs_compression {enable_logs_compression; _} = Option.get_exn_or "enable_logs_compression" enable_logs_compression
+let default_repository {default_repository; _} = Option.get_exn_or "default_repository" default_repository
 let extra_repositories {extra_repositories; _} = Option.get_exn_or "extra_repositories" extra_repositories
 let with_test {with_test; _} = Option.get_exn_or "with_test" with_test
 let with_lower_bound {with_lower_bound; _} = Option.get_exn_or "with_lower_bound" with_lower_bound

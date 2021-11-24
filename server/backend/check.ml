@@ -209,7 +209,7 @@ let () =
     prerr_endline ("Async exception raised: "^msg);
   end
 
-let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
+let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
     List.filter (fun (repo, _) ->
@@ -231,7 +231,7 @@ let get_obuilder ~conf ~opam_repo_commit ~extra_repos switch =
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
       run "sudo ln -f /usr/bin/opam-2.1 /usr/bin/opam";
-      run ~network "rm -rf ~/opam-repository && git clone -q 'git://github.com/ocaml/opam-repository.git' ~/opam-repository && git -C ~/opam-repository checkout -q %s" opam_repo_commit;
+      run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Repository.url opam_repo) opam_repo_commit;
       run "rm -rf ~/.opam && opam init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository";
     ] @
     List.flatten (
@@ -344,6 +344,14 @@ let get_commit_hash ~user ~repo ~branch =
   let r = Github.Response.value r in
   r.Github_t.git_ref_obj.Github_t.obj_sha
 
+let get_commit_hash_default conf =
+  let repository = Server_configfile.default_repository conf in
+  let user = Intf.Repository.github_user repository in
+  let repo = Intf.Repository.github_repo repository in
+  let branch = Intf.Repository.github_branch repository in
+  get_commit_hash ~user ~repo ~branch >|= fun hash ->
+  (repository, hash)
+
 let get_commit_hash_extra_repos conf =
   Lwt_list.map_s begin fun repository ->
     let user = Intf.Repository.github_user repository in
@@ -429,10 +437,10 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
     with_stderr ~start_time workdir begin fun ~stderr ->
       let timer = Oca_lib.timer_start () in
       get_cap ~stderr ~cap_file >>= fun cap ->
-      get_commit_hash ~user:"ocaml" ~repo:"opam-repository" ~branch:None >>= fun opam_repo_commit ->
+      get_commit_hash_default conf >>= fun (opam_repo, opam_repo_commit) ->
       get_commit_hash_extra_repos conf >>= fun extra_repos ->
       let switches' = switches in
-      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo_commit ~extra_repos switch)) switches in
+      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
       begin match switches with
       | switch::_ ->
           Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
