@@ -68,7 +68,7 @@ module Github = struct
     | {user; repo; branch = None; _} -> user^"/"^repo
     | {user; repo; branch = Some branch; _} -> user^"/"^repo^"#"^branch
 
-  let url {user; repo; _} = "git+https://github.com/"^user^"/"^repo
+  let url {user; repo; _} = "https://github.com/"^user^"/"^repo
 
   let user {user; _} = user
   let repo {repo; _} = repo
