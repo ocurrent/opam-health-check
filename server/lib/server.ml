@@ -77,7 +77,7 @@ module Make (Backend : Backend_intf.S) = struct
       String.equal (Server_workdirs.get_logdir_name logdir) name
     ) logdirs
 
-  let callback backend _conn req _body =
+  let callback ~conf backend _conn req _body =
     let uri = Cohttp.Request.uri req in
     let get_log ~logdir ~comp ~state ~pkg =
       get_logdir logdir >>= fun logdir ->
@@ -91,7 +91,7 @@ module Make (Backend : Backend_intf.S) = struct
     | [] ->
         Cache.get_latest_logdir Backend.cache >>= fun logdir ->
         parse_raw_query logdir uri >>= fun query ->
-        Cache.get_html Backend.cache query logdir >>= fun html ->
+        Cache.get_html ~conf Backend.cache query logdir >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["run"] ->
         Cache.get_html_run_list Backend.cache >>= fun html ->
@@ -99,7 +99,7 @@ module Make (Backend : Backend_intf.S) = struct
     | ["run";logdir] ->
         get_logdir logdir >>= fun logdir ->
         parse_raw_query logdir uri >>= fun query ->
-        Cache.get_html Backend.cache query logdir >>= fun html ->
+        Cache.get_html ~conf Backend.cache query logdir >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["diff"] ->
         Cache.get_html_diff_list Backend.cache >>=
@@ -111,17 +111,17 @@ module Make (Backend : Backend_intf.S) = struct
         in
         get_logdir old_logdir >>= fun old_logdir ->
         get_logdir new_logdir >>= fun new_logdir ->
-        Cache.get_html_diff ~old_logdir ~new_logdir Backend.cache >>= fun html ->
+        Cache.get_html_diff ~conf ~old_logdir ~new_logdir Backend.cache >>= fun html ->
         serv_text ~content_type:"text/html" html
     | ["log"; logdir; comp; state; pkg] ->
         get_log ~logdir ~comp ~state ~pkg
     | _ ->
         failwith "path non recognized: 404"
 
-  let callback ~debug backend conn req body =
+  let callback ~debug ~conf backend conn req body =
     (* TODO: Try to understand why it wouldn't do anything before when this was ~on_exn *)
     Lwt.catch
-      (fun () -> callback backend conn req body)
+      (fun () -> callback ~conf backend conn req body)
       (fun e -> if debug then prerr_endline Printexc.(get_backtrace () ^ to_string e); Lwt.fail e)
 
   let tcp_server ~debug port callback =
@@ -138,7 +138,7 @@ module Make (Backend : Backend_intf.S) = struct
     let port = Server_configfile.port conf in
     Backend.start ~debug ~cap_file conf workdir >>= fun (backend, backend_task) ->
     Lwt.join [
-      tcp_server ~debug port (callback ~debug backend);
+      tcp_server ~debug port (callback ~debug ~conf backend);
       backend_task ();
     ]
 end
