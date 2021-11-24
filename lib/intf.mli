@@ -36,8 +36,10 @@ module Repository : sig
 
   val name : t -> string
   val github : t -> string
+  val url : t -> string
   val github_user : t -> string
   val github_repo : t -> string
+  val github_branch : t -> string option
   val for_switches : t -> Compiler.t list option
 end
 

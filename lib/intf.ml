@@ -52,21 +52,33 @@ module Repository = struct
     name : string;
     github_user : string;
     github_repo : string;
+    github_branch : string option;
     for_switches : Compiler.t list option;
   }
 
   let create ~name ~github ~for_switches =
-    let github_user, github_repo =
+    let github_user, github_repo, github_branch =
       match String.split_on_char '/' github with
-      | [user; repo] -> (user, repo)
-      | _ -> failwith "Ill-formed Github repository (expected: user/repo)"
+      | [user; repo] ->
+          begin match String.split_on_char '#' repo with
+          | [repo; branch] -> (user, repo, Some branch)
+          | [repo] -> (user, repo, None)
+          | _ -> failwith "Ill-formed Github repository (expected: user/repo#branch)"
+          end
+      | _ -> failwith "Ill-formed Github repository (expected: user/repo#branch)"
     in
-    {name; github_user; github_repo; for_switches}
+    {name; github_user; github_repo; github_branch; for_switches}
+
+  let github = function
+    | {github_user; github_repo; github_branch = None; _} -> github_user^"/"^github_repo
+    | {github_user; github_repo; github_branch = Some branch; _} -> github_user^"/"^github_repo^"#"^branch
+
+  let url {github_user; github_repo; _} = "git+https://github.com/"^github_user^"/"^github_repo
 
   let name {name; _} = name
-  let github {github_user; github_repo; _} = github_user^"/"^github_repo
   let github_user {github_user; _} = github_user
   let github_repo {github_repo; _} = github_repo
+  let github_branch {github_branch; _} = github_branch
   let for_switches {for_switches; _} = for_switches
 end
 
