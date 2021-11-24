@@ -10,7 +10,7 @@ type t = {
   mutable processes : int option;
   mutable enable_dune_cache : bool option;
   mutable enable_logs_compression : bool option;
-  mutable default_repository : Intf.Repository.t option;
+  mutable default_repository : Intf.Github.t option;
   mutable extra_repositories : Intf.Repository.t list option;
   mutable with_test : bool option;
   mutable with_lower_bound : bool option;
@@ -96,7 +96,7 @@ let set_config conf = function
   | "enable-logs-compression" as field, `Bool logs_compression ->
       set_field ~field (fun () -> conf.enable_logs_compression <- Some logs_compression) conf.enable_logs_compression
   | "default-repository" as field, `String github ->
-      let repo = Intf.Repository.create ~name:"" ~github ~for_switches:None in (* TODO: do something about the ugly ~name:"" *)
+      let repo = Intf.Github.create github in
       set_field ~field (fun () -> conf.default_repository <- Some repo) conf.default_repository
   | "extra-repositories" as field, `A repositories ->
       let repositories = List.map get_repo repositories in
@@ -138,10 +138,10 @@ let yaml_of_extra_repositories l =
   let aux repo =
     match Intf.Repository.for_switches repo with
     | None ->
-        `String (Intf.Repository.github repo)
+        `String (Intf.Github.to_string (Intf.Repository.github repo))
     | Some for_switches ->
         `O [
-          ("github", `String (Intf.Repository.github repo));
+          ("github", `String (Intf.Github.to_string (Intf.Repository.github repo)));
           ("for-switches", `A (List.map (fun s -> `String (Intf.Compiler.to_string s)) for_switches));
         ]
   in
@@ -167,7 +167,7 @@ let yaml_of_conf conf =
     "processes", `Float (float_of_int (Option.get_exn_or "conf.processes" conf.processes));
     "enable-dune-cache", `Bool (Option.get_exn_or "conf.enable_dune_cache" conf.enable_dune_cache);
     "enable-logs-compression", `Bool (Option.get_exn_or "conf.enable_logs_compression" conf.enable_logs_compression);
-    "default-repository", `String (Intf.Repository.github (Option.get_exn_or "conf.default_repository" conf.default_repository));
+    "default-repository", `String (Intf.Github.to_string (Option.get_exn_or "conf.default_repository" conf.default_repository));
     "extra-repositories", Option.map_or ~default:`Null yaml_of_extra_repositories conf.extra_repositories;
     "with-test", `Bool (Option.get_exn_or "conf.with_test" conf.with_test);
     "with-lower-bound", `Bool (Option.get_exn_or "conf.with_lower_bound" conf.with_lower_bound);
@@ -201,7 +201,7 @@ let set_defaults conf =
   if Option.is_none conf.enable_logs_compression then
     conf.enable_logs_compression <- Some true; (* NOTE: Requires too much disk space for regular users *)
   if Option.is_none conf.default_repository then
-    conf.default_repository <- Some (Intf.Repository.create ~name:"" ~github:"ocaml/opam-repository" ~for_switches:None);
+    conf.default_repository <- Some (Intf.Github.create "ocaml/opam-repository");
   if Option.is_none conf.extra_repositories then
     conf.extra_repositories <- Some [Intf.Repository.create ~name:"beta" ~github:"ocaml/ocaml-beta-repository" ~for_switches:None];
   if Option.is_none conf.with_test then

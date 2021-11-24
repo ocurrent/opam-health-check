@@ -231,13 +231,13 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
       run "sudo ln -f /usr/bin/opam-2.1 /usr/bin/opam";
-      run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Repository.url opam_repo) opam_repo_commit;
+      run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
       run "rm -rf ~/.opam && opam init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository";
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
         let name = Filename.quote (Intf.Repository.name repo) in
-        let url = Intf.Repository.url repo in
+        let url = Intf.Github.url (Intf.Repository.github repo) in
         [ run ~network "git clone -q '%s' ~/%s && git -C ~/%s checkout -q %s" url name name hash;
           run "opam repository add --dont-select %s ~/%s" name name;
         ]
@@ -330,7 +330,10 @@ let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder)
     (Pkg_set.add pkgname pkgs_set, job :: jobs)
   end pkgs (Pkg_set.empty, jobs)
 
-let get_commit_hash ~user ~repo ~branch =
+let get_commit_hash github =
+  let user = Intf.Github.user github in
+  let repo = Intf.Github.repo github in
+  let branch = Intf.Github.branch github in
   Github.Monad.run begin
     let ( >>= ) = Github.Monad.( >>= ) in
     Github.Repo.info ~user ~repo () >>= fun info ->
@@ -345,19 +348,14 @@ let get_commit_hash ~user ~repo ~branch =
   r.Github_t.git_ref_obj.Github_t.obj_sha
 
 let get_commit_hash_default conf =
-  let repository = Server_configfile.default_repository conf in
-  let user = Intf.Repository.github_user repository in
-  let repo = Intf.Repository.github_repo repository in
-  let branch = Intf.Repository.github_branch repository in
-  get_commit_hash ~user ~repo ~branch >|= fun hash ->
-  (repository, hash)
+  let github = Server_configfile.default_repository conf in
+  get_commit_hash github >|= fun hash ->
+  (github, hash)
 
 let get_commit_hash_extra_repos conf =
   Lwt_list.map_s begin fun repository ->
-    let user = Intf.Repository.github_user repository in
-    let repo = Intf.Repository.github_repo repository in
-    let branch = Intf.Repository.github_branch repository in
-    get_commit_hash ~user ~repo ~branch >|= fun hash ->
+    let github = Intf.Repository.github repository in
+    get_commit_hash github >|= fun hash ->
     (repository, hash)
   end (Server_configfile.extra_repositories conf)
 

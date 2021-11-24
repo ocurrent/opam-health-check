@@ -47,38 +47,47 @@ module Switch = struct
   let compare (Switch (x, _)) (Switch (y, _)) = Compiler.compare x y
 end
 
+module Github = struct
+  type t = {
+    user : string;
+    repo : string;
+    branch : string option;
+  }
+
+  let create github =
+    match String.split_on_char '/' github with
+    | [user; repo] ->
+        begin match String.split_on_char '#' repo with
+        | [repo; branch] -> {user; repo; branch = Some branch}
+        | [repo] -> {user; repo; branch = None}
+        | _ -> failwith "Ill-formed Github repository (expected: user/repo#branch)"
+        end
+    | _ -> failwith "Ill-formed Github repository (expected: user/repo#branch)"
+
+  let to_string = function
+    | {user; repo; branch = None; _} -> user^"/"^repo
+    | {user; repo; branch = Some branch; _} -> user^"/"^repo^"#"^branch
+
+  let url {user; repo; _} = "git+https://github.com/"^user^"/"^repo
+
+  let user {user; _} = user
+  let repo {repo; _} = repo
+  let branch {branch; _} = branch
+end
+
 module Repository = struct
   type t = {
     name : string;
-    github_user : string;
-    github_repo : string;
-    github_branch : string option;
+    github : Github.t;
     for_switches : Compiler.t list option;
   }
 
   let create ~name ~github ~for_switches =
-    let github_user, github_repo, github_branch =
-      match String.split_on_char '/' github with
-      | [user; repo] ->
-          begin match String.split_on_char '#' repo with
-          | [repo; branch] -> (user, repo, Some branch)
-          | [repo] -> (user, repo, None)
-          | _ -> failwith "Ill-formed Github repository (expected: user/repo#branch)"
-          end
-      | _ -> failwith "Ill-formed Github repository (expected: user/repo#branch)"
-    in
-    {name; github_user; github_repo; github_branch; for_switches}
-
-  let github = function
-    | {github_user; github_repo; github_branch = None; _} -> github_user^"/"^github_repo
-    | {github_user; github_repo; github_branch = Some branch; _} -> github_user^"/"^github_repo^"#"^branch
-
-  let url {github_user; github_repo; _} = "git+https://github.com/"^github_user^"/"^github_repo
+    let github = Github.create github in
+    {name; github; for_switches}
 
   let name {name; _} = name
-  let github_user {github_user; _} = github_user
-  let github_repo {github_repo; _} = github_repo
-  let github_branch {github_branch; _} = github_branch
+  let github {github; _} = github
   let for_switches {for_switches; _} = for_switches
 end
 

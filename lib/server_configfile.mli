@@ -10,7 +10,7 @@ val auto_run_interval : t -> int
 val processes : t -> int
 val enable_dune_cache : t -> bool
 val enable_logs_compression : t -> bool
-val default_repository : t -> Intf.Repository.t
+val default_repository : t -> Intf.Github.t
 val extra_repositories : t -> Intf.Repository.t list
 val with_test : t -> bool
 val with_lower_bound : t -> bool

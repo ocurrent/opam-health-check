@@ -29,17 +29,26 @@ module Switch : sig
   val compare : t -> t -> int
 end
 
+module Github : sig
+  type t
+
+  val create : string -> t
+
+  val to_string : t -> string
+  val url : t -> string
+
+  val user : t -> string
+  val repo : t -> string
+  val branch : t -> string option
+end
+
 module Repository : sig
   type t
 
   val create : name:string -> github:string -> for_switches:Compiler.t list option -> t
 
   val name : t -> string
-  val github : t -> string
-  val url : t -> string
-  val github_user : t -> string
-  val github_repo : t -> string
-  val github_branch : t -> string option
+  val github : t -> Github.t
   val for_switches : t -> Compiler.t list option
 end
 
