@@ -108,7 +108,6 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
   | (Ok (), r) ->
       Lwt.return r
   | (Error (), _) ->
-      Lwt_io.write_line stderr ("Failure in ocluster: "^c) >>= fun () ->
       match default with
       | None -> Lwt.fail_with ("Failure in ocluster: "^c) (* TODO: Replace this with "send message to debug slack webhook" *)
       | Some v -> Lwt.return v
@@ -205,8 +204,9 @@ let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
 
 let () =
   Lwt.async_exception_hook := begin fun e ->
-    let msg = Printexc.to_string e in
-    prerr_endline ("Async exception raised: "^msg);
+    prerr_endline ("Async exception raised: "^Printexc.to_string e);
+    prerr_string (Printexc.get_backtrace ());
+    flush stderr;
   end
 
 let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
@@ -433,34 +433,41 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     let start_time = Unix.time () in
     with_stderr ~start_time workdir begin fun ~stderr ->
-      let timer = Oca_lib.timer_start () in
-      get_cap ~stderr ~cap_file >>= fun cap ->
-      get_commit_hash_default conf >>= fun (opam_repo, opam_repo_commit) ->
-      get_commit_hash_extra_repos conf >>= fun extra_repos ->
-      let switches' = switches in
-      let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
-      begin match switches with
-      | switch::_ ->
-          Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
-          let compressed = Server_configfile.enable_logs_compression conf in
-          let old_logdir = List.head_opt old_logdir in
-          let new_logdir = Server_workdirs.new_logdir ~compressed ~hash:opam_repo_commit ~start_time workdir in
-          Server_workdirs.init_base_jobs ~switches:switches' new_logdir >>= fun () ->
-          let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
-          Lwt_list.map_p (get_pkgs ~debug ~cap ~stderr ~conf) switches >>= fun pkgs ->
-          let pkgs = Pkg_set.of_list (List.concat pkgs) in
-          Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
-          let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
-          let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
-          Lwt.join jobs >>= fun () ->
-          Oca_lib.timer_log timer stderr "Operation" >>= fun () ->
-          Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
-          move_tmpdirs_to_final ~switches:switches' new_logdir workdir >>= fun () ->
-          on_finished workdir;
-          trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
-          Oca_lib.timer_log timer stderr "Clean up"
-      | [] ->
-          Lwt_io.write_line stderr "No switches."
+      Lwt.catch begin fun () ->
+        let timer = Oca_lib.timer_start () in
+        get_cap ~stderr ~cap_file >>= fun cap ->
+        get_commit_hash_default conf >>= fun (opam_repo, opam_repo_commit) ->
+        get_commit_hash_extra_repos conf >>= fun extra_repos ->
+        let switches' = switches in
+        let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
+        begin match switches with
+        | switch::_ ->
+            Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
+            let compressed = Server_configfile.enable_logs_compression conf in
+            let old_logdir = List.head_opt old_logdir in
+            let new_logdir = Server_workdirs.new_logdir ~compressed ~hash:opam_repo_commit ~start_time workdir in
+            Server_workdirs.init_base_jobs ~switches:switches' new_logdir >>= fun () ->
+            let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
+            Lwt_list.map_p (get_pkgs ~debug ~cap ~stderr ~conf) switches >>= fun pkgs ->
+            let pkgs = Pkg_set.of_list (List.concat pkgs) in
+            Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
+            let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
+            let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
+            Lwt.join jobs >>= fun () ->
+            Oca_lib.timer_log timer stderr "Operation" >>= fun () ->
+            Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
+            move_tmpdirs_to_final ~switches:switches' new_logdir workdir >>= fun () ->
+            on_finished workdir;
+            trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
+            Oca_lib.timer_log timer stderr "Clean up"
+        | [] ->
+            Lwt_io.write_line stderr "No switches."
+        end
+      end begin fun exc ->
+        Lwt_io.write_line stderr ("Exception: "^Printexc.to_string exc^".") >>= fun () ->
+        Lwt_io.write stderr (Printexc.get_backtrace ()) >>= fun () ->
+        Lwt_io.flush stderr >|= fun () ->
+        prerr_endline "The current run failed unexpectedly. Please check the latest log using: opam-health-check log"
       end
     end
   end (fun () -> run_locked := false; Lwt.return_unit) end;

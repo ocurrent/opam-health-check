@@ -122,15 +122,15 @@ module Make (Backend : Backend_intf.S) = struct
     (* TODO: Try to understand why it wouldn't do anything before when this was ~on_exn *)
     Lwt.catch
       (fun () -> callback ~conf backend conn req body)
-      (fun e -> if debug then prerr_endline Printexc.(get_backtrace () ^ to_string e); Lwt.fail e)
+      (fun e -> if debug then prerr_endline (Printexc.get_backtrace () ^ Printexc.to_string e); Lwt.fail e)
 
-  let tcp_server ~debug port callback =
-    Printexc.record_backtrace debug;
+  let tcp_server port callback =
     Cohttp_lwt_unix.Server.create
       ~mode:(`TCP (`Port port))
       (Cohttp_lwt_unix.Server.make ~callback ())
 
   let main ~debug ~cap_file ~workdir =
+    Printexc.record_backtrace debug;
     Lwt_unix.getcwd () >>= fun cwd ->
     let workdir = Server_workdirs.create ~cwd ~workdir in
     Server_workdirs.init_base workdir >>= fun () ->
@@ -138,7 +138,7 @@ module Make (Backend : Backend_intf.S) = struct
     let port = Server_configfile.port conf in
     Backend.start ~debug ~cap_file conf workdir >>= fun (backend, backend_task) ->
     Lwt.join [
-      tcp_server ~debug port (callback ~debug ~conf backend);
+      tcp_server port (callback ~debug ~conf backend);
       backend_task ();
     ]
 end
