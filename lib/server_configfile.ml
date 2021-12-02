@@ -203,7 +203,7 @@ let set_defaults conf =
   if Option.is_none conf.default_repository then
     conf.default_repository <- Some (Intf.Github.create "ocaml/opam-repository");
   if Option.is_none conf.extra_repositories then
-    conf.extra_repositories <- Some [Intf.Repository.create ~name:"beta" ~github:"ocaml/ocaml-beta-repository" ~for_switches:None];
+    conf.extra_repositories <- Some [];
   if Option.is_none conf.with_test then
     conf.with_test <- Some false; (* TODO: Enable by default in the future (takes 1.5x the time) *)
   if Option.is_none conf.with_lower_bound then
