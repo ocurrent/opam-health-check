@@ -116,7 +116,7 @@ module Make (Backend : Backend_intf.S) = struct
     | ["log"; logdir; comp; state; pkg] ->
         get_log ~logdir ~comp ~state ~pkg
     | _ ->
-        failwith "path non recognized: 404"
+        Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
 
   let callback ~debug ~conf backend conn req body =
     (* TODO: Try to understand why it wouldn't do anything before when this was ~on_exn *)
