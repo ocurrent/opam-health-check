@@ -70,7 +70,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
   | ["set-processes"; i] ->
       let i = int_of_string i in
       if i < 0 then
-        Lwt.fail_with "Cannot set the number of processes to a negative value."
+        failwith "Cannot set the number of processes to a negative value."
       else
         Server_configfile.set_processes conf i >|= fun () ->
         (fun () -> Lwt.return_none)
@@ -112,7 +112,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
   | ["log"] ->
       get_log workdir
   | _ ->
-      Lwt.fail_with "Action unrecognized."
+      failwith "Action unrecognized."
   end >>= fun resp ->
   let stream = Lwt_stream.from resp in
   Cohttp_lwt_unix.Server.respond ~status:`OK ~body:(`Stream stream) ()
@@ -143,7 +143,7 @@ let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
   | Some (pversion, body) when String.equal Oca_lib.protocol_version pversion ->
       begin match String.Split.left ~by:"\n" body with
       | Some (_, "") ->
-          Lwt.fail_with "Empty message"
+          failwith "Empty message"
       | Some (user, body) ->
           get_user_key workdir user >>= fun key ->
           let body = decrypt key body in
@@ -151,12 +151,12 @@ let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
           | Some (user', body) when String.equal user user' ->
               admin_action ~on_finished ~conf ~run_trigger workdir body
           | Some _ ->
-              Lwt.fail_with "Identity couldn't be ensured"
+              failwith "Identity couldn't be ensured"
           | None ->
-              Lwt.fail_with "Identity check required"
+              failwith "Identity check required"
           end
       | None ->
-          Lwt.fail_with "Cannot find username"
+          failwith "Cannot find username"
       end
   | Some (pversion, _) ->
       Cohttp_lwt_unix.Server.respond_string
@@ -166,4 +166,4 @@ let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
                 Please upgrade your client.")
         ()
   | None ->
-      Lwt.fail_with "Cannot parse request"
+      failwith "Cannot parse request"

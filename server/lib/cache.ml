@@ -195,7 +195,7 @@ let get_html ~conf self query logdir =
 
 let get_latest_logdir self =
   self.logdirs >>= function
-  | [] -> Lwt.fail Not_found
+  | [] -> raise Not_found
   | logdir::_ -> Lwt.return logdir
 
 let get_html ~conf self query logdir =

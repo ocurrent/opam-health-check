@@ -29,7 +29,7 @@ let get_files dirname =
         aux (file :: files)
     end begin function
     | End_of_file -> Lwt.return files
-    | exn -> Lwt.fail exn
+    | exn -> raise exn
     end
   in
   aux [] >>= fun files ->
@@ -66,12 +66,12 @@ let pread ?cwd ?exit1 ~timeout cmd f =
         | _, _ ->
             let cmd = String.concat " " cmd in
             prerr_endline ("Command '"^cmd^"' failed (exit status: "^string_of_int n^".");
-            Lwt.fail (Failure "process failure")
+            failwith "process failure"
         end
     | Unix.WSIGNALED n | Unix.WSTOPPED n ->
         let cmd = String.concat " " cmd in
         prerr_endline ("Command '"^cmd^"' killed by a signal (n°"^string_of_int n^")");
-        Lwt.fail (Failure "process failure")
+        failwith "process failure"
   end
 
 let read_unordered_lines c =
@@ -118,7 +118,7 @@ let mkdir_p dir =
           Lwt_unix.mkdir (Fpath.to_string dir) 0o750
         end begin function
         | Unix.Unix_error (Unix.EEXIST, _, _) -> Lwt.return_unit
-        | e -> Lwt.fail e
+        | e -> raise e
         end [@ocaml.warning "-fragile-match"] >>= fun () ->
         aux dir xs
   in
@@ -144,7 +144,7 @@ let rec rm_rf dirname =
     in
     Lwt.catch rm_files begin function
     | End_of_file -> Lwt.return_unit
-    | e -> Lwt.fail e
+    | e -> raise e
     end
   end begin fun () ->
     Lwt_unix.closedir dir >>= fun () ->

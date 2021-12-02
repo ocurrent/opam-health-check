@@ -109,7 +109,7 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
       Lwt.return r
   | (Error (), _) ->
       match default with
-      | None -> Lwt.fail_with ("Failure in ocluster: "^c) (* TODO: Replace this with "send message to debug slack webhook" *)
+      | None -> failwith ("Failure in ocluster: "^c) (* TODO: Replace this with "send message to debug slack webhook" *)
       | Some v -> Lwt.return v
 
 let failure_kind logfile =
@@ -410,7 +410,7 @@ let get_cap ~stderr ~cap_file =
       Lwt.return sr
   | Error _ ->
       Lwt_io.write_line stderr "cap file couldn't be loaded" >>= fun () ->
-      Lwt.fail_with "cap file not found"
+      failwith "cap file not found"
 
 let run_locked = ref false
 
