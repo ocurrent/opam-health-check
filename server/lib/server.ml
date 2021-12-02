@@ -77,7 +77,8 @@ module Make (Backend : Backend_intf.S) = struct
       String.equal (Server_workdirs.get_logdir_name logdir) name
     ) logdirs
 
-  let callback ~conf backend _conn req _body =
+  let callback ~conf backend _conn req body_NOT_USED =
+    Cohttp_lwt.Body.drain_body body_NOT_USED >>= fun () ->
     let uri = Cohttp.Request.uri req in
     let get_log ~logdir ~comp ~state ~pkg =
       get_logdir logdir >>= fun logdir ->
