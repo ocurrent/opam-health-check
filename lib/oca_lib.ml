@@ -19,16 +19,14 @@ let char_is_docker_compatible = function
 let get_files dirname =
   let%lwt dir = Lwt_unix.opendir (Fpath.to_string dirname) in
   let rec aux files =
-    Lwt.catch begin fun () ->
+    try%lwt
       let%lwt file = Lwt_unix.readdir dir in
       if Fpath.is_rel_seg file then
         aux files
       else
         aux (file :: files)
-    end begin function
+    with
     | End_of_file -> Lwt.return files
-    | exn -> raise exn
-    end
   in
   let%lwt files = aux [] in
   let%lwt () = Lwt_unix.closedir dir in
@@ -141,10 +139,7 @@ let rec rm_rf dirname =
           in
           rm_files ()
     in
-    Lwt.catch rm_files begin function
-    | End_of_file -> Lwt.return_unit
-    | e -> raise e
-    end
+    try%lwt rm_files () with End_of_file -> Lwt.return_unit
   end begin fun () ->
     let%lwt () = Lwt_unix.closedir dir in
     Lwt_unix.rmdir (Fpath.to_string dirname)

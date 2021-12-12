@@ -442,7 +442,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     let start_time = Unix.time () in
     with_stderr ~start_time workdir begin fun ~stderr ->
-      Lwt.catch begin fun () ->
+      try%lwt
         let timer = Oca_lib.timer_start () in
         let%lwt cap = get_cap ~stderr ~cap_file in
         let%lwt (opam_repo, opam_repo_commit) = get_commit_hash_default conf in
@@ -472,12 +472,12 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
         | [] ->
             Lwt_io.write_line stderr "No switches."
         end
-      end begin fun exc ->
-        let%lwt () = Lwt_io.write_line stderr ("Exception: "^Printexc.to_string exc^".") in
-        let%lwt () = Lwt_io.write stderr (Printexc.get_backtrace ()) in
-        let%lwt () = Lwt_io.flush stderr in
-        Lwt.return (prerr_endline "The current run failed unexpectedly. Please check the latest log using: opam-health-check log")
-      end
+      with
+      | exc ->
+          let%lwt () = Lwt_io.write_line stderr ("Exception: "^Printexc.to_string exc^".") in
+          let%lwt () = Lwt_io.write stderr (Printexc.get_backtrace ()) in
+          let%lwt () = Lwt_io.flush stderr in
+          Lwt.return (prerr_endline "The current run failed unexpectedly. Please check the latest log using: opam-health-check log")
     end
   end (fun () -> run_locked := false; Lwt.return_unit) end;
   Lwt.return_unit

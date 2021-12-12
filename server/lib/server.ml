@@ -120,9 +120,8 @@ module Make (Backend : Backend_intf.S) = struct
 
   let callback ~debug ~conf backend conn req body =
     (* TODO: Try to understand why it wouldn't do anything before when this was ~on_exn *)
-    Lwt.catch
-      (fun () -> callback ~conf backend conn req body)
-      (fun e -> if debug then prerr_endline (Printexc.get_backtrace () ^ Printexc.to_string e); raise e)
+    try%lwt callback ~conf backend conn req body with
+    | e -> if debug then prerr_endline (Printexc.get_backtrace () ^ Printexc.to_string e); raise e
 
   let tcp_server port callback =
     Cohttp_lwt_unix.Server.create
