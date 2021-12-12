@@ -35,27 +35,27 @@ let create_admin_key workdir =
 
 let get_log workdir =
   let ilogdir = Server_workdirs.ilogdir workdir in
-  Oca_lib.get_files ilogdir >>= fun logs ->
+  let%lwt logs = Oca_lib.get_files ilogdir in
   let logs = List.sort String.compare logs in
   let logfile = Option.get_exn_or "no last log" (List.last_opt logs) in
   let logfile = ilogdir // logfile in
-  Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_RDONLY] 0o644 >>= fun fd ->
+  let%lwt fd = Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_RDONLY] 0o644 in
   let off = ref 0 in
   let rec loop () =
     let is_running = Check.is_running () in
-    Lwt_unix.lseek fd 0 Unix.SEEK_END >>= fun new_off ->
+    let%lwt new_off = Lwt_unix.lseek fd 0 Unix.SEEK_END in
     if new_off < 0 then
       assert false
     else if !off < new_off then begin
-      Lwt_unix.lseek fd !off Unix.SEEK_SET >>= fun _ ->
+      let%lwt _ = Lwt_unix.lseek fd !off Unix.SEEK_SET in
       let len = new_off - !off in
       let buf = Bytes.create len in
-      Lwt_unix.read fd buf 0 len >>= fun _ ->
+      let%lwt _ = Lwt_unix.read fd buf 0 len in
       off := new_off;
       Lwt.return (Some (Bytes.to_string buf))
     end else if is_running then begin
       off := new_off;
-      Lwt_unix.sleep 1. >>= fun () ->
+      let%lwt () = Lwt_unix.sleep 1. in
       loop ()
     end else
       Lwt.return_none
@@ -63,57 +63,58 @@ let get_log workdir =
   Lwt.return loop
 
 let admin_action ~on_finished ~conf ~run_trigger workdir body =
-  begin match String.split_on_char '\n' body with
-  | ["set-auto-run-interval"; i] ->
-      Server_configfile.set_auto_run_interval conf (int_of_string i) >|= fun () ->
-      (fun () -> Lwt.return_none)
-  | ["set-processes"; i] ->
-      let i = int_of_string i in
-      if i < 0 then
-        failwith "Cannot set the number of processes to a negative value."
-      else
-        Server_configfile.set_processes conf i >|= fun () ->
+  let%lwt resp =
+    match String.split_on_char '\n' body with
+    | ["set-auto-run-interval"; i] ->
+        Server_configfile.set_auto_run_interval conf (int_of_string i) >|= fun () ->
         (fun () -> Lwt.return_none)
-  | ["add-ocaml-switch";name;switch] ->
-      let switch = Intf.Switch.create ~name ~switch in
-      let switches = switch :: Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
-      let switches = List.sort Intf.Switch.compare switches in
-      Server_configfile.set_ocaml_switches conf switches >|= fun () ->
-      (fun () -> Lwt.return_none)
-  | ["set-ocaml-switch";name;switch] ->
-      let switch = Intf.Switch.create ~name ~switch in
-      let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
-      let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
-      let switches = List.set_at_idx idx switch switches in
-      Server_configfile.set_ocaml_switches conf switches >|= fun () ->
-      (fun () -> Lwt.return_none)
-  | ["rm-ocaml-switch";name] ->
-      let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
-      let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
-      let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
-      Server_configfile.set_ocaml_switches conf switches >|= fun () ->
-      (fun () -> Lwt.return_none)
-  | "set-slack-webhooks"::webhooks ->
-      let webhooks = List.map Uri.of_string webhooks in
-      Server_configfile.set_slack_webhooks conf webhooks >|= fun () ->
-      (fun () -> Lwt.return_none)
-  | ["set-list-command";cmd] ->
-      Server_configfile.set_list_command conf cmd >|= fun () ->
-      (fun () -> Lwt.return_none)
-  | ["run"] ->
-      Lwt_mvar.put run_trigger () >|= fun () ->
-      (fun () -> Lwt.return_none)
-  | ["add-user";username] ->
-      create_userkey workdir username >|= fun () ->
-      (fun () -> Lwt.return_none)
-  | ["clear-cache"] ->
-      on_finished workdir;
-      Lwt.return (fun () -> Lwt.return_none)
-  | ["log"] ->
-      get_log workdir
-  | _ ->
-      failwith "Action unrecognized."
-  end >>= fun resp ->
+    | ["set-processes"; i] ->
+        let i = int_of_string i in
+        if i < 0 then
+          failwith "Cannot set the number of processes to a negative value."
+        else
+          Server_configfile.set_processes conf i >|= fun () ->
+          (fun () -> Lwt.return_none)
+    | ["add-ocaml-switch";name;switch] ->
+        let switch = Intf.Switch.create ~name ~switch in
+        let switches = switch :: Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
+        let switches = List.sort Intf.Switch.compare switches in
+        Server_configfile.set_ocaml_switches conf switches >|= fun () ->
+        (fun () -> Lwt.return_none)
+    | ["set-ocaml-switch";name;switch] ->
+        let switch = Intf.Switch.create ~name ~switch in
+        let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
+        let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
+        let switches = List.set_at_idx idx switch switches in
+        Server_configfile.set_ocaml_switches conf switches >|= fun () ->
+        (fun () -> Lwt.return_none)
+    | ["rm-ocaml-switch";name] ->
+        let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
+        let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
+        let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
+        Server_configfile.set_ocaml_switches conf switches >|= fun () ->
+        (fun () -> Lwt.return_none)
+    | "set-slack-webhooks"::webhooks ->
+        let webhooks = List.map Uri.of_string webhooks in
+        Server_configfile.set_slack_webhooks conf webhooks >|= fun () ->
+        (fun () -> Lwt.return_none)
+    | ["set-list-command";cmd] ->
+        Server_configfile.set_list_command conf cmd >|= fun () ->
+        (fun () -> Lwt.return_none)
+    | ["run"] ->
+        Lwt_mvar.put run_trigger () >|= fun () ->
+        (fun () -> Lwt.return_none)
+    | ["add-user";username] ->
+        create_userkey workdir username >|= fun () ->
+        (fun () -> Lwt.return_none)
+    | ["clear-cache"] ->
+        on_finished workdir;
+        Lwt.return (fun () -> Lwt.return_none)
+    | ["log"] ->
+        get_log workdir
+    | _ ->
+        failwith "Action unrecognized."
+  in
   let stream = Lwt_stream.from resp in
   Cohttp_lwt_unix.Server.respond ~status:`OK ~body:(`Stream stream) ()
 
@@ -138,14 +139,14 @@ let rec decrypt key msg =
     partial_decrypt key msg ^ decrypt key next
 
 let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
-  Cohttp_lwt.Body.to_string body >>= fun body ->
+  let%lwt body = Cohttp_lwt.Body.to_string body in
   match String.Split.left ~by:"\n" body with
   | Some (pversion, body) when String.equal Oca_lib.protocol_version pversion ->
       begin match String.Split.left ~by:"\n" body with
       | Some (_, "") ->
           failwith "Empty message"
       | Some (user, body) ->
-          get_user_key workdir user >>= fun key ->
+          let%lwt key = get_user_key workdir user in
           let body = decrypt key body in
           begin match String.Split.left ~by:"\n" body with
           | Some (user', body) when String.equal user user' ->

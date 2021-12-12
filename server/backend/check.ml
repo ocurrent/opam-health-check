@@ -22,7 +22,7 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
       (ops @ [Obuilder_spec.run ~cache:(cache ~conf) ~network "%s" c])
   in
   let obuilder_content = obuilder_to_string obuilder_content in
-  Capnp_rpc_lwt.Sturdy_ref.connect_exn cap >>= fun service ->
+  let%lwt service = Capnp_rpc_lwt.Sturdy_ref.connect_exn cap in
   Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
   let action = Cluster_api.Submission.obuilder_build obuilder_content in
   let cache_hint = "opam-health-check-"^Digest.to_hex (Digest.string obuilder_content) in
@@ -36,23 +36,25 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
           Cluster_api.Job.log job start >>= function
           | Error (`Capnp e) -> Lwt_io.write stderr (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
           | Ok ("", _) -> Lwt.return_unit
-          | Ok (data, next) -> Lwt_io.write stdout data >>= fun () -> tail job next
+          | Ok (data, next) ->
+              let%lwt () = Lwt_io.write stdout data in
+              tail job next
         in
-        tail job 0L >>= fun () ->
+        let%lwt () = tail job 0L in
         Cluster_api.Job.result job >>= function
         | Ok _ ->
             Lwt.return (Ok ())
         | Error (`Capnp e) ->
-            Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e) >>= fun () ->
+            let%lwt () = Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e) in
             Lwt.return (Error ())
       in
       (* NOTE: any processes shouldn't take more than 2 hours *)
       let timeout =
         let hours = 2 in
-        Lwt_unix.sleep (float_of_int (hours * 60 * 60)) >>= fun () ->
+        let%lwt () = Lwt_unix.sleep (float_of_int (hours * 60 * 60)) in
         let cancel =
-          Cluster_api.Job.cancel job >>= fun cancel_result ->
-          Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" >>= fun () ->
+          let%lwt cancel_result = Cluster_api.Job.cancel job in
+          let%lwt () = Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" in
           match cancel_result with
           | Ok () ->
               Lwt_io.write_line stdout "+++ Job cancelled +++"
@@ -61,16 +63,16 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
         in
         let timeout =
           let minute = 1 in
-          Lwt_unix.sleep (float_of_int (minute * 60)) >>= fun () ->
+          let%lwt () = Lwt_unix.sleep (float_of_int (minute * 60)) in
           Lwt_io.write_line stdout "+++ Cancellation failed +++"
         in
-        Lwt.pick [cancel; timeout] >>= fun () ->
-        Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_int hours^" hours).") >>= fun () ->
+        let%lwt () = Lwt.pick [cancel; timeout] in
+        let%lwt () = Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_int hours^" hours).") in
         Lwt.return (Error ())
       in
       Lwt.pick [timeout; proc]
   | Error {Capnp_rpc.Exception.reason; _} ->
-      Lwt_io.write_line stderr ("capnp-rpc failed to settle: "^reason) >>= fun () ->
+      let%lwt () = Lwt_io.write_line stderr ("capnp-rpc failed to settle: "^reason) in
       Lwt.return (Error ())
 
 let exec_out ~fexec ~fout =
@@ -80,14 +82,14 @@ let exec_out ~fexec ~fout =
       (fun () -> fexec ~stdout)
       (fun () -> Lwt_io.close stdout)
   in
-  fout ~stdin >>= fun res ->
-  Lwt_io.close stdin >>= fun () ->
+  let%lwt res = fout ~stdin in
+  let%lwt () = Lwt_io.close stdin in
   proc >|= fun r ->
   (r, res)
 
 let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
   let rec aux ~stdin =
-    Lwt_io.read_line_opt stdin >>= fun line ->
+    let%lwt line = Lwt_io.read_line_opt stdin in
     match line with
     | Some "@@@OUTPUT" ->
         let rec aux acc =
@@ -98,7 +100,7 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
         in
         aux []
     | Some line ->
-        (if debug then Lwt_io.write_line stderr line else Lwt.return_unit) >>= fun () ->
+        let%lwt () = (if debug then Lwt_io.write_line stderr line else Lwt.return_unit) in
         aux ~stdin
     | None -> Lwt.return_nil
   in
@@ -176,28 +178,28 @@ exit $res
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
-    Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") >>= fun () ->
+    let%lwt () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") in
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
     Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) begin fun stdout ->
       ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg)
     end >>= function
     | Ok () ->
-        Lwt_io.write_line stderr ("["^num^"] succeeded.") >>= fun () ->
+        let%lwt () = Lwt_io.write_line stderr ("["^num^"] succeeded.") in
         Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
     | Error () ->
         failure_kind logfile >>= begin function
         | `Partial ->
-            Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") >>= fun () ->
+            let%lwt () = Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") in
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir))
         | `Failure ->
-            Lwt_io.write_line stderr ("["^num^"] failed.") >>= fun () ->
+            let%lwt () = Lwt_io.write_line stderr ("["^num^"] failed.") in
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch logdir))
         | `NotAvailable ->
-            Lwt_io.write_line stderr ("["^num^"] finished with not available.") >>= fun () ->
+            let%lwt () = Lwt_io.write_line stderr ("["^num^"] finished with not available.") in
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch logdir))
         | `Other | `AcceptFailures | `Timeout ->
-            Lwt_io.write_line stderr ("["^num^"] finished with an internal failure.") >>= fun () ->
+            let%lwt () = Lwt_io.write_line stderr ("["^num^"] finished with an internal failure.") in
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch logdir))
         end
   end
@@ -274,8 +276,8 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
 
 let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
   let switch = Intf.Compiler.to_string (Intf.Switch.name switch) in
-  Lwt_io.write_line stderr ("Getting packages list for "^switch^"...") >>= fun () ->
-  ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) >>= fun pkgs ->
+  let%lwt () = Lwt_io.write_line stderr ("Getting packages list for "^switch^"...") in
+  let%lwt pkgs = ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) in
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) with (* TODO: Remove this horror *)
@@ -287,7 +289,7 @@ let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
   pkgs
 
 let with_stderr ~start_time workdir f =
-  Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) >>= fun () ->
+  let%lwt () = Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) in
   let logfile = Server_workdirs.new_ilogfile ~start_time workdir in
   Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_APPEND] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) begin fun stderr ->
     f ~stderr
@@ -302,7 +304,7 @@ let revdeps_script pkg =
 
 let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkgname ~pkg ~logdir =
-    ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) >>= fun revdeps ->
+    let%lwt revdeps = ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) in
     let module Set = Set.Make(String) in
     let revdeps = Set.of_list revdeps in
     let revdeps = Set.remove pkgname revdeps in (* https://github.com/ocaml/opam/issues/4446 *)
@@ -311,9 +313,10 @@ let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder)
     )
   in
   let get_latest_metadata ~base_obuilder ~pkgname ~logdir = (* TODO: Get this locally by merging all the repository and parsing the opam files using opam-core *)
-    ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
-      ("opam show --raw "^Filename.quote pkgname)
-    >>= fun opam ->
+    let%lwt opam =
+      ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
+        ("opam show --raw "^Filename.quote pkgname)
+    in
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpopamfile ~pkg:pkgname logdir)) (fun c ->
       Lwt_io.write c (String.concat "\n" opam)
     )
@@ -322,8 +325,8 @@ let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder)
     let pkgname = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) in (* TODO: Remove this horror *)
     let job =
       Lwt_pool.use pool begin fun () ->
-        Lwt_io.write_line stderr ("Getting metadata for "^full_name) >>= fun () ->
-        get_revdeps ~base_obuilder ~pkgname ~pkg:full_name ~logdir >>= fun () ->
+        let%lwt () = Lwt_io.write_line stderr ("Getting metadata for "^full_name) in
+        let%lwt () = get_revdeps ~base_obuilder ~pkgname ~pkg:full_name ~logdir in
         if Pkg_set.mem pkgname pkgs_set then Lwt.return_unit else get_latest_metadata ~base_obuilder ~pkgname ~logdir
       end
     in
@@ -364,9 +367,9 @@ let move_tmpdirs_to_final ~switches logdir workdir =
   let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
   let tmpdir = Server_workdirs.tmpdir logdir in
   let switches = List.map Intf.Switch.name switches in
-  Server_workdirs.logdir_move ~switches logdir >>= fun () ->
-  Oca_lib.rm_rf metadatadir >>= fun () ->
-  Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) >>= fun () ->
+  let%lwt () = Server_workdirs.logdir_move ~switches logdir in
+  let%lwt () = Oca_lib.rm_rf metadatadir in
+  let%lwt () = Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) in
   Oca_lib.rm_rf tmpdir
 
 let run_jobs ~cap ~conf ~pool ~stderr logdir switches pkgs =
@@ -392,12 +395,13 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   in
   Server_configfile.slack_webhooks conf |>
   Lwt_list.iter_s begin fun webhook ->
-    Lwt_io.write_line stderr ("Triggering Slack webhook "^Uri.to_string webhook) >>= fun () ->
-    Cohttp_lwt_unix.Client.post
-      ~headers:(Cohttp.Header.of_list ["Content-type", "application/json"])
-      ~body:(`String body)
-      webhook
-    >>= fun (resp, _body) ->
+    let%lwt () = Lwt_io.write_line stderr ("Triggering Slack webhook "^Uri.to_string webhook) in
+    let%lwt (resp, _body) =
+      Cohttp_lwt_unix.Client.post
+        ~headers:(Cohttp.Header.of_list ["Content-type", "application/json"])
+        ~body:(`String body)
+        webhook
+    in
     match Cohttp.Response.status resp with
     | `OK -> Lwt.return_unit
     | _ -> Lwt_io.write_line stderr ("Something when wrong with slack webhook "^Uri.to_string webhook)
@@ -409,7 +413,7 @@ let get_cap ~stderr ~cap_file =
   | Ok sr ->
       Lwt.return sr
   | Error _ ->
-      Lwt_io.write_line stderr "cap file couldn't be loaded" >>= fun () ->
+      let%lwt () = Lwt_io.write_line stderr "cap file couldn't be loaded" in
       failwith "cap file not found"
 
 let run_locked = ref false
@@ -435,37 +439,37 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
     with_stderr ~start_time workdir begin fun ~stderr ->
       Lwt.catch begin fun () ->
         let timer = Oca_lib.timer_start () in
-        get_cap ~stderr ~cap_file >>= fun cap ->
-        get_commit_hash_default conf >>= fun (opam_repo, opam_repo_commit) ->
-        get_commit_hash_extra_repos conf >>= fun extra_repos ->
+        let%lwt cap = get_cap ~stderr ~cap_file in
+        let%lwt (opam_repo, opam_repo_commit) = get_commit_hash_default conf in
+        let%lwt extra_repos = get_commit_hash_extra_repos conf in
         let switches' = switches in
         let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
         begin match switches with
         | switch::_ ->
-            Oca_server.Cache.get_logdirs cache >>= fun old_logdir ->
+            let%lwt old_logdir = Oca_server.Cache.get_logdirs cache in
             let compressed = Server_configfile.enable_logs_compression conf in
             let old_logdir = List.head_opt old_logdir in
             let new_logdir = Server_workdirs.new_logdir ~compressed ~hash:opam_repo_commit ~start_time workdir in
-            Server_workdirs.init_base_jobs ~switches:switches' new_logdir >>= fun () ->
+            let%lwt () = Server_workdirs.init_base_jobs ~switches:switches' new_logdir in
             let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
-            Lwt_list.map_p (get_pkgs ~debug ~cap ~stderr ~conf) switches >>= fun pkgs ->
+            let%lwt pkgs = Lwt_list.map_p (get_pkgs ~debug ~cap ~stderr ~conf) switches in
             let pkgs = Pkg_set.of_list (List.concat pkgs) in
-            Oca_lib.timer_log timer stderr "Initialization" >>= fun () ->
+            let%lwt () = Oca_lib.timer_log timer stderr "Initialization" in
             let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
             let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
-            Lwt.join jobs >>= fun () ->
-            Oca_lib.timer_log timer stderr "Operation" >>= fun () ->
-            Lwt_io.write_line stderr "Finishing up..." >>= fun () ->
-            move_tmpdirs_to_final ~switches:switches' new_logdir workdir >>= fun () ->
+            let%lwt () = Lwt.join jobs in
+            let%lwt () = Oca_lib.timer_log timer stderr "Operation" in
+            let%lwt () = Lwt_io.write_line stderr "Finishing up..." in
+            let%lwt () = move_tmpdirs_to_final ~switches:switches' new_logdir workdir in
             on_finished workdir;
-            trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf >>= fun () ->
+            let%lwt () = trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf in
             Oca_lib.timer_log timer stderr "Clean up"
         | [] ->
             Lwt_io.write_line stderr "No switches."
         end
       end begin fun exc ->
-        Lwt_io.write_line stderr ("Exception: "^Printexc.to_string exc^".") >>= fun () ->
-        Lwt_io.write stderr (Printexc.get_backtrace ()) >>= fun () ->
+        let%lwt () = Lwt_io.write_line stderr ("Exception: "^Printexc.to_string exc^".") in
+        let%lwt () = Lwt_io.write stderr (Printexc.get_backtrace ()) in
         Lwt_io.flush stderr >|= fun () ->
         prerr_endline "The current run failed unexpectedly. Please check the latest log using: opam-health-check log"
       end

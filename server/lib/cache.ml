@@ -101,7 +101,7 @@ let is_deprecated flag =
   String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
 
 let (>>&&) x f =
-  x >>= fun x ->
+  let%lwt x = x in
   if x then f () else Lwt.return_false
 
 let must_show_package ~logsearch query ~is_latest pkg =
@@ -181,15 +181,15 @@ let revdeps_cmp p1 p2 =
 
 let get_html ~conf self query logdir =
   let aux ~logdir pkgs =
-    pkgs >>= fun pkgs ->
+    let%lwt pkgs = pkgs in
     let logsearch = get_logsearch ~query ~logdir in
-    Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) >>= fun (pkgs, _) ->
+    let%lwt (pkgs, _) = Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) in
     let pkgs = if query.Html.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
     let html = Html.get_html ~logdir ~conf query pkgs in
     Html_cache.add self.html_tbl (logdir, query) html;
     Lwt.return html
   in
-  self.pkgs >>= fun pkgs ->
+  let%lwt pkgs = self.pkgs in
   let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
   aux ~logdir pkgs
 
@@ -221,7 +221,7 @@ let get_revdeps self k =
   Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k)
 
 let get_html_diff ~conf ~old_logdir ~new_logdir self =
-  get_pkgs ~logdir:old_logdir self >>= fun old_pkgs ->
+  let%lwt old_pkgs = get_pkgs ~logdir:old_logdir self in
   get_pkgs ~logdir:new_logdir self >|= fun new_pkgs ->
   generate_diff old_pkgs new_pkgs |>
   Html.get_diff ~conf ~old_logdir ~new_logdir

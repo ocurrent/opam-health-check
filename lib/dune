@@ -1,6 +1,7 @@
 (library
   (name oca_lib)
   (wrapped false)
+  (preprocess (pps lwt_ppx))
   (libraries
     lwt
     lwt.unix
