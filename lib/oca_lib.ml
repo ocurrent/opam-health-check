@@ -70,16 +70,25 @@ let pread ?cwd ?exit1 ~timeout cmd f =
         Lwt.fail (Failure "process failure")
   end
 
-let read_unordered_lines c =
+let read_unordered_lines ~typical_line_size c =
+  let buffer = Buffer.create typical_line_size in
   let rec aux acc =
-    match%lwt Lwt_io.read_line_opt c with
-    | None -> Lwt.return acc (* Note: We don't care about the line ordering *)
-    | Some line -> aux (line :: acc)
+    match%lwt Lwt_io.read ~count:typical_line_size c with
+    | "" -> Lwt.return acc (* Note: We don't care about the line ordering *)
+    | str ->
+        Buffer.add_string buffer str;
+        let lines = String.split_on_char '\n' (Buffer.contents buffer) in
+        let rec add_lines acc = function
+          | [] -> assert false (* State not reachable by String.split_on_char *)
+          | [x] -> Buffer.clear buffer; Buffer.add_string buffer x; acc
+          | x::xs -> add_lines (x :: acc) xs
+        in
+        aux (add_lines acc lines)
   in
   aux []
 
 let scan_tpxz_archive archive =
-  pread ~timeout:60. ["pixz"; "-l"; Fpath.to_string archive] read_unordered_lines
+  pread ~timeout:60. ["pixz"; "-l"; Fpath.to_string archive] (read_unordered_lines ~typical_line_size:64)
 
 let random_access_tpxz_archive ~file archive =
   let file = Filename.quote file in
@@ -96,13 +105,13 @@ let compress_tpxz_archive ~cwd ~directories archive =
 
 let ugrep_dir ~switch ~regexp ~cwd =
   let cwd = Fpath.to_string cwd in
-  pread ~timeout:60. ~cwd ~exit1:[] ["ugrep"; "-Rl"; "--include="^switch^"/**"; "--regexp="^regexp; "."] read_unordered_lines
+  pread ~timeout:60. ~cwd ~exit1:[] ["ugrep"; "-Rl"; "--include="^switch^"/**"; "--regexp="^regexp; "."] (read_unordered_lines ~typical_line_size:64)
 
 let ugrep_tpxz ~switch ~regexp ~archive =
   let switch = Filename.quote switch in
   let regexp = Filename.quote regexp in
   let archive = Filename.quote (Fpath.to_string archive) in
-  pread ~timeout:60. ~exit1:[] ["sh"; "-c"; "pixz -x "^switch^" -i "^archive^" | ugrep -zl --format='%z%~' --regexp="^regexp] read_unordered_lines
+  pread ~timeout:60. ~exit1:[] ["sh"; "-c"; "pixz -x "^switch^" -i "^archive^" | ugrep -zl --format='%z%~' --regexp="^regexp] (read_unordered_lines ~typical_line_size:64)
 
 let mkdir_p dir =
   let rec aux base = function

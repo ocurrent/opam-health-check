@@ -15,5 +15,6 @@
     fpath
     uri
     re
+    logs
     current_ansi
     oca_lib))
