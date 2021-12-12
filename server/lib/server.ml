@@ -145,7 +145,14 @@ module Make (Backend : Backend_intf.S) = struct
   let callback ~debug ~conf backend conn req body =
     (* TODO: Try to understand why it wouldn't do anything before when this was ~on_exn *)
     try%lwt callback ~conf backend conn req body with
-    | e -> if debug then prerr_endline (Printexc.get_backtrace () ^ Printexc.to_string e); raise e
+    | e ->
+        if debug then begin
+          let uri = Uri.to_string (Cohttp.Request.uri req) in
+          let e = Printexc.to_string e in
+          prerr_endline ("Exception while serving the page \""^uri^"\" raised: "^e);
+          prerr_endline (Printexc.get_backtrace ());
+        end;
+        raise e
 
   let tcp_server port callback =
     Cohttp_lwt_unix.Server.create
