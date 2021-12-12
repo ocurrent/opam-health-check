@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 let parse_key key =
   let key = IO.with_in (Fpath.to_string key) (IO.read_all ?size:None) in
   let key = Mirage_crypto_pk.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key) in
@@ -18,15 +16,15 @@ let rec encrypt_msg ~key msg =
 
 let print_body body =
   let stream = Cohttp_lwt.Body.to_stream body in
-  Lwt_stream.iter (fun s -> print_string s; flush stdout) stream >|= fun () ->
-  print_newline ()
+  let%lwt () = Lwt_stream.iter (fun s -> print_string s; flush stdout) stream in
+  Lwt.return (print_newline ())
 
 let process_response (res, body) =
   match Cohttp.Response.status res with
   | `OK ->
       print_body body
   | `Upgrade_required ->
-      print_body body >|= fun () ->
+      let%lwt () = print_body body in
       raise Exit
   | _ ->
       print_endline "A problem occured";
@@ -47,8 +45,8 @@ let send_msg ~profilename ~confdir ~conffile msg =
   let prefix = Oca_lib.protocol_version^"\n"^prefix in
   print_endline "Sending command...";
   Lwt_main.run begin
-    Cohttp_lwt_unix.Client.post ~body:(`String (prefix^msg)) uri >>=
-    process_response
+    let%lwt resp = Cohttp_lwt_unix.Client.post ~body:(`String (prefix^msg)) uri in
+    process_response resp
   end
 
 let set_auto_run_interval ~confdir ~conffile profilename i =

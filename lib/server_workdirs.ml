@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 type t = Fpath.t
 
 let (/) path file =
@@ -30,7 +28,7 @@ let new_logdir ~compressed ~hash ~start_time workdir =
 
 let logdirs workdir =
   let base_logdir = base_logdir workdir in
-  Oca_lib.get_files base_logdir >|= fun dirs ->
+  let%lwt dirs = Oca_lib.get_files base_logdir in
   let dirs = List.sort (fun x y -> -String.compare x y) dirs in
   List.map (fun dir ->
     match String.split_on_char '-' dir with
@@ -42,7 +40,8 @@ let logdirs workdir =
         | _ -> assert false
         end
     | _ -> assert false
-  ) dirs
+  ) dirs |>
+  Lwt.return
 
 let logdir_ty_equal ty1 ty2 = match ty1, ty2 with
   | Uncompressed, Uncompressed
@@ -62,13 +61,14 @@ let get_logdir_time (Logdir (_, time, _, _, _)) = time
 
 let get_files ~name ~switch (Logdir (_, _, _, _, files)) =
   let switch = Intf.Compiler.to_string switch in
-  files >|= fun files ->
+  let%lwt files = files in
   List.filter_map (fun file ->
     match String.split_on_char '/' file with
     | [_switch; _name; ""] -> None
     | [switch'; name'; pkg] when String.equal switch switch' && String.equal name name' -> Some pkg
     | _ -> None
-  ) files
+  ) files |>
+  Lwt.return
 
 let goodfiles = get_files ~name:"good"
 let partialfiles = get_files ~name:"partial"
@@ -77,12 +77,13 @@ let notavailablefiles = get_files ~name:"not-available"
 let internalfailurefiles = get_files ~name:"internal-failure"
 
 let logdir_get_compilers (Logdir (_, _, _, _, files)) =
-  files >|= fun files ->
+  let%lwt files = files in
   List.filter_map (fun file ->
     match String.split_on_char '/' file with
     | [switch; ""] -> Some (Intf.Compiler.from_string switch)
     | _ -> None
-  ) files
+  ) files |>
+  Lwt.return
 
 let logdir_get_content ~comp ~state ~pkg = function
   | Logdir (Uncompressed, _, _, workdir, _) as logdir ->

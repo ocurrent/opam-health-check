@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 module Make (Backend : Backend_intf.S) = struct
   let serv_text ~content_type body =
     let headers = Cohttp.Header.init_with "Content-Type" content_type in
@@ -72,10 +70,11 @@ module Make (Backend : Backend_intf.S) = struct
     | path -> filter_path (Fpath.segs (Fpath.v path))
 
   let get_logdir name =
-    Cache.get_logdirs Backend.cache >|= fun logdirs ->
+    let%lwt logdirs = Cache.get_logdirs Backend.cache in
     List.find (fun logdir ->
       String.equal (Server_workdirs.get_logdir_name logdir) name
-    ) logdirs
+    ) logdirs |>
+    Lwt.return
 
   let callback ~conf backend _conn req body_NOT_USED =
     let%lwt () = Cohttp_lwt.Body.drain_body body_NOT_USED in
@@ -103,8 +102,8 @@ module Make (Backend : Backend_intf.S) = struct
         let%lwt html = Cache.get_html ~conf Backend.cache query logdir in
         serv_text ~content_type:"text/html" html
     | ["diff"] ->
-        Cache.get_html_diff_list Backend.cache >>=
-        serv_text ~content_type:"text/html"
+        let%lwt html = Cache.get_html_diff_list Backend.cache in
+        serv_text ~content_type:"text/html" html
     | ["diff"; range] ->
         let (old_logdir, new_logdir) = match String.split_on_char '.' range with
           | [old_logdir; ""; new_logdir] -> (old_logdir, new_logdir)

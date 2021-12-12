@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 let ( // ) = Fpath.( / )
 
 let with_file_out ~flags file f =
@@ -29,7 +27,7 @@ let create_userkey workdir username =
 let create_admin_key workdir =
   let username = Oca_lib.default_admin_name in
   let keyfile = get_keyfile workdir username in
-  Lwt_unix.file_exists (Fpath.to_string keyfile) >>= function
+  match%lwt Lwt_unix.file_exists (Fpath.to_string keyfile) with
   | true -> Lwt.return_unit
   | false -> create_userkey workdir username
 
@@ -66,47 +64,47 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
   let%lwt resp =
     match String.split_on_char '\n' body with
     | ["set-auto-run-interval"; i] ->
-        Server_configfile.set_auto_run_interval conf (int_of_string i) >|= fun () ->
-        (fun () -> Lwt.return_none)
+        let%lwt () = Server_configfile.set_auto_run_interval conf (int_of_string i) in
+        Lwt.return (fun () -> Lwt.return_none)
     | ["set-processes"; i] ->
         let i = int_of_string i in
         if i < 0 then
           failwith "Cannot set the number of processes to a negative value."
         else
-          Server_configfile.set_processes conf i >|= fun () ->
-          (fun () -> Lwt.return_none)
+          let%lwt () = Server_configfile.set_processes conf i in
+          Lwt.return (fun () -> Lwt.return_none)
     | ["add-ocaml-switch";name;switch] ->
         let switch = Intf.Switch.create ~name ~switch in
         let switches = switch :: Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let switches = List.sort Intf.Switch.compare switches in
-        Server_configfile.set_ocaml_switches conf switches >|= fun () ->
-        (fun () -> Lwt.return_none)
+        let%lwt () = Server_configfile.set_ocaml_switches conf switches in
+        Lwt.return (fun () -> Lwt.return_none)
     | ["set-ocaml-switch";name;switch] ->
         let switch = Intf.Switch.create ~name ~switch in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
         let switches = List.set_at_idx idx switch switches in
-        Server_configfile.set_ocaml_switches conf switches >|= fun () ->
-        (fun () -> Lwt.return_none)
+        let%lwt () = Server_configfile.set_ocaml_switches conf switches in
+        Lwt.return (fun () -> Lwt.return_none)
     | ["rm-ocaml-switch";name] ->
         let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
-        Server_configfile.set_ocaml_switches conf switches >|= fun () ->
-        (fun () -> Lwt.return_none)
+        let%lwt () = Server_configfile.set_ocaml_switches conf switches in
+        Lwt.return (fun () -> Lwt.return_none)
     | "set-slack-webhooks"::webhooks ->
         let webhooks = List.map Uri.of_string webhooks in
-        Server_configfile.set_slack_webhooks conf webhooks >|= fun () ->
-        (fun () -> Lwt.return_none)
+        let%lwt () = Server_configfile.set_slack_webhooks conf webhooks in
+        Lwt.return (fun () -> Lwt.return_none)
     | ["set-list-command";cmd] ->
-        Server_configfile.set_list_command conf cmd >|= fun () ->
-        (fun () -> Lwt.return_none)
+        let%lwt () = Server_configfile.set_list_command conf cmd in
+        Lwt.return (fun () -> Lwt.return_none)
     | ["run"] ->
-        Lwt_mvar.put run_trigger () >|= fun () ->
-        (fun () -> Lwt.return_none)
+        let%lwt () = Lwt_mvar.put run_trigger () in
+        Lwt.return (fun () -> Lwt.return_none)
     | ["add-user";username] ->
-        create_userkey workdir username >|= fun () ->
-        (fun () -> Lwt.return_none)
+        let%lwt () = create_userkey workdir username in
+        Lwt.return (fun () -> Lwt.return_none)
     | ["clear-cache"] ->
         on_finished workdir;
         Lwt.return (fun () -> Lwt.return_none)
@@ -124,8 +122,8 @@ let is_bzero = function
 
 let get_user_key workdir user =
   let keyfile = get_keyfile workdir user in
-  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) (Lwt_io.read ?count:None) >|= fun key ->
-  Mirage_crypto_pk.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key)
+  let%lwt key = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) (Lwt_io.read ?count:None) in
+  Lwt.return (Mirage_crypto_pk.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key))
 
 let partial_decrypt key msg =
   Cstruct.to_string (Mirage_crypto_pk.Rsa.decrypt ~key (Cstruct.of_string msg))

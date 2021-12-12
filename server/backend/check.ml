@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 let cache ~conf =
   let opam_cache = Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache" in
   if Server_configfile.enable_dune_cache conf then
@@ -29,11 +27,11 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   let pool = Server_configfile.platform_pool conf in
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Submission.submit submission_service ~urgent:false ~pool ~action ~cache_hint) @@ fun ticket ->
   Capnp_rpc_lwt.Capability.with_ref (Cluster_api.Ticket.job ticket) @@ fun job ->
-  Capnp_rpc_lwt.Capability.await_settled job >>= function
+  match%lwt Capnp_rpc_lwt.Capability.await_settled job with
   | Ok () ->
       let proc =
         let rec tail job start =
-          Cluster_api.Job.log job start >>= function
+          match%lwt Cluster_api.Job.log job start with
           | Error (`Capnp e) -> Lwt_io.write stderr (Fmt.str "Error tailing logs: %a" Capnp_rpc.Error.pp e)
           | Ok ("", _) -> Lwt.return_unit
           | Ok (data, next) ->
@@ -41,7 +39,7 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
               tail job next
         in
         let%lwt () = tail job 0L in
-        Cluster_api.Job.result job >>= function
+        match%lwt Cluster_api.Job.result job with
         | Ok _ ->
             Lwt.return (Ok ())
         | Error (`Capnp e) ->
@@ -84,8 +82,8 @@ let exec_out ~fexec ~fout =
   in
   let%lwt res = fout ~stdin in
   let%lwt () = Lwt_io.close stdin in
-  proc >|= fun r ->
-  (r, res)
+  let%lwt r = proc in
+  Lwt.return (r, res)
 
 let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
   let rec aux ~stdin =
@@ -93,7 +91,7 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
     match line with
     | Some "@@@OUTPUT" ->
         let rec aux acc =
-          Lwt_io.read_line_opt stdin >>= function
+          match%lwt Lwt_io.read_line_opt stdin with
           | Some "@@@OUTPUT" -> Lwt.return (List.rev acc)
           | Some x -> aux (x :: acc)
           | None -> Lwt.return_nil (* Something went wrong, ignore. *)
@@ -104,9 +102,11 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
         aux ~stdin
     | None -> Lwt.return_nil
   in
-  exec_out ~fout:aux ~fexec:begin fun ~stdout ->
-    ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@OUTPUT && "^c^" && echo @@@OUTPUT")
-  end >>= function
+  match%lwt
+    exec_out ~fout:aux ~fexec:(fun ~stdout ->
+      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@OUTPUT && "^c^" && echo @@@OUTPUT")
+    )
+  with
   | (Ok (), r) ->
       Lwt.return r
   | (Error (), _) ->
@@ -117,7 +117,7 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
 let failure_kind logfile =
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
     let rec lookup res =
-      Lwt_io.read_line_opt ic >>= function
+      match%lwt Lwt_io.read_line_opt ic with
       | Some "+- The following actions failed" -> lookup `Failure
       | Some "+- The following actions were aborted" -> Lwt.return `Partial
       | Some "[ERROR] Package conflict!" -> lookup `NotAvailable
@@ -181,14 +181,16 @@ let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
     let%lwt () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") in
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
-    Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) begin fun stdout ->
-      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg)
-    end >>= function
+    match%lwt
+      Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) (fun stdout ->
+        ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg)
+      )
+    with
     | Ok () ->
         let%lwt () = Lwt_io.write_line stderr ("["^num^"] succeeded.") in
         Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
     | Error () ->
-        failure_kind logfile >>= begin function
+        begin match%lwt failure_kind logfile with
         | `Partial ->
             let%lwt () = Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") in
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir))
@@ -285,8 +287,8 @@ let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
     | _ -> true
   end pkgs in
   let nelts = string_of_int (List.length pkgs) in
-  Lwt_io.write_line stderr ("Package list for "^switch^" retrieved. "^nelts^" elements to process.") >|= fun () ->
-  pkgs
+  let%lwt () = Lwt_io.write_line stderr ("Package list for "^switch^" retrieved. "^nelts^" elements to process.") in
+  Lwt.return pkgs
 
 let with_stderr ~start_time workdir f =
   let%lwt () = Oca_lib.mkdir_p (Server_workdirs.ilogdir workdir) in
@@ -337,29 +339,31 @@ let get_commit_hash github =
   let user = Intf.Github.user github in
   let repo = Intf.Github.repo github in
   let branch = Intf.Github.branch github in
-  Github.Monad.run begin
-    let ( >>= ) = Github.Monad.( >>= ) in
-    Github.Repo.info ~user ~repo () >>= fun info ->
-    let branch = match branch with
-      | None -> info#value.Github_t.repository_default_branch
-      | Some _ -> branch
-    in
-    let branch = Option.value ~default:"master" branch in
-    Github.Repo.get_ref ~user ~repo ~name:("heads/"^branch) ()
-  end >|= fun r ->
+  let%lwt r =
+    Github.Monad.run begin
+      let ( >>= ) = Github.Monad.( >>= ) in
+      Github.Repo.info ~user ~repo () >>= fun info ->
+      let branch = match branch with
+        | None -> info#value.Github_t.repository_default_branch
+        | Some _ -> branch
+      in
+      let branch = Option.value ~default:"master" branch in
+      Github.Repo.get_ref ~user ~repo ~name:("heads/"^branch) ()
+    end
+  in
   let r = Github.Response.value r in
-  r.Github_t.git_ref_obj.Github_t.obj_sha
+  Lwt.return (r.Github_t.git_ref_obj.Github_t.obj_sha)
 
 let get_commit_hash_default conf =
   let github = Server_configfile.default_repository conf in
-  get_commit_hash github >|= fun hash ->
-  (github, hash)
+  let%lwt hash = get_commit_hash github in
+  Lwt.return (github, hash)
 
 let get_commit_hash_extra_repos conf =
   Lwt_list.map_s begin fun repository ->
     let github = Intf.Repository.github repository in
-    get_commit_hash github >|= fun hash ->
-    (repository, hash)
+    let%lwt hash = get_commit_hash github in
+    Lwt.return (repository, hash)
   end (Server_configfile.extra_repositories conf)
 
 let move_tmpdirs_to_final ~switches logdir workdir =
@@ -423,7 +427,8 @@ let is_running () = !run_locked
 let wait_current_run_to_finish =
   let rec loop () =
     if is_running () then
-      Lwt_unix.sleep 1. >>= loop
+      let%lwt () = Lwt_unix.sleep 1. in
+      loop ()
     else
       Lwt.return_unit
   in
@@ -470,8 +475,8 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
       end begin fun exc ->
         let%lwt () = Lwt_io.write_line stderr ("Exception: "^Printexc.to_string exc^".") in
         let%lwt () = Lwt_io.write stderr (Printexc.get_backtrace ()) in
-        Lwt_io.flush stderr >|= fun () ->
-        prerr_endline "The current run failed unexpectedly. Please check the latest log using: opam-health-check log"
+        let%lwt () = Lwt_io.flush stderr in
+        Lwt.return (prerr_endline "The current run failed unexpectedly. Please check the latest log using: opam-health-check log")
       end
     end
   end (fun () -> run_locked := false; Lwt.return_unit) end;

@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 let (//) = Fpath.(/)
 
 let rec list_map_cube f = function
@@ -33,18 +31,18 @@ let get_files dirname =
     end
   in
   let%lwt files = aux [] in
-  Lwt_unix.closedir dir >|= fun () ->
-  files
+  let%lwt () = Lwt_unix.closedir dir in
+  Lwt.return files
 
 let rec scan_dir ~full_path dirname =
   let%lwt files = get_files full_path in
   Lwt_list.fold_left_s (fun acc file ->
     let full_path = Fpath.add_seg full_path file in
     let file = Fpath.normalize (Fpath.add_seg dirname file) in
-    Lwt_unix.stat (Fpath.to_string full_path) >>= function
+    match%lwt Lwt_unix.stat (Fpath.to_string full_path) with
     | {Unix.st_kind = Unix.S_DIR; _} ->
-        scan_dir ~full_path file >|= fun files ->
-        Fpath.to_string (Fpath.add_seg file "") :: files @ acc
+        let%lwt files = scan_dir ~full_path file in
+        Lwt.return (Fpath.to_string (Fpath.add_seg file "") :: files @ acc)
     | {Unix.st_kind = Unix.S_REG; _} ->
         Lwt.return (Fpath.to_string file :: acc)
     | {Unix.st_kind = Unix.(S_CHR | S_BLK | S_LNK | S_FIFO | S_SOCK); _} ->
@@ -56,7 +54,7 @@ let scan_dir dirname = scan_dir ~full_path:dirname (Fpath.v ".")
 let pread ?cwd ?exit1 ~timeout cmd f =
   Lwt_process.with_process_in ?cwd ~timeout ~stdin:`Close ("", Array.of_list cmd) begin fun proc ->
     let%lwt res = f proc#stdout in
-    proc#close >>= function
+    match%lwt proc#close with
     | Unix.WEXITED n ->
         begin match n, exit1 with
         | 0, _ ->
@@ -76,7 +74,7 @@ let pread ?cwd ?exit1 ~timeout cmd f =
 
 let read_unordered_lines c =
   let rec aux acc =
-    Lwt_io.read_line_opt c >>= function
+    match%lwt Lwt_io.read_line_opt c with
     | None -> Lwt.return acc (* Note: We don't care about the line ordering *)
     | Some line -> aux (line :: acc)
   in
@@ -130,7 +128,7 @@ let rec rm_rf dirname =
   let%lwt dir = Lwt_unix.opendir (Fpath.to_string dirname) in
   Lwt.finalize begin fun () ->
     let rec rm_files () =
-      Lwt_unix.readdir dir >>= function
+      match%lwt Lwt_unix.readdir dir with
       | "." | ".." -> rm_files ()
       | file ->
           let file = dirname // file in
@@ -161,8 +159,9 @@ let timer_log timer c msg =
   let start_time = !timer in
   let end_time = Unix.time () in
   let time_span = end_time -. start_time in
-  Lwt_io.write_line c ("Done. "^msg^" took: "^string_of_float time_span^" seconds") >|= fun () ->
-  timer := Unix.time ()
+  let%lwt () = Lwt_io.write_line c ("Done. "^msg^" took: "^string_of_float time_span^" seconds") in
+  timer := Unix.time ();
+  Lwt.return_unit
 
 let protocol_version = "2"
 let default_server_name = "default" (* TODO: Just make it random instead?! *)
