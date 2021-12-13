@@ -9,7 +9,7 @@ let cache ~conf =
 let network = ["host"]
 
 let obuilder_to_string spec =
-  Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_t spec)
+  Sexplib0.Sexp.to_string_mach (Obuilder_spec.sexp_of_t spec)
 
 let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   let obuilder_content =
