@@ -220,19 +220,23 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   in
   let open Obuilder_spec in
   let cache = cache ~conf in
-  let from = match Server_configfile.platform_os conf with
+  let os = Server_configfile.platform_os conf in
+  let is_macos = String.equal os "macos" in
+  let from = match os  with
     | "linux" -> "ocaml/opam:"^Server_configfile.platform_distribution conf
+    | "macos" -> "macos-"^Server_configfile.platform_distribution conf^"-ocaml-4.13" (*TODO: Will macOS cope with creating a new switch... *)
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
+  let prefix = if is_macos then "~/local" else "/usr" in
   stage ~from begin
     [ user ~uid:1000 ~gid:1000;
       env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
-      run "sudo ln -f /usr/bin/opam-2.1 /usr/bin/opam";
+      run "%sln -f %s/bin/opam-2.1 %s/bin/opam" (if is_macos then "" else "sudo ") prefix prefix;
       run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
-      run "rm -rf ~/.opam && opam init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository";
+      run "rm -rf ~/.opam && opam init -ya --bare%s ~/opam-repository" (if is_macos then "" else "--config ~/.opamrc-sandbox");
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
