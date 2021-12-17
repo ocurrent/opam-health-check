@@ -15,6 +15,7 @@ depends: [
   "cohttp"
   "cohttp-lwt"
   "cohttp-lwt-unix"
+  "http-lwt-client"
   "containers" {>= "3.4"}
   "opam-core"
   "opam-format"
