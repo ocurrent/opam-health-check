@@ -404,6 +404,7 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
     let%lwt () = Lwt_io.write_line stderr ("Triggering Slack webhook "^Uri.to_string webhook) in
     match%lwt
       Http_lwt_client.one_request
+        ~config:(`HTTP_1_1 Httpaf.Config.default) (* TODO: Remove this when https://github.com/roburio/http-lwt-client/issues/7 is fixed *)
         ~meth:`POST
         ~headers:[("Content-type", "application/json")]
         ~body
