@@ -408,7 +408,11 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
         (Uri.to_string webhook)
     with
     | Ok ({Http_lwt_client.status = `OK; _}, _body) -> Lwt.return_unit
-    | Ok _ | Error _ -> Lwt_io.write_line stderr ("Something when wrong with slack webhook "^Uri.to_string webhook)
+    | Ok (resp, body) ->
+        let resp = Format.sprintf "%a" Http_lwt_client.pp_response resp in
+        let body = match body with None -> "" | Some body -> "\nBody: "^body in
+        Lwt_io.write_line stderr ("Webhook returned failure: "^resp^body)
+    | Error (`Msg msg) -> Lwt_io.write_line stderr ("Webhook failed with: "^msg)
   end
 
 let get_cap ~stderr ~cap_file =
