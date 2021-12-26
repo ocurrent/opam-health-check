@@ -137,7 +137,10 @@ module Make (Backend : Backend_intf.S) = struct
 
   let main ~debug ~cap_file ~workdir =
     Printexc.record_backtrace debug;
-    if debug then Logs.set_level (Some Logs.Debug);
+    if debug then begin
+      Logs.set_level (Some Logs.Debug);
+      Logs.set_reporter (Logs_fmt.reporter ());
+    end;
     let%lwt cwd = Lwt_unix.getcwd () in
     let workdir = Server_workdirs.create ~cwd ~workdir in
     let%lwt () = Server_workdirs.init_base workdir in
