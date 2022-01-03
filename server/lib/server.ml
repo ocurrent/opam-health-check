@@ -83,9 +83,12 @@ module Make (Backend : Backend_intf.S) = struct
       let%lwt logdir = get_logdir logdir in
       let comp = Intf.Compiler.from_string comp in
       let state = Intf.State.from_string state in
-      let%lwt log = Backend.get_log backend ~logdir ~comp ~state ~pkg in
-      let html = Html.get_log ~comp ~pkg log in
-      serv_text ~content_type:"text/html; charset=utf-8" html
+      match%lwt Backend.get_log backend ~logdir ~comp ~state ~pkg with
+      | None ->
+          Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
+      | Some log ->
+          let html = Html.get_log ~comp ~pkg log in
+          serv_text ~content_type:"text/html; charset=utf-8" html
     in
     match path_from_uri uri with
     | [] ->
