@@ -71,41 +71,45 @@ let generate_diff old_pkgs new_pkgs =
 
 type t = {
   html_tbl : string Html_cache.t;
-  mutable logdirs : Server_workdirs.logdir list Lwt.t;
-  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t) list Lwt.t;
-  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list) list Lwt.t;
-  mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
-  mutable revdeps : int Revdeps_cache.t Lwt.t;
+  mutable logdirs : Server_workdirs.logdir list;
+  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list) list;
+  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list) list;
+  mutable opams : OpamFile.OPAM.t Opams_cache.t;
+  mutable revdeps : int Revdeps_cache.t;
 }
 
 let create () = {
   html_tbl = Html_cache.create 32;
-  logdirs = Lwt.return_nil;
-  pkgs = Lwt.return_nil;
-  compilers = Lwt.return_nil;
-  opams = Lwt.return (Opams_cache.create 0);
-  revdeps = Lwt.return (Revdeps_cache.create 0);
+  logdirs = [];
+  pkgs = [];
+  compilers = [];
+  opams = Opams_cache.create 0;
+  revdeps = Revdeps_cache.create 0;
 }
 
 let clear_and_init self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
-  self.opams <- opams ();
-  self.revdeps <- revdeps ();
-  self.logdirs <- logdirs ();
-  self.compilers <- begin
-    let%lwt logdirs = self.logdirs in
+  let%lwt opams = opams () in
+  let%lwt revdeps = revdeps () in
+  let%lwt logdirs = logdirs () in
+  let%lwt compilers =
     Lwt_list.map_s (fun logdir ->
       let%lwt c = compilers logdir in
       Lwt.return (logdir, c)
     ) logdirs
-  end;
-  self.pkgs <- begin
-    let%lwt compilers = self.compilers in
-    List.map (fun (logdir, compilers) ->
-      (logdir, pkgs ~compilers logdir)
-    ) compilers |>
-    Lwt.return
-  end;
-  Html_cache.clear self.html_tbl
+  in
+  let%lwt pkgs =
+    Lwt_list.map_s (fun (logdir, compilers) ->
+      let%lwt pkgs = pkgs ~compilers logdir in
+      Lwt.return (logdir, pkgs)
+    ) compilers
+  in
+  self.opams <- opams;
+  self.revdeps <- revdeps;
+  self.logdirs <- logdirs;
+  self.compilers <- compilers;
+  self.pkgs <- pkgs;
+  Html_cache.clear self.html_tbl;
+  Lwt.return_unit
 
 let is_deprecated flag =
   String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
@@ -194,7 +198,6 @@ let revdeps_cmp p1 p2 =
 
 let get_html ~conf self query logdir =
   let aux ~logdir pkgs =
-    let%lwt pkgs = pkgs in
     let logsearch = get_logsearch ~query ~logdir in
     let%lwt (pkgs, _) = Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) in
     let pkgs = if query.Html.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
@@ -202,14 +205,14 @@ let get_html ~conf self query logdir =
     Html_cache.add self.html_tbl (logdir, query) html;
     Lwt.return html
   in
-  let%lwt pkgs = self.pkgs in
+  let pkgs = self.pkgs in
   let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
   aux ~logdir pkgs
 
 let get_latest_logdir self =
-  match%lwt self.logdirs with
-  | [] -> raise Not_found
-  | logdir::_ -> Lwt.return logdir
+  match self.logdirs with
+  | [] -> raise Not_found (* TODO: Replace by None *)
+  | logdir::_ -> logdir
 
 let get_html ~conf self query logdir =
   match Html_cache.find_opt self.html_tbl (logdir, query) with
@@ -220,34 +223,32 @@ let get_logdirs self =
   self.logdirs
 
 let get_pkgs ~logdir self =
-  let%lwt pkgs = self.pkgs in
+  let pkgs = self.pkgs in
   List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs
 
 let get_compilers ~logdir self =
-  let%lwt compilers = self.compilers in
-  Lwt.return (List.assoc ~eq:Server_workdirs.logdir_equal logdir compilers)
+  let compilers = self.compilers in
+  List.assoc ~eq:Server_workdirs.logdir_equal logdir compilers
 
 let get_opam self k =
-  let%lwt opams = self.opams in
-  Lwt.return (Option.get_or ~default:OpamFile.OPAM.empty (Opams_cache.find_opt opams k))
+  let opams = self.opams in
+  Option.get_or ~default:OpamFile.OPAM.empty (Opams_cache.find_opt opams k)
 
 let get_revdeps self k =
-  let%lwt revdeps = self.revdeps in
-  Lwt.return (Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k))
+  let revdeps = self.revdeps in
+  Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k)
 
 let get_html_diff ~conf ~old_logdir ~new_logdir self =
-  let%lwt old_pkgs = get_pkgs ~logdir:old_logdir self in
-  let%lwt new_pkgs = get_pkgs ~logdir:new_logdir self in
+  let old_pkgs = get_pkgs ~logdir:old_logdir self in
+  let new_pkgs = get_pkgs ~logdir:new_logdir self in
   generate_diff old_pkgs new_pkgs |>
-  Html.get_diff ~conf ~old_logdir ~new_logdir |>
-  Lwt.return
+  Html.get_diff ~conf ~old_logdir ~new_logdir
 
 let get_html_diff_list self =
-  let%lwt pkgs = self.pkgs in
+  let pkgs = self.pkgs in
   Oca_lib.list_map_cube (fun (new_logdir, _) (old_logdir, _) -> (old_logdir, new_logdir)) pkgs |>
-  Html.get_diff_list |>
-  Lwt.return
+  Html.get_diff_list
 
 let get_html_run_list self =
-  let%lwt pkgs = self.pkgs in
-  Lwt.return (Html.get_run_list (List.map fst pkgs))
+  let pkgs = self.pkgs in
+  Html.get_run_list (List.map fst pkgs)

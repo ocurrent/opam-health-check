@@ -456,7 +456,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
         let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
         begin match switches with
         | switch::_ ->
-            let%lwt old_logdir = Oca_server.Cache.get_logdirs cache in
+            let old_logdir = Oca_server.Cache.get_logdirs cache in
             let compressed = Server_configfile.enable_logs_compression conf in
             let old_logdir = List.head_opt old_logdir in
             let new_logdir = Server_workdirs.new_logdir ~compressed ~hash:opam_repo_commit ~start_time workdir in
@@ -471,7 +471,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
             let%lwt () = Oca_lib.timer_log timer stderr "Operation" in
             let%lwt () = Lwt_io.write_line stderr "Finishing up..." in
             let%lwt () = move_tmpdirs_to_final ~switches:switches' new_logdir workdir in
-            on_finished workdir;
+            let%lwt () = on_finished workdir in
             let%lwt () = trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf in
             Oca_lib.timer_log timer stderr "Clean up"
         | [] ->
