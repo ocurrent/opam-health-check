@@ -400,9 +400,6 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   Server_configfile.slack_webhooks conf |>
   Lwt_list.iter_s begin fun webhook ->
     let%lwt () = Lwt_io.write_line stderr ("Triggering Slack webhook "^Uri.to_string webhook) in
-    Logs.set_level (Some Logs.Debug);
-    Logs.set_reporter (Logs_fmt.reporter ());
-    let%lwt () =
     match%lwt
       Http_lwt_client.one_request
         ~config:(`HTTP_1_1 Httpaf.Config.default) (* TODO: Remove this when https://github.com/roburio/http-lwt-client/issues/7 is fixed *)
@@ -417,9 +414,6 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
         let body = match body with None -> "" | Some body -> "\nBody: "^body in
         Lwt_io.write_line stderr ("Webhook returned failure: "^resp^body)
     | Error (`Msg msg) -> Lwt_io.write_line stderr ("Webhook failed with: "^msg)
-  in
-  Logs.set_reporter Logs.nop_reporter;
-  Lwt.return_unit
   end
 
 let get_cap ~stderr ~cap_file =
