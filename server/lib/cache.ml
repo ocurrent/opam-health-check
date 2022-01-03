@@ -208,8 +208,8 @@ let get_html ~conf self query logdir =
 
 let get_latest_logdir self =
   match%lwt self.logdirs with
-  | [] -> raise Not_found
-  | logdir::_ -> Lwt.return logdir
+  | [] -> Lwt.return None
+  | logdir::_ -> Lwt.return (Some logdir)
 
 let get_html ~conf self query logdir =
   match Html_cache.find_opt self.html_tbl (logdir, query) with
