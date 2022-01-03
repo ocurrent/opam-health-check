@@ -94,10 +94,16 @@ module Make (Backend : Backend_intf.S) = struct
     in
     match path_from_uri uri with
     | [] ->
-        let logdir = Cache.get_latest_logdir Backend.cache in
-        let query = parse_raw_query logdir uri in
-        let%lwt html = Cache.get_html ~conf Backend.cache query logdir in
-        serv_text ~content_type:"text/html" html
+        begin match Cache.get_latest_logdir Backend.cache with
+        | None ->
+            serv_text ~content_type:"text/text"
+              "No run exist, please wait for the first run to finish. \
+               Please look at the documentation to learn how to start it."
+        | Some logdir ->
+            let query = parse_raw_query logdir uri in
+            let%lwt html = Cache.get_html ~conf Backend.cache query logdir in
+            serv_text ~content_type:"text/html" html
+        end
     | ["run"] ->
         let html = Cache.get_html_run_list Backend.cache in
         serv_text ~content_type:"text/html" html

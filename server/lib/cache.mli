@@ -14,7 +14,7 @@ val clear_and_init :
   revdeps:(unit -> int Revdeps_cache.t Lwt.t) ->
   unit Lwt.t
 
-val get_latest_logdir : t -> Server_workdirs.logdir
+val get_latest_logdir : t -> Server_workdirs.logdir option
 val get_html : conf:Server_configfile.t -> t -> Html.query -> Server_workdirs.logdir -> string Lwt.t
 val get_logdirs : t -> Server_workdirs.logdir list
 val get_pkgs : logdir:Server_workdirs.logdir -> t -> Intf.Pkg.t list
