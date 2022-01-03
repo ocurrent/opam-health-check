@@ -89,24 +89,24 @@ let create () = {
 
 let clear_and_init self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   let%lwt opams = opams () in
+  self.opams <- opams;
   let%lwt revdeps = revdeps () in
+  self.revdeps <- revdeps;
   let%lwt logdirs = logdirs () in
+  self.logdirs <- logdirs;
   let%lwt compilers =
     Lwt_list.map_s (fun logdir ->
       let%lwt c = compilers logdir in
       Lwt.return (logdir, c)
     ) logdirs
   in
+  self.compilers <- compilers;
   let%lwt pkgs =
     Lwt_list.map_s (fun (logdir, compilers) ->
       let%lwt pkgs = pkgs ~compilers logdir in
       Lwt.return (logdir, pkgs)
     ) compilers
   in
-  self.opams <- opams;
-  self.revdeps <- revdeps;
-  self.logdirs <- logdirs;
-  self.compilers <- compilers;
   self.pkgs <- pkgs;
   Html_cache.clear self.html_tbl;
   Lwt.return_unit
