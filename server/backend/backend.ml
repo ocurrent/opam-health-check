@@ -136,13 +136,19 @@ let start ~debug ~cap_file conf workdir =
   let on_finished = cache_clear_and_init in
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
-  let%lwt () = cache_clear_and_init workdir in
+  let init = cache_clear_and_init workdir in
   Mirage_crypto_rng_lwt.initialize ();
   let%lwt () = Admin.create_admin_key workdir in
   let task () =
     Lwt.join [
-      tcp_server port callback;
-      run_action_loop ~conf ~run_trigger (fun () -> Check.run ~debug ~cap_file ~on_finished ~conf cache workdir);
+      tcp_server port (fun conn req body ->
+        let%lwt () = init in
+        callback conn req body
+      );
+      run_action_loop ~conf ~run_trigger (fun () ->
+        let%lwt () = init in
+        Check.run ~debug ~cap_file ~on_finished ~conf cache workdir
+      );
     ]
   in
-  Lwt.return (workdir, task)
+  Lwt.return (workdir, init, task)
