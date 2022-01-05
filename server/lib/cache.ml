@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 open Intf
 
 module Html_cache = Hashtbl.Make (struct
@@ -93,15 +91,27 @@ let clear_and_init self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   self.opams <- opams ();
   self.revdeps <- revdeps ();
   self.logdirs <- logdirs ();
-  self.compilers <- self.logdirs >>= Lwt_list.map_s (fun logdir -> compilers logdir >|= fun c -> (logdir, c));
-  self.pkgs <- self.compilers >|= List.map (fun (logdir, compilers) -> (logdir, pkgs ~compilers logdir));
+  self.compilers <- begin
+    let%lwt logdirs = self.logdirs in
+    Lwt_list.map_s (fun logdir ->
+      let%lwt c = compilers logdir in
+      Lwt.return (logdir, c)
+    ) logdirs
+  end;
+  self.pkgs <- begin
+    let%lwt compilers = self.compilers in
+    List.map (fun (logdir, compilers) ->
+      (logdir, pkgs ~compilers logdir)
+    ) compilers |>
+    Lwt.return
+  end;
   Html_cache.clear self.html_tbl
 
 let is_deprecated flag =
   String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
 
 let (>>&&) x f =
-  x >>= fun x ->
+  let%lwt x = x in
   if x then f () else Lwt.return_false
 
 let must_show_package ~logsearch query ~is_latest pkg =
@@ -150,7 +160,9 @@ let must_show_package ~logsearch query ~is_latest pkg =
     | None -> true
   end >>&& begin fun () ->
     match snd query.Html.logsearch with
-    | Some _ -> logsearch >|= List.exists (Pkg.equal pkg)
+    | Some _ ->
+        let%lwt logsearch = logsearch in
+        Lwt.return (List.exists (Pkg.equal pkg) logsearch)
     | None -> Lwt.return_true
   end
 
@@ -159,9 +171,9 @@ let filter_pkg ~logsearch query (acc, last) pkg =
     | None -> true
     | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
   in
-  must_show_package ~logsearch query ~is_latest pkg >|= function
-  | true -> (pkg :: acc, Some pkg)
-  | false -> (acc, Some pkg)
+  match%lwt must_show_package ~logsearch query ~is_latest pkg with
+  | true -> Lwt.return (pkg :: acc, Some pkg)
+  | false -> Lwt.return (acc, Some pkg)
 
 (* TODO: Make use of the cache *)
 let get_logsearch ~query ~logdir =
@@ -169,32 +181,33 @@ let get_logsearch ~query ~logdir =
   | _, None -> Lwt.return []
   | regexp, Some (_, comp) ->
       let switch = Compiler.to_string comp in
-      Server_workdirs.logdir_search ~switch ~regexp logdir >|=
+      let%lwt searches = Server_workdirs.logdir_search ~switch ~regexp logdir in
       List.filter_map (fun s ->
         match String.split_on_char '/' s with
         | [_switch; _state; full_name] -> Some (Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:(-1))
         | _ -> None
-      )
+      ) searches |>
+      Lwt.return
 
 let revdeps_cmp p1 p2 =
   Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
 
 let get_html ~conf self query logdir =
   let aux ~logdir pkgs =
-    pkgs >>= fun pkgs ->
+    let%lwt pkgs = pkgs in
     let logsearch = get_logsearch ~query ~logdir in
-    Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) >>= fun (pkgs, _) ->
+    let%lwt (pkgs, _) = Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) in
     let pkgs = if query.Html.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
     let html = Html.get_html ~logdir ~conf query pkgs in
     Html_cache.add self.html_tbl (logdir, query) html;
     Lwt.return html
   in
-  self.pkgs >>= fun pkgs ->
+  let%lwt pkgs = self.pkgs in
   let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
   aux ~logdir pkgs
 
 let get_latest_logdir self =
-  self.logdirs >>= function
+  match%lwt self.logdirs with
   | [] -> raise Not_found
   | logdir::_ -> Lwt.return logdir
 
@@ -207,30 +220,34 @@ let get_logdirs self =
   self.logdirs
 
 let get_pkgs ~logdir self =
-  self.pkgs >>= List.assoc ~eq:Server_workdirs.logdir_equal logdir
+  let%lwt pkgs = self.pkgs in
+  List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs
 
 let get_compilers ~logdir self =
-  self.compilers >|= List.assoc ~eq:Server_workdirs.logdir_equal logdir
+  let%lwt compilers = self.compilers in
+  Lwt.return (List.assoc ~eq:Server_workdirs.logdir_equal logdir compilers)
 
 let get_opam self k =
-  self.opams >|= fun opams ->
-  Option.get_or ~default:OpamFile.OPAM.empty (Opams_cache.find_opt opams k)
+  let%lwt opams = self.opams in
+  Lwt.return (Option.get_or ~default:OpamFile.OPAM.empty (Opams_cache.find_opt opams k))
 
 let get_revdeps self k =
-  self.revdeps >|= fun revdeps ->
-  Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k)
+  let%lwt revdeps = self.revdeps in
+  Lwt.return (Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k))
 
 let get_html_diff ~conf ~old_logdir ~new_logdir self =
-  get_pkgs ~logdir:old_logdir self >>= fun old_pkgs ->
-  get_pkgs ~logdir:new_logdir self >|= fun new_pkgs ->
+  let%lwt old_pkgs = get_pkgs ~logdir:old_logdir self in
+  let%lwt new_pkgs = get_pkgs ~logdir:new_logdir self in
   generate_diff old_pkgs new_pkgs |>
-  Html.get_diff ~conf ~old_logdir ~new_logdir
+  Html.get_diff ~conf ~old_logdir ~new_logdir |>
+  Lwt.return
 
 let get_html_diff_list self =
-  self.pkgs >|= fun pkgs ->
+  let%lwt pkgs = self.pkgs in
   Oca_lib.list_map_cube (fun (new_logdir, _) (old_logdir, _) -> (old_logdir, new_logdir)) pkgs |>
-  Html.get_diff_list
+  Html.get_diff_list |>
+  Lwt.return
 
 let get_html_run_list self =
-  self.pkgs >|= fun pkgs ->
-  Html.get_run_list (List.map fst pkgs)
+  let%lwt pkgs = self.pkgs in
+  Lwt.return (Html.get_run_list (List.map fst pkgs))

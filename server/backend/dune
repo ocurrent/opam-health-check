@@ -1,5 +1,6 @@
 (library
   (name backend)
+  (preprocess (pps lwt_ppx))
   (libraries
     oca_lib
     fmt

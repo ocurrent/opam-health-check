@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 type t = Fpath.t
 
 let (/) path file =
@@ -30,7 +28,7 @@ let new_logdir ~compressed ~hash ~start_time workdir =
 
 let logdirs workdir =
   let base_logdir = base_logdir workdir in
-  Oca_lib.get_files base_logdir >|= fun dirs ->
+  let%lwt dirs = Oca_lib.get_files base_logdir in
   let dirs = List.sort (fun x y -> -String.compare x y) dirs in
   List.map (fun dir ->
     match String.split_on_char '-' dir with
@@ -42,7 +40,8 @@ let logdirs workdir =
         | _ -> assert false
         end
     | _ -> assert false
-  ) dirs
+  ) dirs |>
+  Lwt.return
 
 let logdir_ty_equal ty1 ty2 = match ty1, ty2 with
   | Uncompressed, Uncompressed
@@ -62,13 +61,14 @@ let get_logdir_time (Logdir (_, time, _, _, _)) = time
 
 let get_files ~name ~switch (Logdir (_, _, _, _, files)) =
   let switch = Intf.Compiler.to_string switch in
-  files >|= fun files ->
+  let%lwt files = files in
   List.filter_map (fun file ->
     match String.split_on_char '/' file with
     | [_switch; _name; ""] -> None
     | [switch'; name'; pkg] when String.equal switch switch' && String.equal name name' -> Some pkg
     | _ -> None
-  ) files
+  ) files |>
+  Lwt.return
 
 let goodfiles = get_files ~name:"good"
 let partialfiles = get_files ~name:"partial"
@@ -77,12 +77,13 @@ let notavailablefiles = get_files ~name:"not-available"
 let internalfailurefiles = get_files ~name:"internal-failure"
 
 let logdir_get_compilers (Logdir (_, _, _, _, files)) =
-  files >|= fun files ->
+  let%lwt files = files in
   List.filter_map (fun file ->
     match String.split_on_char '/' file with
     | [switch; ""] -> Some (Intf.Compiler.from_string switch)
     | _ -> None
-  ) files
+  ) files |>
+  Lwt.return
 
 let logdir_get_content ~comp ~state ~pkg = function
   | Logdir (Uncompressed, _, _, workdir, _) as logdir ->
@@ -115,7 +116,7 @@ let logdir_move ~switches (Logdir (ty, _, _, workdir, _) as logdir) = match ty w
       let cwd = tmplogdir logdir in
       let directories = List.map Intf.Compiler.to_string switches in
       let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
-      Oca_lib.compress_tpxz_archive ~cwd ~directories archive >>= fun () ->
+      let%lwt () = Oca_lib.compress_tpxz_archive ~cwd ~directories archive in
       Oca_lib.rm_rf cwd
   | Uncompressed ->
       let tmplogdir = tmplogdir logdir in
@@ -153,23 +154,23 @@ let tmprevdepsfile ~pkg logdir = tmprevdepsdir logdir/pkg
 let configfile workdir = workdir/"config.yaml"
 
 let init_base workdir =
-  Oca_lib.mkdir_p (keysdir workdir) >>= fun () ->
-  Oca_lib.mkdir_p (base_logdir workdir) >>= fun () ->
-  Oca_lib.mkdir_p (ilogdir workdir) >>= fun () ->
-  Oca_lib.mkdir_p (opamsdir workdir) >>= fun () ->
+  let%lwt () = Oca_lib.mkdir_p (keysdir workdir) in
+  let%lwt () = Oca_lib.mkdir_p (base_logdir workdir) in
+  let%lwt () = Oca_lib.mkdir_p (ilogdir workdir) in
+  let%lwt () = Oca_lib.mkdir_p (opamsdir workdir) in
   Oca_lib.mkdir_p (revdepsdir workdir)
 
 let init_base_job ~switch logdir =
   let switch = Intf.Switch.name switch in
-  Oca_lib.mkdir_p (tmpgooddir ~switch logdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmppartialdir ~switch logdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpbaddir ~switch logdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpnotavailabledir ~switch logdir) >>= fun () ->
+  let%lwt () = Oca_lib.mkdir_p (tmpgooddir ~switch logdir) in
+  let%lwt () = Oca_lib.mkdir_p (tmppartialdir ~switch logdir) in
+  let%lwt () = Oca_lib.mkdir_p (tmpbaddir ~switch logdir) in
+  let%lwt () = Oca_lib.mkdir_p (tmpnotavailabledir ~switch logdir) in
   Oca_lib.mkdir_p (tmpinternalfailuredir ~switch logdir)
 
 let init_base_jobs ~switches logdir =
-  Oca_lib.mkdir_p (tmplogdir logdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpmetadatadir logdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmprevdepsdir logdir) >>= fun () ->
-  Oca_lib.mkdir_p (tmpopamsdir logdir) >>= fun () ->
+  let%lwt () = Oca_lib.mkdir_p (tmplogdir logdir) in
+  let%lwt () = Oca_lib.mkdir_p (tmpmetadatadir logdir) in
+  let%lwt () = Oca_lib.mkdir_p (tmprevdepsdir logdir) in
+  let%lwt () = Oca_lib.mkdir_p (tmpopamsdir logdir) in
   Lwt_list.iter_s (fun switch -> init_base_job ~switch logdir) switches

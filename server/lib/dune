@@ -1,6 +1,7 @@
 (library
   (name oca_server)
   (modules_without_implementation backend_intf)
+  (preprocess (pps lwt_ppx))
   (libraries
     lwt
     lwt.unix
