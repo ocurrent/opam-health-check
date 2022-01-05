@@ -106,7 +106,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
         let%lwt () = create_userkey workdir username in
         Lwt.return (fun () -> Lwt.return_none)
     | ["clear-cache"] ->
-        let%lwt () = on_finished workdir in
+        on_finished workdir;
         Lwt.return (fun () -> Lwt.return_none)
     | ["log"] ->
         get_log workdir

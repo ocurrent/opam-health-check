@@ -35,18 +35,19 @@ let fill_pkgs_from_dir ~pool pkg_tbl logdir comp =
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) in (* TODO: Remove this horror *)
-  let opam = Oca_server.Cache.get_opam cache pkg in
-  let revdeps = Oca_server.Cache.get_revdeps cache full_name in
-  Intf.Pkg.create ~full_name ~instances ~opam ~revdeps :: acc
+  let%lwt acc = acc in
+  let%lwt opam = Oca_server.Cache.get_opam cache pkg in
+  let%lwt revdeps = Oca_server.Cache.get_revdeps cache full_name in
+  Lwt.return (Intf.Pkg.create ~full_name ~instances ~opam ~revdeps :: acc)
 
 let get_pkgs ~pool ~compilers logdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
   let%lwt () = Lwt_list.iter_s (fill_pkgs_from_dir ~pool pkg_tbl logdir) compilers in
-  let pkgs = Pkg_tbl.fold add_pkg pkg_tbl [] in
+  let%lwt pkgs = Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil in
   Lwt.return (List.sort Intf.Pkg.compare pkgs)
 
 let get_log _ ~logdir ~comp ~state ~pkg =
-  let pkgs = Oca_server.Cache.get_pkgs ~logdir cache in
+  let%lwt pkgs = Oca_server.Cache.get_pkgs ~logdir cache in
   match List.find_opt (fun p -> String.equal pkg (Intf.Pkg.full_name p)) pkgs with
   | None -> Lwt.return_none
   | Some pkg ->
@@ -136,19 +137,17 @@ let start ~debug ~cap_file conf workdir =
   let on_finished = cache_clear_and_init in
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
-  let init = cache_clear_and_init workdir in
+  Lwt.ignore_result (cache_clear_and_init workdir);
   Mirage_crypto_rng_lwt.initialize ();
   let%lwt () = Admin.create_admin_key workdir in
   let task () =
     Lwt.join [
       tcp_server port (fun conn req body ->
-        let%lwt () = init in
         callback conn req body
       );
       run_action_loop ~conf ~run_trigger (fun () ->
-        let%lwt () = init in
         Check.run ~debug ~cap_file ~on_finished ~conf cache workdir
       );
     ]
   in
-  Lwt.return (workdir, init, task)
+  Lwt.return (workdir, task)

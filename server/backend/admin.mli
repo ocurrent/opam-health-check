@@ -1,7 +1,7 @@
 val create_admin_key : Server_workdirs.t -> unit Lwt.t
 
 val callback :
-  on_finished:(Server_workdirs.t -> unit Lwt.t) ->
+  on_finished:(Server_workdirs.t -> unit) ->
   conf:Server_configfile.t ->
   run_trigger:unit Lwt_mvar.t ->
   Server_workdirs.t ->
