@@ -166,12 +166,9 @@ module Make (Backend : Backend_intf.S) = struct
     let%lwt () = Server_workdirs.init_base workdir in
     let conf = Server_configfile.from_workdir workdir in
     let port = Server_configfile.port conf in
-    let%lwt (backend, init, backend_task) = Backend.start ~debug ~cap_file conf workdir in
+    let%lwt (backend, backend_task) = Backend.start ~debug ~cap_file conf workdir in
     Lwt.join [
-      tcp_server port (fun conn req body ->
-        let%lwt () = init in
-        callback ~debug ~conf backend conn req body
-      );
+      tcp_server port (callback ~debug ~conf backend);
       backend_task ();
     ]
 end

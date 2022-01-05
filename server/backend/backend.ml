@@ -142,12 +142,8 @@ let start ~debug ~cap_file conf workdir =
   let%lwt () = Admin.create_admin_key workdir in
   let task () =
     Lwt.join [
-      tcp_server port (fun conn req body ->
-        callback conn req body
-      );
-      run_action_loop ~conf ~run_trigger (fun () ->
-        Check.run ~debug ~cap_file ~on_finished ~conf cache workdir
-      );
+      tcp_server port callback;
+      run_action_loop ~conf ~run_trigger (fun () -> Check.run ~debug ~cap_file ~on_finished ~conf cache workdir);
     ]
   in
   Lwt.return (workdir, task)
