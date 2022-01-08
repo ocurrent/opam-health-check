@@ -25,10 +25,10 @@ let process_response (res, body) =
       print_body body
   | `Upgrade_required ->
       let%lwt () = print_body body in
-      raise Exit
+      Lwt.fail Exit
   | _ ->
       print_endline "A problem occured";
-      raise Exit
+      Lwt.fail Exit
 
 let send_msg ~profilename ~confdir ~conffile msg =
   let conf = Configfile.from_file ~confdir conffile in

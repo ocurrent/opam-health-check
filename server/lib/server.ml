@@ -152,7 +152,7 @@ module Make (Backend : Backend_intf.S) = struct
           prerr_endline ("Exception while serving the page \""^uri^"\" raised: "^e);
           prerr_endline (Printexc.get_backtrace ());
         end;
-        raise e
+        Lwt.fail e
 
   let tcp_server port callback =
     Cohttp_lwt_unix.Server.create

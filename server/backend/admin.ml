@@ -69,7 +69,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
     | ["set-processes"; i] ->
         let i = int_of_string i in
         if i < 0 then
-          failwith "Cannot set the number of processes to a negative value."
+          Lwt.fail (Failure "Cannot set the number of processes to a negative value.")
         else
           let%lwt () = Server_configfile.set_processes conf i in
           Lwt.return (fun () -> Lwt.return_none)
@@ -111,7 +111,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
     | ["log"] ->
         get_log workdir
     | _ ->
-        failwith "Action unrecognized."
+        Lwt.fail (Failure "Action unrecognized.")
   in
   let stream = Lwt_stream.from resp in
   Cohttp_lwt_unix.Server.respond ~status:`OK ~body:(`Stream stream) ()
@@ -142,7 +142,7 @@ let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
   | Some (pversion, body) when String.equal Oca_lib.protocol_version pversion ->
       begin match String.Split.left ~by:"\n" body with
       | Some (_, "") ->
-          failwith "Empty message"
+          Lwt.fail (Failure "Empty message")
       | Some (user, body) ->
           let%lwt key = get_user_key workdir user in
           let body = decrypt key body in
@@ -150,12 +150,12 @@ let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
           | Some (user', body) when String.equal user user' ->
               admin_action ~on_finished ~conf ~run_trigger workdir body
           | Some _ ->
-              failwith "Identity couldn't be ensured"
+              Lwt.fail (Failure "Identity couldn't be ensured")
           | None ->
-              failwith "Identity check required"
+              Lwt.fail (Failure "Identity check required")
           end
       | None ->
-          failwith "Cannot find username"
+          Lwt.fail (Failure "Cannot find username")
       end
   | Some (pversion, _) ->
       Cohttp_lwt_unix.Server.respond_string
@@ -165,4 +165,4 @@ let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
                 Please upgrade your client.")
         ()
   | None ->
-      failwith "Cannot parse request"
+      Lwt.fail (Failure "Cannot parse request")
