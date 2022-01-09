@@ -61,6 +61,8 @@ let get_log _ ~logdir ~comp ~state ~pkg =
           let%lwt content = Intf.Instance.content instance in
           Lwt.return (Some content)
 
+let read_file ic = try%lwt Lwt_io.read ic with Lwt_io.Channel_closed "input" -> Lwt.return "" (* TODO: debug *)
+
 let get_opams workdir =
   let dir = Server_workdirs.opamsdir workdir in
   let%lwt files = Oca_lib.get_files dir in
@@ -68,7 +70,7 @@ let get_opams workdir =
   let%lwt () =
     Lwt_list.iter_s begin fun pkg ->
       let file = Server_workdirs.opamfile ~pkg workdir in
-      let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
+      let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) read_file in
       let content = try OpamFile.OPAM.read_from_string content with _ -> OpamFile.OPAM.empty in
       Lwt.return (Oca_server.Cache.Opams_cache.add opams pkg content)
     end files
@@ -82,7 +84,7 @@ let get_revdeps workdir =
   let%lwt () =
     Lwt_list.iter_s begin fun pkg ->
       let file = Server_workdirs.revdepsfile ~pkg workdir in
-      let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
+      let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) read_file in
       let content = String.split_on_char '\n' content in
       let content = List.hd content in
       let content = int_of_string content in
