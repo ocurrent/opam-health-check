@@ -20,6 +20,7 @@ val platform_os : t -> string
 val platform_arch : t -> string
 val platform_pool : t -> string
 val platform_distribution : t -> string
+val platform_image : t -> string
 val ocaml_switches : t -> Intf.Switch.t list option
 val slack_webhooks : t -> Uri.t list
 

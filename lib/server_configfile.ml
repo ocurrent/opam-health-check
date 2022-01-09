@@ -18,6 +18,7 @@ type t = {
   mutable platform_arch : string option;
   mutable platform_pool : string option;
   mutable platform_distribution : string option;
+  mutable platform_image : string option;
   mutable ocaml_switches : Intf.Switch.t list option;
   mutable slack_webhooks : Uri.t list option;
 }
@@ -42,6 +43,7 @@ let create_conf yamlfile = {
   platform_arch = None;
   platform_pool = None;
   platform_distribution = None;
+  platform_image = None;
   ocaml_switches = None;
   slack_webhooks = None;
 }
@@ -120,6 +122,8 @@ let set_config conf = function
             set_field ~field (fun () -> conf.platform_pool <- Some pool) conf.platform_pool
         | "distribution" as field, `String distribution ->
             set_field ~field (fun () -> conf.platform_distribution <- Some distribution) conf.platform_distribution
+        | "image" as field, `String image ->
+            set_field ~field (fun () -> conf.platform_image <- Some image) conf.platform_image
         | field, _ ->
             failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
       ) platform
@@ -176,6 +180,7 @@ let yaml_of_conf conf =
       "arch", `String (Option.get_exn_or "conf.platform_arch" conf.platform_arch);
       "custom-pool", yaml_of_str_opt conf.platform_pool;
       "distribution", `String (Option.get_exn_or "conf.platform_distribution" conf.platform_distribution);
+      "image", `String (Option.get_exn_or "conf.platform_image" conf.platform_image);
     ];
     "ocaml-switches", Option.map_or ~default:`Null yaml_of_ocaml_switches conf.ocaml_switches;
     "slack-webhooks", Option.map_or ~default:`Null yaml_of_slack_webhooks conf.slack_webhooks;
@@ -214,6 +219,8 @@ let set_defaults conf =
     conf.platform_arch <- Some "x86_64";
   if Option.is_none conf.platform_distribution then
     conf.platform_distribution <- Some "debian-unstable";
+  if Option.is_none conf.platform_image then
+    conf.platform_image <- Some "debian-unstable@sha256:a13c01aab19715953d47831effb2beb0ac90dc98c13b216893db2550799e3b9f";
   if Option.is_none conf.slack_webhooks then
     conf.slack_webhooks <- Some [];
   let yaml = Yaml.to_string_exn (yaml_of_conf conf) in
@@ -290,5 +297,6 @@ let platform_pool ({platform_pool; _} as conf) = match platform_pool with
   | None -> platform_os conf^"-"^platform_arch conf
   | Some pool -> pool
 let platform_distribution {platform_distribution; _} = Option.get_exn_or "platform_distribution" platform_distribution
+let platform_image {platform_image; _} = Option.get_exn_or "platform_image" platform_image
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let slack_webhooks {slack_webhooks; _} = Option.get_exn_or "slack_webhooks" slack_webhooks
