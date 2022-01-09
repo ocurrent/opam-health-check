@@ -81,12 +81,10 @@ let read_unordered_lines c =
 let scan_tpxz_archive archive =
   pread ~timeout:60. ["pixz"; "-l"; Fpath.to_string archive] read_unordered_lines
 
-let read_file ic = try%lwt Lwt_io.read ic with Lwt_io.Channel_closed "input" -> Lwt.return "" (* TODO: debug *)
-
 let random_access_tpxz_archive ~file archive =
   let file = Filename.quote file in
   let archive = Filename.quote (Fpath.to_string archive) in
-  pread ~timeout:60. ["sh"; "-c"; "pixz -x "^file^" -i "^archive^" | tar -xO"] read_file
+  pread ~timeout:60. ["sh"; "-c"; "pixz -x "^file^" -i "^archive^" | tar -xO"] (Lwt_io.read ?count:None)
 
 let compress_tpxz_archive ~cwd ~directories archive =
   let cwd = Fpath.to_string cwd in

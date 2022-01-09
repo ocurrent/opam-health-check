@@ -120,11 +120,9 @@ let is_bzero = function
   | '\000' -> true
   | _ -> false
 
-let read_file ic = try%lwt Lwt_io.read ic with Lwt_io.Channel_closed "input" -> Lwt.return "" (* TODO: debug *)
-
 let get_user_key workdir user =
   let keyfile = get_keyfile workdir user in
-  let%lwt key = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) read_file in
+  let%lwt key = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) (Lwt_io.read ?count:None) in
   Lwt.return (Mirage_crypto_pk.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key))
 
 let partial_decrypt key msg =

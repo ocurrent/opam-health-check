@@ -85,14 +85,12 @@ let logdir_get_compilers (Logdir (_, _, _, _, files)) =
   ) files |>
   Lwt.return
 
-let read_file ic = try%lwt Lwt_io.read ic with Lwt_io.Channel_closed "input" -> Lwt.return "" (* TODO: debug *)
-
 let logdir_get_content ~comp ~state ~pkg = function
   | Logdir (Uncompressed, _, _, workdir, _) as logdir ->
       let comp = Intf.Compiler.to_string comp in
       let state = Intf.State.to_string state in
       let file = base_logdir workdir/get_logdir_name logdir/comp/state/pkg in
-      Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) read_file
+      Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None)
   | Logdir (Compressed, _, _, workdir, _) as logdir ->
       let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
       let comp = Intf.Compiler.to_string comp in
