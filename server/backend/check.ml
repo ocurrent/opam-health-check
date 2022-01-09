@@ -96,7 +96,7 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
           match%lwt Lwt_io.read_line_opt stdin with
           | Some "@@@OUTPUT" -> Lwt.return (List.rev acc)
           | Some x -> aux (x :: acc)
-          | None -> Lwt.return_nil (* Something went wrong, ignore. *)
+          | None -> Lwt.fail (Failure "Closing @@@OUTPUT could not be detected")
         in
         aux []
     | Some line ->
