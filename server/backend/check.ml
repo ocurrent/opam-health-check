@@ -75,11 +75,7 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
 
 let exec_out ~fexec ~fout =
   let stdin, stdout = Lwt_io.pipe () in
-  let proc =
-    Lwt.finalize
-      (fun () -> fexec ~stdout)
-      (fun () -> Lwt_io.close stdout)
-  in
+  let proc = (fexec ~stdout) [%lwt.finally Lwt_io.close stdout] in
   let%lwt res = fout ~stdin in
   let%lwt () = Lwt_io.close stdin in
   let%lwt r = proc in
