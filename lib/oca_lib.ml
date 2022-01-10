@@ -29,7 +29,7 @@ let get_files dirname =
     | End_of_file -> Lwt.return files
   in
   let%lwt files = aux [] in
-  let%lwt () = Lwt_unix.closedir dir in
+  Lwt_unix.closedir dir;%lwt
   Lwt.return files
 
 let rec scan_dir ~full_path dirname =
@@ -131,17 +131,16 @@ let rec rm_rf dirname =
       | file ->
           let file = dirname // file in
           let%lwt stat = Lwt_unix.stat (Fpath.to_string file) in
-          let%lwt () =
-            match stat.Unix.st_kind with
-            | Unix.S_DIR -> rm_rf file
-            | Unix.S_REG -> Lwt_unix.unlink (Fpath.to_string file)
-            | Unix.(S_CHR | S_BLK | S_LNK | S_FIFO | S_SOCK) -> assert false
-          in
+          begin match stat.Unix.st_kind with
+          | Unix.S_DIR -> rm_rf file
+          | Unix.S_REG -> Lwt_unix.unlink (Fpath.to_string file)
+          | Unix.(S_CHR | S_BLK | S_LNK | S_FIFO | S_SOCK) -> assert false
+          end;%lwt
           rm_files ()
     in
     try%lwt rm_files () with End_of_file -> Lwt.return_unit
   end begin fun () ->
-    let%lwt () = Lwt_unix.closedir dir in
+    Lwt_unix.closedir dir;%lwt
     Lwt_unix.rmdir (Fpath.to_string dirname)
   end
 
@@ -154,7 +153,7 @@ let timer_log timer c msg =
   let start_time = !timer in
   let end_time = Unix.time () in
   let time_span = end_time -. start_time in
-  let%lwt () = Lwt_io.write_line c ("Done. "^msg^" took: "^string_of_float time_span^" seconds") in
+  Lwt_io.write_line c ("Done. "^msg^" took: "^string_of_float time_span^" seconds");%lwt
   timer := Unix.time ();
   Lwt.return_unit
 

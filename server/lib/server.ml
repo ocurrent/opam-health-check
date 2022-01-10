@@ -77,7 +77,7 @@ module Make (Backend : Backend_intf.S) = struct
     Lwt.return
 
   let callback ~conf backend _conn req body_NOT_USED =
-    let%lwt () = Cohttp_lwt.Body.drain_body body_NOT_USED in
+    Cohttp_lwt.Body.drain_body body_NOT_USED;%lwt
     let uri = Cohttp.Request.uri req in
     let get_log ~logdir ~comp ~state ~pkg =
       let%lwt logdir = get_logdir logdir in
@@ -132,7 +132,7 @@ module Make (Backend : Backend_intf.S) = struct
     Printexc.record_backtrace debug;
     let%lwt cwd = Lwt_unix.getcwd () in
     let workdir = Server_workdirs.create ~cwd ~workdir in
-    let%lwt () = Server_workdirs.init_base workdir in
+    Server_workdirs.init_base workdir;%lwt
     let conf = Server_configfile.from_workdir workdir in
     let port = Server_configfile.port conf in
     let%lwt (backend, backend_task) = Backend.start ~debug ~cap_file conf workdir in

@@ -116,7 +116,7 @@ let logdir_move ~switches (Logdir (ty, _, _, workdir, _) as logdir) = match ty w
       let cwd = tmplogdir logdir in
       let directories = List.map Intf.Compiler.to_string switches in
       let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
-      let%lwt () = Oca_lib.compress_tpxz_archive ~cwd ~directories archive in
+      Oca_lib.compress_tpxz_archive ~cwd ~directories archive;%lwt
       Oca_lib.rm_rf cwd
   | Uncompressed ->
       let tmplogdir = tmplogdir logdir in
@@ -154,23 +154,23 @@ let tmprevdepsfile ~pkg logdir = tmprevdepsdir logdir/pkg
 let configfile workdir = workdir/"config.yaml"
 
 let init_base workdir =
-  let%lwt () = Oca_lib.mkdir_p (keysdir workdir) in
-  let%lwt () = Oca_lib.mkdir_p (base_logdir workdir) in
-  let%lwt () = Oca_lib.mkdir_p (ilogdir workdir) in
-  let%lwt () = Oca_lib.mkdir_p (opamsdir workdir) in
+  Oca_lib.mkdir_p (keysdir workdir);%lwt
+  Oca_lib.mkdir_p (base_logdir workdir);%lwt
+  Oca_lib.mkdir_p (ilogdir workdir);%lwt
+  Oca_lib.mkdir_p (opamsdir workdir);%lwt
   Oca_lib.mkdir_p (revdepsdir workdir)
 
 let init_base_job ~switch logdir =
   let switch = Intf.Switch.name switch in
-  let%lwt () = Oca_lib.mkdir_p (tmpgooddir ~switch logdir) in
-  let%lwt () = Oca_lib.mkdir_p (tmppartialdir ~switch logdir) in
-  let%lwt () = Oca_lib.mkdir_p (tmpbaddir ~switch logdir) in
-  let%lwt () = Oca_lib.mkdir_p (tmpnotavailabledir ~switch logdir) in
+  Oca_lib.mkdir_p (tmpgooddir ~switch logdir);%lwt
+  Oca_lib.mkdir_p (tmppartialdir ~switch logdir);%lwt
+  Oca_lib.mkdir_p (tmpbaddir ~switch logdir);%lwt
+  Oca_lib.mkdir_p (tmpnotavailabledir ~switch logdir);%lwt
   Oca_lib.mkdir_p (tmpinternalfailuredir ~switch logdir)
 
 let init_base_jobs ~switches logdir =
-  let%lwt () = Oca_lib.mkdir_p (tmplogdir logdir) in
-  let%lwt () = Oca_lib.mkdir_p (tmpmetadatadir logdir) in
-  let%lwt () = Oca_lib.mkdir_p (tmprevdepsdir logdir) in
-  let%lwt () = Oca_lib.mkdir_p (tmpopamsdir logdir) in
+  Oca_lib.mkdir_p (tmplogdir logdir);%lwt
+  Oca_lib.mkdir_p (tmpmetadatadir logdir);%lwt
+  Oca_lib.mkdir_p (tmprevdepsdir logdir);%lwt
+  Oca_lib.mkdir_p (tmpopamsdir logdir);%lwt
   Lwt_list.iter_s (fun switch -> init_base_job ~switch logdir) switches

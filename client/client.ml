@@ -16,7 +16,7 @@ let rec encrypt_msg ~key msg =
 
 let print_body body =
   let stream = Cohttp_lwt.Body.to_stream body in
-  let%lwt () = Lwt_stream.iter (fun s -> print_string s; flush stdout) stream in
+  Lwt_stream.iter (fun s -> print_string s; flush stdout) stream;%lwt
   Lwt.return (print_newline ())
 
 let process_response (res, body) =
@@ -24,7 +24,7 @@ let process_response (res, body) =
   | `OK ->
       print_body body
   | `Upgrade_required ->
-      let%lwt () = print_body body in
+      print_body body;%lwt
       raise Exit
   | _ ->
       print_endline "A problem occured";

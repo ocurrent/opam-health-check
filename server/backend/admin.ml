@@ -53,7 +53,7 @@ let get_log workdir =
       Lwt.return (Some (Bytes.to_string buf))
     end else if is_running then begin
       off := new_off;
-      let%lwt () = Lwt_unix.sleep 1. in
+      Lwt_unix.sleep 1.;%lwt
       loop ()
     end else
       Lwt.return_none
@@ -64,46 +64,46 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
   let%lwt resp =
     match String.split_on_char '\n' body with
     | ["set-auto-run-interval"; i] ->
-        let%lwt () = Server_configfile.set_auto_run_interval conf (int_of_string i) in
+        Server_configfile.set_auto_run_interval conf (int_of_string i);%lwt
         Lwt.return (fun () -> Lwt.return_none)
     | ["set-processes"; i] ->
         let i = int_of_string i in
         if i < 0 then
           failwith "Cannot set the number of processes to a negative value."
         else
-          let%lwt () = Server_configfile.set_processes conf i in
+          Server_configfile.set_processes conf i;%lwt
           Lwt.return (fun () -> Lwt.return_none)
     | ["add-ocaml-switch";name;switch] ->
         let switch = Intf.Switch.create ~name ~switch in
         let switches = switch :: Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let switches = List.sort Intf.Switch.compare switches in
-        let%lwt () = Server_configfile.set_ocaml_switches conf switches in
+        Server_configfile.set_ocaml_switches conf switches;%lwt
         Lwt.return (fun () -> Lwt.return_none)
     | ["set-ocaml-switch";name;switch] ->
         let switch = Intf.Switch.create ~name ~switch in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
         let switches = List.set_at_idx idx switch switches in
-        let%lwt () = Server_configfile.set_ocaml_switches conf switches in
+        Server_configfile.set_ocaml_switches conf switches;%lwt
         Lwt.return (fun () -> Lwt.return_none)
     | ["rm-ocaml-switch";name] ->
         let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
-        let%lwt () = Server_configfile.set_ocaml_switches conf switches in
+        Server_configfile.set_ocaml_switches conf switches;%lwt
         Lwt.return (fun () -> Lwt.return_none)
     | "set-slack-webhooks"::webhooks ->
         let webhooks = List.map Uri.of_string webhooks in
-        let%lwt () = Server_configfile.set_slack_webhooks conf webhooks in
+        Server_configfile.set_slack_webhooks conf webhooks;%lwt
         Lwt.return (fun () -> Lwt.return_none)
     | ["set-list-command";cmd] ->
-        let%lwt () = Server_configfile.set_list_command conf cmd in
+        Server_configfile.set_list_command conf cmd;%lwt
         Lwt.return (fun () -> Lwt.return_none)
     | ["run"] ->
-        let%lwt () = Lwt_mvar.put run_trigger () in
+        Lwt_mvar.put run_trigger ();%lwt
         Lwt.return (fun () -> Lwt.return_none)
     | ["add-user";username] ->
-        let%lwt () = create_userkey workdir username in
+        create_userkey workdir username;%lwt
         Lwt.return (fun () -> Lwt.return_none)
     | ["clear-cache"] ->
         on_finished workdir;

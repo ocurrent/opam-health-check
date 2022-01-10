@@ -42,7 +42,7 @@ let add_pkg full_name instances acc =
 
 let get_pkgs ~pool ~compilers logdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
-  let%lwt () = Lwt_list.iter_s (fill_pkgs_from_dir ~pool pkg_tbl logdir) compilers in
+  Lwt_list.iter_s (fill_pkgs_from_dir ~pool pkg_tbl logdir) compilers;%lwt
   let%lwt pkgs = Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil in
   Lwt.return (List.sort Intf.Pkg.compare pkgs)
 
@@ -56,30 +56,26 @@ let get_opams workdir =
   let dir = Server_workdirs.opamsdir workdir in
   let%lwt files = Oca_lib.get_files dir in
   let opams = Oca_server.Cache.Opams_cache.create 10_000 in
-  let%lwt () =
-    Lwt_list.iter_s begin fun pkg ->
-      let file = Server_workdirs.opamfile ~pkg workdir in
-      let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
-      let content = try OpamFile.OPAM.read_from_string content with _ -> OpamFile.OPAM.empty in
-      Lwt.return (Oca_server.Cache.Opams_cache.add opams pkg content)
-    end files
-  in
+  Lwt_list.iter_s begin fun pkg ->
+    let file = Server_workdirs.opamfile ~pkg workdir in
+    let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
+    let content = try OpamFile.OPAM.read_from_string content with _ -> OpamFile.OPAM.empty in
+    Lwt.return (Oca_server.Cache.Opams_cache.add opams pkg content)
+  end files;%lwt
   Lwt.return opams
 
 let get_revdeps workdir =
   let dir = Server_workdirs.revdepsdir workdir in
   let%lwt files = Oca_lib.get_files dir in
   let revdeps = Oca_server.Cache.Revdeps_cache.create 10_000 in
-  let%lwt () =
-    Lwt_list.iter_s begin fun pkg ->
-      let file = Server_workdirs.revdepsfile ~pkg workdir in
-      let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
-      let content = String.split_on_char '\n' content in
-      let content = List.hd content in
-      let content = int_of_string content in
-      Lwt.return (Oca_server.Cache.Revdeps_cache.add revdeps pkg content)
-    end files
-  in
+  Lwt_list.iter_s begin fun pkg ->
+    let file = Server_workdirs.revdepsfile ~pkg workdir in
+    let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
+    let content = String.split_on_char '\n' content in
+    let content = List.hd content in
+    let content = int_of_string content in
+    Lwt.return (Oca_server.Cache.Revdeps_cache.add revdeps pkg content)
+  end files;%lwt
   Lwt.return revdeps
 
 (* TODO: Deduplicate with Server.tcp_server *)
@@ -101,23 +97,22 @@ let cache_clear_and_init workdir =
 
 let run_action_loop ~conf ~run_trigger f =
   let rec loop () =
-    let%lwt () =
-      try%lwt
-        let regular_run =
-          let run_interval = Server_configfile.auto_run_interval conf * 60 * 60 in
-          if run_interval > 0 then
-            let%lwt () = Lwt_unix.sleep (float_of_int run_interval) in
-            Check.wait_current_run_to_finish ()
-          else
-            fst (Lwt.wait ())
-        in
-        let manual_run = Lwt_mvar.take run_trigger in
-        let%lwt () = Lwt.pick [regular_run; manual_run] in
-        f ()
-      with e ->
-        let msg = Printexc.to_string e in
-        Lwt_io.write_line Lwt_io.stderr ("Exception raised in action loop: "^msg)
-    in
+    begin try%lwt
+      let regular_run =
+        let run_interval = Server_configfile.auto_run_interval conf * 60 * 60 in
+        if run_interval > 0 then begin
+          Lwt_unix.sleep (float_of_int run_interval);%lwt
+          Check.wait_current_run_to_finish ()
+        end else
+          fst (Lwt.wait ())
+      in
+      let manual_run = Lwt_mvar.take run_trigger in
+      Lwt.pick [regular_run; manual_run];%lwt
+      f ()
+    with e ->
+      let msg = Printexc.to_string e in
+      Lwt_io.write_line Lwt_io.stderr ("Exception raised in action loop: "^msg)
+    end;%lwt
     loop ()
   in
   loop ()
@@ -129,7 +124,7 @@ let start ~debug ~cap_file conf workdir =
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
   cache_clear_and_init workdir;
   Mirage_crypto_rng_lwt.initialize ();
-  let%lwt () = Admin.create_admin_key workdir in
+  Admin.create_admin_key workdir;%lwt
   let task () =
     Lwt.join [
       tcp_server port callback;
