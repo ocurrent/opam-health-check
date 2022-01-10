@@ -8,7 +8,7 @@
     cohttp-lwt
     cohttp-lwt-unix
     containers
-    xdg-basedir
+    directories
     fpath
     uri
     lwt

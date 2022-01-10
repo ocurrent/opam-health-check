@@ -213,9 +213,13 @@ let log_cmd ~confdir ~conffile =
   (term, info)
 
 let cmds =
-  let confdir = XDGBaseDir.(default.config_home) in
-  let confdir = Fpath.v confdir in
-  let confdir = Fpath.add_seg confdir "opam-health-check" in
+  let module App_id = struct
+      let qualifier = "org"
+      let organization = "ocurrent"
+      let application = "opam-health-check"
+    end in
+  let module M = Directories.Project_dirs(App_id) in
+  let confdir = M.config_dir |> Option.get_exn_or "Couldn't derive config_dir" |> Fpath.v in
   let conffile = Fpath.add_seg confdir "config.yaml" in
   [
     init_cmd ~confdir ~conffile; (* TODO: Handle profilename on init *)
