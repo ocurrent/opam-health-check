@@ -1,3 +1,5 @@
+let fmt = Printf.sprintf
+
 let cache ~conf =
   let opam_cache = Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache" in
   if Server_configfile.enable_dune_cache conf then
@@ -434,6 +436,44 @@ let wait_current_run_to_finish =
   in
   loop
 
+let update_docker_image conf =
+  let repo_and_tag ~image =
+    match String.split_on_char ':' image with
+    | [] -> assert false
+    | [image] -> Lwt.return (image, None)
+    | [image; tag] -> Lwt.return (image, Some tag)
+    | _ -> Lwt.fail (Failure (fmt "Image name '%s' is not valid" image))
+  in
+  let get_latest_image ~image =
+    let%lwt repo, tag = repo_and_tag ~image in
+    let os = Server_configfile.platform_os conf in
+    let arch = match Server_configfile.platform_arch conf with
+      | "x86_64" -> "amd64"
+      | arch -> arch
+    in
+    match%lwt Docker_hub.fetch_manifests ~repo ~tag with
+    | Ok manifests ->
+        begin match Docker_hub.digest ~os ~arch manifests with
+        | Ok digest -> Lwt.return (Some (image^"@"^digest))
+        | Error _ -> prerr_endline "Something went wrong while parsing docker digest"; Lwt.return None
+        end
+    | Error _ -> prerr_endline "Something went wrong while fetching docker manifests"; Lwt.return None
+  in
+  let image = Server_configfile.platform_image conf in
+  match String.split_on_char '@' image with
+  | [] -> assert false
+  | [image] ->
+      begin match%lwt get_latest_image ~image with
+      | Some image -> Server_configfile.set_platform_image conf image
+      | None -> Lwt.fail (Failure (fmt "Could not get digest for image '%s'" image))
+      end
+  | [image; _old_digest] ->
+      begin match%lwt get_latest_image ~image with
+      | Some image -> Server_configfile.set_platform_image conf image
+      | None -> prerr_endline "Defaulting to old digest"; Lwt.return_unit
+      end
+  | _ -> Lwt.fail (Failure (fmt "Image name '%s' is not valid" image))
+
 let run ~debug ~cap_file ~on_finished ~conf cache workdir =
   let switches = Option.get_exn_or "no switches" (Server_configfile.ocaml_switches conf) in
   if !run_locked then
@@ -444,6 +484,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
     with_stderr ~start_time workdir begin fun ~stderr ->
       try%lwt
         let timer = Oca_lib.timer_start () in
+        let%lwt () = update_docker_image conf in
         let%lwt cap = get_cap ~stderr ~cap_file in
         let%lwt (opam_repo, opam_repo_commit) = get_commit_hash_default conf in
         let%lwt extra_repos = get_commit_hash_extra_repos conf in

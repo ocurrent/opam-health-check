@@ -31,3 +31,4 @@ val set_default_ocaml_switches : t -> (unit -> Intf.Switch.t list Lwt.t) -> unit
 val set_list_command : t -> string -> unit Lwt.t
 val set_extra_command : t -> string option -> unit Lwt.t
 val set_slack_webhooks : t -> Uri.t list -> unit Lwt.t
+val set_platform_image : t -> string -> unit Lwt.t

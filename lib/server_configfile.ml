@@ -263,6 +263,11 @@ let set_slack_webhooks conf webhooks =
   set_defaults conf;
   Lwt.return_unit
 
+let set_platform_image conf image =
+  conf.platform_image <- Some image;
+  set_defaults conf;
+  Lwt.return_unit
+
 let create yamlfile yaml =
   let conf = create_conf yamlfile in
   List.iter (set_config conf) yaml;
