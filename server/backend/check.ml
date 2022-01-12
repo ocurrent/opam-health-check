@@ -512,7 +512,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
             let%lwt () = Oca_lib.timer_log timer stderr "Operation" in
             let%lwt () = Lwt_io.write_line stderr "Finishing up..." in
             let%lwt () = move_tmpdirs_to_final ~switches:switches' new_logdir workdir in
-            on_finished workdir;
+            let%lwt () = on_finished workdir in
             let%lwt () = trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf in
             Oca_lib.timer_log timer stderr "Clean up"
         | [] ->
