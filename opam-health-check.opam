@@ -28,7 +28,7 @@ depends: [
   "yaml" {>= "2.0.0"}
   "sexplib" {>= "v0.9.0"}
   "sexplib0" {>= "v0.9.0"}
-  "ocaml-xdg-basedir"
+  "xdg-basedir" {>= "0.0.4"}
   "obuilder-spec" {>= "0.2"}
   "ocluster-api" {>= "0.1"}
   "current_ansi" {>= "0.1"}
