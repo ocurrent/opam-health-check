@@ -72,7 +72,7 @@ let generate_diff old_pkgs new_pkgs =
 type data = {
   html_tbl : string Html_cache.t;
   mutable logdirs : Server_workdirs.logdir list Lwt.t;
-  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t) list Lwt.t;
+  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list) list Lwt.t;
   mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list) list Lwt.t;
   mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
@@ -110,10 +110,10 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   end;
   self.pkgs <- begin
     let%lwt compilers = self.compilers in
-    List.map (fun (logdir, compilers) ->
-      (logdir, pkgs ~compilers logdir)
-    ) compilers |>
-    Lwt.return
+    Lwt_list.map_s (fun (logdir, compilers) ->
+      let%lwt pkgs = pkgs ~compilers logdir in
+      Lwt.return (logdir, pkgs)
+    ) compilers
   end;
   Html_cache.clear self.html_tbl;
   let%lwt () = Lwt.join [
@@ -212,7 +212,6 @@ let revdeps_cmp p1 p2 =
 
 let get_html ~conf self query logdir =
   let aux ~logdir pkgs =
-    let%lwt pkgs = pkgs in
     let logsearch = get_logsearch ~query ~logdir in
     let%lwt (pkgs, _) = Lwt_list.fold_left_s (filter_pkg ~logsearch query) ([], None) (List.rev pkgs) in
     let pkgs = if query.Html.sort_by_revdeps then List.sort revdeps_cmp pkgs else pkgs in
@@ -243,7 +242,7 @@ let get_logdirs self =
 let get_pkgs ~logdir self =
   let%lwt self = !self in
   let%lwt pkgs = self.pkgs in
-  List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs
+  Lwt.return (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
 
 let get_compilers ~logdir self =
   let%lwt self = !self in
