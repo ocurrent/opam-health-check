@@ -62,12 +62,12 @@ let pread ?cwd ?exit1 ~timeout cmd f =
         | _, _ ->
             let cmd = String.concat " " cmd in
             prerr_endline ("Command '"^cmd^"' failed (exit status: "^string_of_int n^".");
-            failwith "process failure"
+            Lwt.fail (Failure "process failure")
         end
     | Unix.WSIGNALED n | Unix.WSTOPPED n ->
         let cmd = String.concat " " cmd in
         prerr_endline ("Command '"^cmd^"' killed by a signal (n°"^string_of_int n^")");
-        failwith "process failure"
+        Lwt.fail (Failure "process failure")
   end
 
 let read_unordered_lines c =
@@ -124,7 +124,7 @@ let mkdir_p dir =
 
 let rec rm_rf dirname =
   let%lwt dir = Lwt_unix.opendir (Fpath.to_string dirname) in
-  Lwt.finalize begin fun () ->
+  begin
     let rec rm_files () =
       match%lwt Lwt_unix.readdir dir with
       | "." | ".." -> rm_files ()
@@ -140,10 +140,11 @@ let rec rm_rf dirname =
           rm_files ()
     in
     try%lwt rm_files () with End_of_file -> Lwt.return_unit
-  end begin fun () ->
+  end
+  [%lwt.finally
     let%lwt () = Lwt_unix.closedir dir in
     Lwt_unix.rmdir (Fpath.to_string dirname)
-  end
+  ]
 
 type timer = float ref
 

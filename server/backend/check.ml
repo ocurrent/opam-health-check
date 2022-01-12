@@ -11,7 +11,7 @@ let cache ~conf =
 let network = ["host"]
 
 let obuilder_to_string spec =
-  Sexplib0.Sexp.to_string_hum (Obuilder_spec.sexp_of_t spec)
+  Sexplib0.Sexp.to_string_mach (Obuilder_spec.sexp_of_t spec)
 
 let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
   let obuilder_content =
@@ -77,11 +77,7 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
 
 let exec_out ~fexec ~fout =
   let stdin, stdout = Lwt_io.pipe () in
-  let proc =
-    Lwt.finalize
-      (fun () -> fexec ~stdout)
-      (fun () -> Lwt_io.close stdout)
-  in
+  let proc = (fexec ~stdout) [%lwt.finally Lwt_io.close stdout] in
   let%lwt res = fout ~stdin in
   let%lwt () = Lwt_io.close stdin in
   let%lwt r = proc in
@@ -96,7 +92,7 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
           match%lwt Lwt_io.read_line_opt stdin with
           | Some "@@@OUTPUT" -> Lwt.return (List.rev acc)
           | Some x -> aux (x :: acc)
-          | None -> Lwt.return_nil (* Something went wrong, ignore. *)
+          | None -> Lwt.fail (Failure "Closing @@@OUTPUT could not be detected")
         in
         aux []
     | Some line ->
@@ -113,7 +109,7 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
       Lwt.return r
   | (Error (), _) ->
       match default with
-      | None -> failwith ("Failure in ocluster: "^c) (* TODO: Replace this with "send message to debug slack webhook" *)
+      | None -> Lwt.fail (Failure ("Failure in ocluster: "^c)) (* TODO: Replace this with "send message to debug slack webhook" *)
       | Some v -> Lwt.return v
 
 let failure_kind logfile =
@@ -425,7 +421,7 @@ let get_cap ~stderr ~cap_file =
       Lwt.return sr
   | Error _ ->
       let%lwt () = Lwt_io.write_line stderr "cap file couldn't be loaded" in
-      failwith "cap file not found"
+      Lwt.fail (Failure "cap file not found")
 
 let run_locked = ref false
 
