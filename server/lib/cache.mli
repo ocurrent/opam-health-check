@@ -12,7 +12,7 @@ val clear_and_init :
   logdirs:(unit -> Server_workdirs.logdir list Lwt.t) ->
   opams:(unit -> OpamFile.OPAM.t Opams_cache.t Lwt.t) ->
   revdeps:(unit -> int Revdeps_cache.t Lwt.t) ->
-  unit
+  unit Lwt.t
 
 val get_latest_logdir : t -> Server_workdirs.logdir option Lwt.t
 val get_html : conf:Server_configfile.t -> t -> Html.query -> Server_workdirs.logdir -> string Lwt.t

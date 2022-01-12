@@ -105,7 +105,14 @@ let clear_and_init self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
     ) compilers |>
     Lwt.return
   end;
-  Html_cache.clear self.html_tbl
+  Html_cache.clear self.html_tbl;
+  Lwt.join [
+    (let%lwt _ = self.opams in Lwt.return_unit);
+    (let%lwt _ = self.revdeps in Lwt.return_unit);
+    (let%lwt _ = self.logdirs in Lwt.return_unit);
+    (let%lwt _ = self.compilers in Lwt.return_unit);
+    (let%lwt _ = self.pkgs in Lwt.return_unit);
+  ]
 
 let is_deprecated flag =
   String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"

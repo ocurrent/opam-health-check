@@ -136,7 +136,7 @@ let start ~debug ~cap_file conf workdir =
   let on_finished = cache_clear_and_init in
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
-  cache_clear_and_init workdir;
+  Lwt.ignore_result (cache_clear_and_init workdir);
   Mirage_crypto_rng_lwt.initialize ();
   let%lwt () = Admin.create_admin_key workdir in
   let task () =
