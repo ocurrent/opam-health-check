@@ -71,36 +71,53 @@ module Make (Backend : Backend_intf.S) = struct
 
   let get_logdir name =
     let%lwt logdirs = Cache.get_logdirs Backend.cache in
-    List.find (fun logdir ->
-      String.equal (Server_workdirs.get_logdir_name logdir) name
-    ) logdirs |>
-    Lwt.return
+    Lwt.return (
+      List.find_opt (fun logdir ->
+        String.equal (Server_workdirs.get_logdir_name logdir) name
+      ) logdirs
+    )
 
   let callback ~conf backend _conn req body_NOT_USED =
     let%lwt () = Cohttp_lwt.Body.drain_body body_NOT_USED in
     let uri = Cohttp.Request.uri req in
     let get_log ~logdir ~comp ~state ~pkg =
-      let%lwt logdir = get_logdir logdir in
-      let comp = Intf.Compiler.from_string comp in
-      let state = Intf.State.from_string state in
-      let%lwt log = Backend.get_log backend ~logdir ~comp ~state ~pkg in
-      let html = Html.get_log ~comp ~pkg log in
-      serv_text ~content_type:"text/html; charset=utf-8" html
+      match%lwt get_logdir logdir with
+      | None ->
+          Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
+      | Some logdir ->
+          let comp = Intf.Compiler.from_string comp in
+          let state = Intf.State.from_string state in
+          match%lwt Backend.get_log backend ~logdir ~comp ~state ~pkg with
+          | None ->
+              Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
+          | Some log ->
+              let html = Html.get_log ~comp ~pkg log in
+              serv_text ~content_type:"text/html; charset=utf-8" html
     in
     match path_from_uri uri with
     | [] ->
-        let%lwt logdir = Cache.get_latest_logdir Backend.cache in
-        let%lwt query = parse_raw_query logdir uri in
-        let%lwt html = Cache.get_html ~conf Backend.cache query logdir in
-        serv_text ~content_type:"text/html" html
+        begin match%lwt Cache.get_latest_logdir Backend.cache with
+        | None ->
+            serv_text ~content_type:"text/text"
+              "No run exist, please wait for the first run to finish. \
+               Please look at the documentation to learn how to start it."
+        | Some logdir ->
+            let%lwt query = parse_raw_query logdir uri in
+            let%lwt html = Cache.get_html ~conf Backend.cache query logdir in
+            serv_text ~content_type:"text/html" html
+        end
     | ["run"] ->
         let%lwt html = Cache.get_html_run_list Backend.cache in
         serv_text ~content_type:"text/html" html
     | ["run";logdir] ->
-        let%lwt logdir = get_logdir logdir in
-        let%lwt query = parse_raw_query logdir uri in
-        let%lwt html = Cache.get_html ~conf Backend.cache query logdir in
-        serv_text ~content_type:"text/html" html
+        begin match%lwt get_logdir logdir with
+        | None ->
+            Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
+        | Some logdir ->
+            let%lwt query = parse_raw_query logdir uri in
+            let%lwt html = Cache.get_html ~conf Backend.cache query logdir in
+            serv_text ~content_type:"text/html" html
+        end
     | ["diff"] ->
         let%lwt html = Cache.get_html_diff_list Backend.cache in
         serv_text ~content_type:"text/html" html
@@ -109,10 +126,17 @@ module Make (Backend : Backend_intf.S) = struct
           | [old_logdir; ""; new_logdir] -> (old_logdir, new_logdir)
           | _ -> assert false
         in
-        let%lwt old_logdir = get_logdir old_logdir in
-        let%lwt new_logdir = get_logdir new_logdir in
-        let%lwt html = Cache.get_html_diff ~conf ~old_logdir ~new_logdir Backend.cache in
-        serv_text ~content_type:"text/html" html
+        begin match%lwt get_logdir old_logdir with
+        | None ->
+            Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
+        | Some old_logdir ->
+            match%lwt get_logdir new_logdir with
+            | None ->
+                Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
+            | Some new_logdir ->
+                let%lwt html = Cache.get_html_diff ~conf ~old_logdir ~new_logdir Backend.cache in
+                serv_text ~content_type:"text/html" html
+        end
     | ["log"; logdir; comp; state; pkg] ->
         get_log ~logdir ~comp ~state ~pkg
     | _ ->

@@ -48,9 +48,18 @@ let get_pkgs ~pool ~compilers logdir =
 
 let get_log _ ~logdir ~comp ~state ~pkg =
   let%lwt pkgs = Oca_server.Cache.get_pkgs ~logdir cache in
-  let pkg = List.find (fun p -> String.equal pkg (Intf.Pkg.full_name p)) pkgs in
-  let instance = List.find (fun inst -> Intf.Compiler.equal comp (Intf.Instance.compiler inst) && Intf.State.equal state (Intf.Instance.state inst)) (Intf.Pkg.instances pkg) in
-  Intf.Instance.content instance
+  match List.find_opt (fun p -> String.equal pkg (Intf.Pkg.full_name p)) pkgs with
+  | None -> Lwt.return_none
+  | Some pkg ->
+      let is_instance inst =
+        Intf.Compiler.equal comp (Intf.Instance.compiler inst) &&
+        Intf.State.equal state (Intf.Instance.state inst)
+      in
+      match List.find_opt is_instance (Intf.Pkg.instances pkg) with
+      | None -> Lwt.return_none
+      | Some instance ->
+          let%lwt content = Intf.Instance.content instance in
+          Lwt.return (Some content)
 
 let get_opams workdir =
   let dir = Server_workdirs.opamsdir workdir in
