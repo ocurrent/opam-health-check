@@ -72,7 +72,7 @@ let generate_diff old_pkgs new_pkgs =
 type data = {
   html_tbl : string Html_cache.t;
   mutable logdirs : Server_workdirs.logdir list Lwt.t;
-  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t) list Lwt.t;
+  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t Lazy.t) list Lwt.t;
   mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list) list Lwt.t;
   mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
@@ -111,7 +111,7 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   self.pkgs <- begin
     let%lwt compilers = self.compilers in
     List.map (fun (logdir, compilers) ->
-      (logdir, pkgs ~compilers logdir)
+      (logdir, lazy (pkgs ~compilers logdir))
     ) compilers |>
     Lwt.return
   end;
@@ -121,9 +121,12 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
     (let%lwt _ = self.revdeps in Lwt.return_unit);
     (let%lwt _ = self.logdirs in Lwt.return_unit);
     (let%lwt _ = self.compilers in Lwt.return_unit);
-    (let%lwt _ = self.pkgs in Lwt.return_unit);
   ] in
-  Lwt_mvar.put mvar ()
+  let%lwt () = Lwt_mvar.put mvar () in
+  match%lwt self.pkgs with
+  | [] -> Lwt.return_unit
+  | [(_, v)] -> let%lwt _ = Lazy.force v in Lwt.return_unit
+  | (_, v1)::(_, v2)::_ -> let%lwt _ = Lazy.force v1 and _ = Lazy.force v2 in Lwt.return_unit
 
 let is_deprecated flag =
   String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
@@ -222,7 +225,7 @@ let get_html ~conf self query logdir =
   in
   let%lwt pkgs = self.pkgs in
   let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
-  aux ~logdir pkgs
+  aux ~logdir (Lazy.force pkgs)
 
 let get_latest_logdir self =
   let%lwt self = !self in
@@ -243,7 +246,7 @@ let get_logdirs self =
 let get_pkgs ~logdir self =
   let%lwt self = !self in
   let%lwt pkgs = self.pkgs in
-  List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs
+  Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
 
 let get_compilers ~logdir self =
   let%lwt self = !self in
