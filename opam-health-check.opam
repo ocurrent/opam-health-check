@@ -48,4 +48,8 @@ depends: [
   "conf-pixz" # TODO: Make it a library
   # TODO: Add conf-ugrep
 ]
+conflicts: [
+  "dns-client-lwt" {< "6.1.4"} # Required to fix https://github.com/roburio/http-lwt-client/issues/8
+  "happy-eyeballs-lwt" {< "0.1.3"} # Required to fix https://github.com/roburio/http-lwt-client/issues/8
+]
 synopsis: "A toolchain to check for broken opam packages"
