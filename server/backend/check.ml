@@ -441,12 +441,11 @@ let update_docker_image conf =
   let repo_and_tag ~image =
     match String.split_on_char ':' image with
     | [] -> assert false
-    | [image] -> Lwt.return (image, None)
-    | [image; tag] -> Lwt.return (image, Some tag)
-    | _ -> Lwt.fail (Failure (fmt "Image name '%s' is not valid" image))
+    | [image] -> (image, None)
+    | image::tag -> (image, Some (String.concat ":" tag))
   in
   let get_latest_image ~image =
-    let%lwt repo, tag = repo_and_tag ~image in
+    let repo, tag = repo_and_tag ~image in
     let os = Server_configfile.platform_os conf in
     let arch = match Server_configfile.platform_arch conf with
       | "x86_64" -> "amd64"
