@@ -227,7 +227,7 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let open Obuilder_spec in
   let cache = cache ~conf in
   let from = match Server_configfile.platform_os conf with
-    | "linux" -> "ocaml/opam:"^Server_configfile.platform_image conf
+    | "linux" -> Server_configfile.platform_image conf
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
   stage ~from begin

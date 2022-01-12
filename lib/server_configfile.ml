@@ -220,7 +220,7 @@ let set_defaults conf =
   if Option.is_none conf.platform_distribution then
     conf.platform_distribution <- Some "debian-unstable";
   if Option.is_none conf.platform_image then
-    conf.platform_image <- Some "debian-unstable@sha256:a13c01aab19715953d47831effb2beb0ac90dc98c13b216893db2550799e3b9f";
+    conf.platform_image <- Some "ocaml/opam:debian-unstable@sha256:a13c01aab19715953d47831effb2beb0ac90dc98c13b216893db2550799e3b9f";
   if Option.is_none conf.slack_webhooks then
     conf.slack_webhooks <- Some [];
   let yaml = Yaml.to_string_exn (yaml_of_conf conf) in
