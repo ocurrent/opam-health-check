@@ -419,8 +419,8 @@ let get_cap ~stderr ~cap_file =
   match Capnp_rpc_unix.Cap_file.load vat cap_file with
   | Ok sr ->
       Lwt.return sr
-  | Error _ ->
-      let%lwt () = Lwt_io.write_line stderr "cap file couldn't be loaded" in
+  | Error (`Msg m) ->
+      let%lwt () = Lwt_io.write_line stderr (fmt "Cap file %S couldn't be loaded: %s" cap_file m) in
       Lwt.fail (Failure "cap file not found")
 
 let run_locked = ref false
@@ -454,10 +454,27 @@ let update_docker_image conf =
     match%lwt Docker_hub.fetch_manifests ~repo ~tag with
     | Ok manifests ->
         begin match Docker_hub.digest ~os ~arch manifests with
-        | Ok digest -> Lwt.return (Some (image^"@"^digest))
-        | Error _ -> prerr_endline "Something went wrong while parsing docker digest"; Lwt.return None
+        | Ok digest -> Lwt.return_some (image^"@"^digest)
+        | Error e ->
+           let e = match e with
+             | `Malformed_json str -> fmt "malformed json %S" str
+             | `No_corresponding_arch_found -> "no corresponding arch found"
+             | `No_corresponding_os_found -> "no corresponding os found"
+           in
+           prerr_endline ("Something went wrong while parsing docker digest: "^e);
+           Lwt.return_none
         end
-    | Error _ -> prerr_endline "Something went wrong while fetching docker manifests"; Lwt.return None
+    | Error e ->
+       let e = match e with
+         | `Api_error (response, body) ->
+             Format.asprintf "response: %a, body: %a"
+               Http_lwt_client.pp_response response
+               (Option.pp String.pp) body
+         | `Malformed_json str -> fmt "malformed json %S" str
+         | `Msg str -> str
+       in
+       prerr_endline ("Something went wrong while fetching docker manifests: "^e);
+       Lwt.return_none
   in
   let image = Server_configfile.platform_image conf in
   match String.split_on_char '@' image with
