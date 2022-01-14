@@ -99,8 +99,9 @@ module Make (Backend : Backend_intf.S) = struct
         begin match%lwt Cache.get_latest_logdir Backend.cache with
         | None ->
             serv_text ~content_type:"text/text"
-              "No run exist, please wait for the first run to finish. \
-               Please look at the documentation to learn how to start it."
+              "opam-health-check: no run exist, please wait for the first run \
+               to finish. Please look at the documentation to learn how to \
+               start it.\n"
         | Some logdir ->
             let%lwt query = parse_raw_query logdir uri in
             let%lwt html = Cache.get_html ~conf Backend.cache query logdir in
