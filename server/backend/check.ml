@@ -458,7 +458,7 @@ let update_docker_image conf =
         | Error e ->
            prerr_string "Something went wrong while parsing docker digest: ";
            begin match e with
-           | `Malformed_json str -> Printf.eprintf "malformed json %S\n" str
+           | `Malformed_json str -> prerr_endline (fmt "malformed json %S" str)
            | `No_corresponding_arch_found -> prerr_endline "no corresponding arch found"
            | `No_corresponding_os_found -> prerr_endline "no corresponding os found"
            end;
@@ -470,7 +470,7 @@ let update_docker_image conf =
        | `Api_error (response, str) ->
          Http_lwt_client.pp_response Format.stderr response;
          Option.iter prerr_endline str
-       | `Malformed_json str -> Printf.eprintf "malformed json %S\n" str
+       | `Malformed_json str -> prerr_endline (fmt "malformed json %S" str)
        | `Msg str -> prerr_endline str
        end;
        Lwt.return_none
