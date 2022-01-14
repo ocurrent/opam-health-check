@@ -456,23 +456,24 @@ let update_docker_image conf =
         begin match Docker_hub.digest ~os ~arch manifests with
         | Ok digest -> Lwt.return_some (image^"@"^digest)
         | Error e ->
-           prerr_string "Something went wrong while parsing docker digest: ";
-           begin match e with
-           | `Malformed_json str -> prerr_endline (fmt "malformed json %S" str)
-           | `No_corresponding_arch_found -> prerr_endline "no corresponding arch found"
-           | `No_corresponding_os_found -> prerr_endline "no corresponding os found"
-           end;
+           let e = match e with
+             | `Malformed_json str -> fmt "malformed json %S" str
+             | `No_corresponding_arch_found -> "no corresponding arch found"
+             | `No_corresponding_os_found -> "no corresponding os found"
+           in
+           prerr_endline ("Something went wrong while parsing docker digest: "^e);
            Lwt.return_none
         end
     | Error e ->
-       prerr_string "Something went wrong while fetching docker manifests: ";
-       begin match e with
-       | `Api_error (response, str) ->
-         Http_lwt_client.pp_response Format.stderr response;
-         Option.iter prerr_endline str
-       | `Malformed_json str -> prerr_endline (fmt "malformed json %S" str)
-       | `Msg str -> prerr_endline str
-       end;
+       let e = match e with
+         | `Api_error (response, body) ->
+             Format.asprintf "response: %a, body: %a"
+               Http_lwt_client.pp_response response
+               (Option.pp String.pp) body
+         | `Malformed_json str -> fmt "malformed json %S" str
+         | `Msg str -> str
+       in
+       prerr_endline ("Something went wrong while fetching docker manifests: "^e);
        Lwt.return_none
   in
   let image = Server_configfile.platform_image conf in
