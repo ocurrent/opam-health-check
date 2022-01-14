@@ -420,7 +420,7 @@ let get_cap ~stderr ~cap_file =
   | Ok sr ->
       Lwt.return sr
   | Error (`Msg m) ->
-      let%lwt () = Lwt_io.fprintf stderr "Cap file %S couldn't be loaded: %s\n" cap_file m in
+      let%lwt () = Lwt_io.write_line stderr (fmt "Cap file %S couldn't be loaded: %s" cap_file m) in
       Lwt.fail (Failure "cap file not found")
 
 let run_locked = ref false
