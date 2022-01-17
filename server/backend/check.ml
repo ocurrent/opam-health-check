@@ -83,7 +83,7 @@ let exec_out ~fexec ~fout =
   let%lwt r = proc in
   Lwt.return (r, res)
 
-let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
+let ocluster_build_str ~important ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
   let rec aux ~stdin =
     let%lwt line = Lwt_io.read_line_opt stdin in
     match line with
@@ -92,7 +92,10 @@ let ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
           match%lwt Lwt_io.read_line_opt stdin with
           | Some "@@@OUTPUT" -> Lwt.return (List.rev acc)
           | Some x -> aux (x :: acc)
-          | None -> Lwt.fail (Failure "Closing @@@OUTPUT could not be detected")
+          | None when important -> Lwt.fail (Failure "Error: Closing @@@OUTPUT could not be detected")
+          | None ->
+              let%lwt () = Lwt_io.write_line stderr "Error: Closing @@@OUTPUT could not be detected" in
+              Lwt.return_nil
         in
         aux []
     | Some line ->
@@ -277,7 +280,7 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
 let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
   let switch = Intf.Compiler.to_string (Intf.Switch.name switch) in
   let%lwt () = Lwt_io.write_line stderr ("Getting packages list for "^switch^"...") in
-  let%lwt pkgs = ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) in
+  let%lwt pkgs = ocluster_build_str ~important:true ~debug ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) in
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) with (* TODO: Remove this horror *)
@@ -304,7 +307,7 @@ let revdeps_script pkg =
 
 let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkgname ~pkg ~logdir =
-    let%lwt revdeps = ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) in
+    let%lwt revdeps = ocluster_build_str ~important:false ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) in
     let module Set = Set.Make(String) in
     let revdeps = Set.of_list revdeps in
     let revdeps = Set.remove pkgname revdeps in (* https://github.com/ocaml/opam/issues/4446 *)
@@ -314,7 +317,7 @@ let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder)
   in
   let get_latest_metadata ~base_obuilder ~pkgname ~logdir = (* TODO: Get this locally by merging all the repository and parsing the opam files using opam-core *)
     let%lwt opam =
-      ocluster_build_str ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
+      ocluster_build_str ~important:false ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
         ("opam show --raw "^Filename.quote pkgname)
     in
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpopamfile ~pkg:pkgname logdir)) (fun c ->
