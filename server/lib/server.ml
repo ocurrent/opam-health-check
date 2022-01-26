@@ -141,7 +141,7 @@ module Make (Backend : Backend_intf.S) = struct
     | ["log"; logdir; comp; state; pkg] ->
         get_log ~logdir ~comp ~state ~pkg
     | ["api"; "v1"; "latest"; "packages"] ->
-        let%lwt json = Json_output.latest_packages Backend.cache in
+        let%lwt json = Json.latest_packages Backend.cache in
         let json = Yojson.Safe.to_string json in
         serv_text ~content_type:"application/json" json
     | _ ->
