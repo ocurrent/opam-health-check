@@ -16,11 +16,5 @@ let pkg_to_json pkg =
     ("statuses", `List (List.map instance_to_json (Intf.Pkg.instances pkg)));
   ]
 
-let latest_packages cache =
-  match%lwt Cache.get_latest_logdir cache with
-  | None ->
-      Lwt.return (`List [])
-  | Some logdir ->
-      let%lwt pkgs = Cache.get_pkgs ~logdir cache in
-      let pkgs = List.map pkg_to_json pkgs in
-      Lwt.return (`List pkgs)
+let pkgs_to_json pkgs =
+  `List (List.map pkg_to_json pkgs)

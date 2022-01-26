@@ -24,3 +24,4 @@ val get_revdeps : t -> string -> int Lwt.t
 val get_html_diff : conf:Server_configfile.t -> old_logdir:Server_workdirs.logdir -> new_logdir:Server_workdirs.logdir -> t -> string Lwt.t
 val get_html_diff_list : t -> string Lwt.t
 val get_html_run_list : t -> string Lwt.t
+val get_json_latest_packages : t -> string Lwt.t

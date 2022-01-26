@@ -1,1 +1,1 @@
-val latest_packages : Cache.t -> Yojson.Safe.t Lwt.t
+val pkgs_to_json : Intf.Pkg.t list -> Yojson.Safe.t

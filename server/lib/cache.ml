@@ -16,6 +16,11 @@ module Html_cache = Hashtbl.Make (struct
       String.equal (fst logsearch) (fst y.Html.logsearch) &&
       Option.equal (fun (_, comp1) (_, comp2) -> Intf.Compiler.equal comp1 comp2) (snd logsearch) (snd y.Html.logsearch)
   end)
+module Json_cache = Hashtbl.Make (struct
+    type t = unit (* TODO: Add a proper Json.query type *)
+    let hash () = Hashtbl.hash ()
+    let equal () () = true
+  end)
 
 module Opams_cache = Hashtbl.Make (String)
 module Revdeps_cache = Hashtbl.Make (String)
@@ -71,6 +76,7 @@ let generate_diff old_pkgs new_pkgs =
 
 type data = {
   html_tbl : string Html_cache.t;
+  json_tbl : string Json_cache.t;
   mutable logdirs : Server_workdirs.logdir list Lwt.t;
   mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t Lazy.t) list Lwt.t;
   mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list Lwt.t Lazy.t) list Lwt.t;
@@ -82,6 +88,7 @@ type t = data Lwt.t ref
 
 let create_data () = {
   html_tbl = Html_cache.create 32;
+  json_tbl = Json_cache.create 32;
   logdirs = Lwt.return_nil;
   pkgs = Lwt.return_nil;
   compilers = Lwt.return_nil;
@@ -121,6 +128,7 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
     Lwt.return
   end;
   Html_cache.clear self.html_tbl;
+  Json_cache.clear self.json_tbl;
   let%lwt () = Lwt.join [
     (let%lwt _ = self.opams in Lwt.return_unit);
     (let%lwt _ = self.revdeps in Lwt.return_unit);
@@ -286,3 +294,22 @@ let get_html_run_list self =
   let%lwt self = !self in
   let%lwt pkgs = self.pkgs in
   Lwt.return (Html.get_run_list (List.map fst pkgs))
+
+let get_json_latest_packages self =
+  let%lwt self = !self in
+  match Json_cache.find_opt self.json_tbl () with
+  | Some json ->
+      Lwt.return json
+  | None ->
+      let%lwt json =
+        let%lwt pkgs = match%lwt self.logdirs with
+          | [] -> Lwt.return []
+          | logdir::_ ->
+              let%lwt pkgs = self.pkgs in
+              Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
+        in
+        let json = Json.pkgs_to_json pkgs in
+        Lwt.return (Yojson.Safe.to_string json)
+      in
+      Json_cache.add self.json_tbl () json;
+      Lwt.return json
