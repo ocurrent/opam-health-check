@@ -32,6 +32,7 @@ depends: [
   "obuilder-spec" {>= "0.2"}
   "ocluster-api" {>= "0.1"}
   "current_ansi" {>= "0.1"}
+  "yojson" {>= "1.6.0"}
   "github"
   "github-unix"
   "github-data"

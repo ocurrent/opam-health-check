@@ -140,6 +140,9 @@ module Make (Backend : Backend_intf.S) = struct
         end
     | ["log"; logdir; comp; state; pkg] ->
         get_log ~logdir ~comp ~state ~pkg
+    | ["api"; "v1"; "latest"; "packages"] ->
+        let%lwt json = Cache.get_json_latest_packages Backend.cache in
+        serv_text ~content_type:"application/json" json
     | _ ->
         Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
 

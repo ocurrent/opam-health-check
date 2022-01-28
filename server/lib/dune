@@ -15,5 +15,6 @@
     fpath
     uri
     re
+    yojson
     current_ansi
     oca_lib))
