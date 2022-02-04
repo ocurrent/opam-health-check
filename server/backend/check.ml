@@ -8,12 +8,21 @@ let cache ~conf =
   else
     [opam_cache]
 
-let network = ["host"]
+let platform_os conf =
+  match Server_configfile.platform_os conf with
+  | "linux" -> `Linux
+  | "windows" -> `Windows
+  | os ->
+     (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
+     failwith ("OS '"^os^"' not supported")
+
+let network = function `Linux -> ["host"] | `Windows -> ["nat"]
 
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_mach (Obuilder_spec.sexp_of_t spec)
 
 let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
+  let network = network (platform_os conf) in
   let obuilder_content =
     let {Obuilder_spec.child_builds; from; ops} = base_obuilder in
     Obuilder_spec.stage
