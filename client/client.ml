@@ -43,7 +43,7 @@ let send_msg ~profilename ~confdir ~conffile msg =
   let msg = encrypt_msg ~key (prefix^msg) in
   let uri = Uri.make ~scheme:"http" ~host:hostname ~port () in
   let prefix = Oca_lib.protocol_version^"\n"^prefix in
-  print_endline "Sending command...";
+  print_endline "Sending command…";
   Lwt_main.run begin
     let%lwt resp = Cohttp_lwt_unix.Client.post ~body:(`String (prefix^msg)) uri in
     process_response resp
