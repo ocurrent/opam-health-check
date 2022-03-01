@@ -21,7 +21,7 @@ depends: [
   "opam-format"
   "mirage-crypto-pk" {>= "0.7.0"}
   "mirage-crypto-rng" {>= "0.7.0"}
-  "cmdliner"
+  "cmdliner" {>= "1.1.0"}
   "fpath"
   "fmt" {>= "0.8.7"}
   "re" {>= "1.7.2"}
