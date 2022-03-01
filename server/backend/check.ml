@@ -179,7 +179,7 @@ exit $res
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
-    let%lwt () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"...") in
+    let%lwt () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"…") in
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
     match%lwt
@@ -279,7 +279,7 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
 
 let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
   let switch = Intf.Compiler.to_string (Intf.Switch.name switch) in
-  let%lwt () = Lwt_io.write_line stderr ("Getting packages list for "^switch^"...") in
+  let%lwt () = Lwt_io.write_line stderr ("Getting packages list for "^switch^"…") in
   let%lwt pkgs = ocluster_build_str ~important:true ~debug ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) in
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
@@ -525,7 +525,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
             let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
             let%lwt () = Lwt.join jobs in
             let%lwt () = Oca_lib.timer_log timer stderr "Operation" in
-            let%lwt () = Lwt_io.write_line stderr "Finishing up..." in
+            let%lwt () = Lwt_io.write_line stderr "Finishing up…" in
             let%lwt () = move_tmpdirs_to_final ~switches:switches' new_logdir workdir in
             let%lwt () = on_finished workdir in
             let%lwt () = trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf in

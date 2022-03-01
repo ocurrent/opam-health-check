@@ -377,7 +377,7 @@ let get_diff ~old_logdir ~new_logdir ~conf (bad, partial, not_available, interna
   let old_hash_elm = get_hash_elm old_hash in
   let new_hash = Server_workdirs.get_logdir_hash new_logdir in
   let new_hash_elm = get_hash_elm new_hash in
-  let git_diff = a ~a:[a_href (github_url conf^"/compare/"^old_hash^"..."^new_hash)] [txt "git diff"] in
+  let git_diff = a ~a:[a_href (github_url conf^"/compare/"^old_hash^"…"^new_hash)] [txt "git diff"] in
   let good_txt = span ~a:[a_style ("color: "^CUD_pallette.green^";")] [txt "passing"] in
   let bad_txt = span ~a:[a_style ("color: "^CUD_pallette.red^";")] [txt "failing"] in
   let partial_txt = span ~a:[a_style ("color: "^CUD_pallette.orange^";")] [txt "partially failing"] in
