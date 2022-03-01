@@ -5,6 +5,7 @@ let main debug workdir cap_file = Lwt_main.run (Server.main ~debug ~cap_file ~wo
 (* Command-line parsing *)
 
 module Arg = Cmdliner.Arg
+module Cmd = Cmdliner.Cmd
 module Term = Cmdliner.Term
 
 let ( $ ) = Term.( $ )
@@ -26,7 +27,7 @@ let connect_addr =
 let term = Term.const main $ debug $ workdir $ connect_addr
 
 let info =
-  Term.info
+  Cmd.info
     ~doc:"A server to check for broken opam packages."
     ~man:[`P "This program takes a work directory where every files created \
               are stored. This includes logs, config file and user private \
@@ -34,4 +35,4 @@ let info =
     ~version:Config.version
     Config.name
 
-let () = Term.exit (Term.eval (term, info))
+let () = exit (Cmd.eval (Cmd.v info term))
