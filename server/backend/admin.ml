@@ -79,7 +79,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
         if List.mem ~eq:Intf.Switch.equal switch switches then
           Lwt.fail (Failure "Cannot have duplicate switches names.")
         else
-          let switches = List.sort Intf.Switch.compare switches in
+          let switches = List.sort Intf.Switch.compare (switch :: switches) in
           let%lwt () = Server_configfile.set_ocaml_switches conf switches in
           Lwt.return (fun () -> Lwt.return_none)
     | ["set-ocaml-switch";name;switch] ->
