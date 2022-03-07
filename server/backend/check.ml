@@ -285,6 +285,26 @@ let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) with (* TODO: Remove this horror *)
     | "ocaml" | "ocaml-base-compiler" | "ocaml-variants" | "ocaml-beta" | "ocaml-config" -> false
+    | "ocaml-option-32bit"
+    | "ocaml-option-afl"
+    | "ocaml-option-bytecode-only"
+    | "ocaml-option-default-unsafe-string"
+    | "ocaml-option-flambda"
+    | "ocaml-option-fp"
+    | "ocaml-option-musl"
+    | "ocaml-option-nnp"
+    | "ocaml-option-nnpchecker"
+    | "ocaml-option-no-flat-float-array"
+    | "ocaml-option-spacetime"
+    | "ocaml-option-static"
+    | "ocaml-options-only-afl"
+    | "ocaml-options-only-flambda"
+    | "ocaml-options-only-flambda-fp"
+    | "ocaml-options-only-fp"
+    | "ocaml-options-only-nnp"
+    | "ocaml-options-only-nnpchecker"
+    | "ocaml-options-only-no-flat-float-array"
+    | "ocaml-options-vanilla" -> false
     | _ -> true
   end pkgs in
   let nelts = string_of_int (List.length pkgs) in
