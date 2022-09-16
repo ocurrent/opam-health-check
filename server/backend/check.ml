@@ -1,4 +1,5 @@
 let fmt = Printf.sprintf
+let ( >>!= ) = Lwt_result.bind
 
 let cache ~conf =
   let opam_cache = Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache" in
@@ -461,30 +462,30 @@ let wait_current_run_to_finish =
   loop
 
 let update_docker_image conf =
-  let repo_and_tag ~image =
-    match String.split_on_char ':' image with
-    | [] -> assert false
-    | [image] -> (image, None)
-    | image::tag -> (image, Some (String.concat ":" tag))
-  in
   let get_latest_image ~image =
-    let repo, tag = repo_and_tag ~image in
+    let name, tag = Docker_hub.Image.ignore_digest image in
     let os = Server_configfile.platform_os conf in
     let arch = match Server_configfile.platform_arch conf with
       | "x86_64" -> "amd64"
-      | arch -> arch
+      | arch -> arch (* TODO: Not correct for x86_32 for example *)
     in
-    match%lwt Docker_hub.fetch_manifests ~repo ~tag with
+    let is_correct_platform {Docker_hub.Manifests.platform; _} =
+      String.equal os platform.Docker_hub.Platform.os &&
+      String.equal arch platform.Docker_hub.Platform.arch
+      (* TODO: Detect variant too? *)
+    in
+    let manifests =
+      Docker_hub.Token.fetch name >>!=
+      Docker_hub.Manifests.fetch tag
+    in
+    match%lwt manifests with
     | Ok manifests ->
-        begin match Docker_hub.digest ~os ~arch manifests with
-        | Ok digest -> Lwt.return_some (image^"@"^digest)
-        | Error e ->
-           let e = match e with
-             | `Malformed_json str -> fmt "malformed json %S" str
-             | `No_corresponding_arch_found -> "no corresponding arch found"
-             | `No_corresponding_os_found -> "no corresponding os found"
-           in
-           prerr_endline ("Something went wrong while parsing docker digest: "^e);
+        let elements = Docker_hub.Manifests.elements manifests in
+        begin match List.find_opt is_correct_platform elements with
+        | Some {Docker_hub.Manifests.digest; _} ->
+            Lwt.return_some (Docker_hub.Image.to_string name tag (Some digest))
+        | None ->
+           prerr_endline (fmt "Could not find an image for OS '%s' and arch '%s'" os arch);
            Lwt.return_none
         end
     | Error e ->
