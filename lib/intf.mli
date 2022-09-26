@@ -7,6 +7,8 @@ module State : sig
 
   val from_string : string -> t
   val to_string : t -> string
+
+  val to_pretty_string : t -> string
 end
 
 module Compiler : sig

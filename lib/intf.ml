@@ -21,6 +21,13 @@ module State = struct
     | Bad -> "bad"
     | NotAvailable -> "not-available"
     | InternalFailure -> "internal-failure"
+
+  let to_pretty_string = function
+    | Good -> "Success"
+    | Partial -> "Partial failure"
+    | Bad -> "Failure"
+    | NotAvailable -> "Not available"
+    | InternalFailure -> "Internal failure"
 end
 
 module Compiler = struct

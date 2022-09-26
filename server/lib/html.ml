@@ -165,7 +165,7 @@ let state_checkboxes ~name checked =
               a_id id ::
               if List.mem ~eq:State.equal state checked then [a_checked ()] else [])
           ();
-        label ~a:[a_label_for id] [txt state_str];
+        label ~a:[a_label_for id] [txt (State.to_pretty_string state)];
       ]
     end State.all
   end
