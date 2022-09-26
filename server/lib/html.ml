@@ -4,7 +4,7 @@ type query = {
   available_compilers : Compiler.t list;
   compilers : Compiler.t list;
   show_available : Compiler.t list;
-  show_failures_only : bool;
+  show_only : State.t list;
   show_diff_only : bool;
   show_latest_only : bool;
   sort_by_revdeps : bool;
@@ -151,6 +151,25 @@ let comp_checkboxes ~name checked query =
     end query.available_compilers
   end
 
+let state_checkboxes ~name checked =
+  let open! Tyxml.Html in
+  ul ~a:[a_class ["ks-cboxtags"]] begin
+    List.map begin fun state ->
+      let state_str = State.to_string state in
+      let id = "id_"^name^"_"^state_str in
+      li [
+        input
+          ~a:(a_input_type `Checkbox ::
+              a_name name ::
+              a_value state_str ::
+              a_id id ::
+              if List.mem ~eq:State.equal state checked then [a_checked ()] else [])
+          ();
+        label ~a:[a_label_for id] [txt (State.to_pretty_string state)];
+      ]
+    end State.all
+  end
+
 let common_header =
   let open Tyxml.Html in
   h3 [
@@ -290,8 +309,8 @@ let get_html ~logdir ~conf query pkgs =
   let compilers = comp_checkboxes ~name:"comp" query.compilers query in
   let show_available_text = [txt "Only show packages available in:"] in
   let show_available = comp_checkboxes ~name:"available" query.show_available query in
-  let show_failures_only_text = [txt "Show failures only:"] in
-  let show_failures_only = input ~a:(a_input_type `Checkbox::a_name "show-failures-only"::a_value "true"::if query.show_failures_only then [a_checked ()] else []) () in
+  let show_only_text = [txt "Show only:"] in
+  let show_only = state_checkboxes ~name:"show-only" query.show_only in
   let show_diff_only_text = [txt "Only show packages whose build status differs between each compilers:"] in
   let show_diff_only = input ~a:(a_input_type `Checkbox::a_name "show-diff-only"::a_value "true"::if query.show_diff_only then [a_checked ()] else []) () in
   let show_latest_only_text = [txt "Only show the latest version of each packages:"] in
@@ -313,7 +332,7 @@ let get_html ~logdir ~conf query pkgs =
   let filter_form = gen_table_form ~pkgs:pkgs' ~logdir ~conf [
     (compilers_text, [compilers]);
     (show_available_text, [show_available]);
-    (show_failures_only_text, [show_failures_only]);
+    (show_only_text, [show_only]);
     (show_diff_only_text, [show_diff_only]);
     (show_latest_only_text, [show_latest_only]);
     (sort_by_revdeps_text, [sort_by_revdeps]);

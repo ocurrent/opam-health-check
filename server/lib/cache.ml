@@ -135,13 +135,9 @@ let must_show_package ~logsearch query ~is_latest pkg =
     ) query.Html.show_available
   end >>&& begin fun () ->
     Lwt.return @@
-    if query.Html.show_failures_only then
-      List.exists (fun instance -> match Instance.state instance with
-        | State.Bad | State.Partial -> true
-        | State.Good | State.NotAvailable | State.InternalFailure -> false
-      ) instances
-    else
-      true
+    List.exists (fun state ->
+      List.exists (fun inst -> State.equal state (Instance.state inst)) instances
+    ) query.Html.show_only
   end >>&& begin fun () ->
     Lwt.return @@
     match instances with

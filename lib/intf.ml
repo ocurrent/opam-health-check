@@ -1,6 +1,8 @@
 module State = struct
   type t = Good | Partial | Bad | NotAvailable | InternalFailure
 
+  let all = [Good; Partial; Bad; NotAvailable; InternalFailure]
+
   let equal x y = match x, y with
     | Good, Good | Partial, Partial | Bad, Bad | NotAvailable, NotAvailable | InternalFailure, InternalFailure -> true
     | Good, _ | Partial, _ | Bad, _ | NotAvailable, _ | InternalFailure, _ -> false
@@ -19,6 +21,13 @@ module State = struct
     | Bad -> "bad"
     | NotAvailable -> "not-available"
     | InternalFailure -> "internal-failure"
+
+  let to_pretty_string = function
+    | Good -> "Success"
+    | Partial -> "Partial failure"
+    | Bad -> "Failure"
+    | NotAvailable -> "Not available"
+    | InternalFailure -> "Internal failure"
 end
 
 module Compiler = struct
