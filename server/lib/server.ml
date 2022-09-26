@@ -20,6 +20,7 @@ module Make (Backend : Backend_intf.S) = struct
     let show_available = get_query_param_list uri "available" in
     let show_failures_only = option_to_string (Uri.get_query_param uri "show-failures-only") in
     let show_failures_only = if String.is_empty show_failures_only then checkbox_default false else bool_of_string show_failures_only in
+    let show_only = get_query_param_list uri "show-only" in
     let show_diff_only = option_to_string (Uri.get_query_param uri "show-diff-only") in
     let show_diff_only = if String.is_empty show_diff_only then checkbox_default false else bool_of_string show_diff_only in
     let show_latest_only = option_to_string (Uri.get_query_param uri "show-latest-only") in
@@ -46,11 +47,16 @@ module Make (Backend : Backend_intf.S) = struct
       | [] -> compilers
       | show_available -> List.map Intf.Compiler.from_string show_available
     in
+    let show_only = match show_only with
+      | [] when show_failures_only -> [Intf.State.Bad; Intf.State.Partial]
+      | [] -> Intf.State.all
+      | show_only -> List.map Intf.State.from_string show_only
+    in
     Lwt.return {
       Html.available_compilers;
       Html.compilers;
       Html.show_available;
-      Html.show_failures_only;
+      Html.show_only;
       Html.show_diff_only;
       Html.show_latest_only;
       Html.sort_by_revdeps;

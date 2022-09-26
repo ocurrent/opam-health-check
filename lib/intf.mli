@@ -3,6 +3,8 @@ module State : sig
 
   val equal : t -> t -> bool
 
+  val all : t list
+
   val from_string : string -> t
   val to_string : t -> string
 end
