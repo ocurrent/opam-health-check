@@ -6,7 +6,7 @@ let get_compilers logdir =
   let%lwt compilers = Server_workdirs.logdir_get_compilers logdir in
   Lwt.return (List.sort Intf.Compiler.compare compilers)
 
-module Pkg_tbl = Hashtbl.Make (String)
+module Pkg_tbl = Oca_lib.Hashtbl.Make (String)
 
 let pkg_update ~pool pkg_tbl logdir comp state pkg =
   let get_content () = Lwt_pool.use pool begin fun () ->
@@ -70,7 +70,7 @@ let get_opams workdir =
       let file = Server_workdirs.opamfile ~pkg workdir in
       let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
       let content = try OpamFile.OPAM.read_from_string content with _ -> OpamFile.OPAM.empty in
-      Lwt.return (Oca_server.Cache.Opams_cache.add opams pkg content)
+      Lwt.return (Oca_server.Cache.Opams_cache.replace opams pkg content)
     end files
   in
   Lwt.return opams
@@ -86,7 +86,7 @@ let get_revdeps workdir =
       let content = String.split_on_char '\n' content in
       let content = List.hd content in
       let content = int_of_string content in
-      Lwt.return (Oca_server.Cache.Revdeps_cache.add revdeps pkg content)
+      Lwt.return (Oca_server.Cache.Revdeps_cache.replace revdeps pkg content)
     end files
   in
   Lwt.return revdeps

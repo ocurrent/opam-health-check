@@ -1,15 +1,15 @@
 open Intf
 
-module Opams_cache = Hashtbl.Make (String)
-module Revdeps_cache = Hashtbl.Make (String)
+module Opams_cache = Oca_lib.Hashtbl.Make (String)
+module Revdeps_cache = Oca_lib.Hashtbl.Make (String)
 
 type merge =
   | Old
   | New
 
-module Pkg_htbl = CCHashtbl.Make (struct
+module Pkg_htbl = Oca_lib.Hashtbl.Make (struct
     type t = string * Compiler.t
-    let hash = Hashtbl.hash (* TODO: Improve *)
+    let hash = Oca_lib.Hashtbl.hash (* TODO: Improve *)
     let equal (full_name, comp) y =
       String.equal full_name (fst y) &&
       Intf.Compiler.equal comp (snd y)
@@ -43,7 +43,7 @@ let generate_diff old_pkgs new_pkgs =
     List.iter begin fun inst ->
       let comp = Intf.Instance.compiler inst in
       let state = Intf.Instance.state inst in
-      Pkg_htbl.add pkg_htbl (Intf.Pkg.full_name pkg, comp) (pos, state)
+      Pkg_htbl.replace pkg_htbl (Intf.Pkg.full_name pkg, comp) (pos, state)
     end
   in
   List.iter (aux Old) old_pkgs;

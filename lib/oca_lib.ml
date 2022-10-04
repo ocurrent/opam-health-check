@@ -169,3 +169,5 @@ let default_auto_run_interval = 48 (* 48 hours *)
 let default_processes = 200
 let default_list_command = "opam list --available --installable --short --all-versions"
 let localhost = "localhost"
+
+module Hashtbl = Tbl
