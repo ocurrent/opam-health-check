@@ -35,4 +35,6 @@ let info =
     ~version:Config.version
     Config.name
 
-let () = exit (Cmd.eval (Cmd.v info term))
+let () =
+  Memtrace.trace_if_requested ~context:"opam-health-check" ();
+  exit (Cmd.eval (Cmd.v info term))
