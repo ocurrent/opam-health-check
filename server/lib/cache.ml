@@ -1,15 +1,15 @@
 open Intf
 
-module Opams_cache = Oca_lib.Hashtbl.Make (String)
-module Revdeps_cache = Oca_lib.Hashtbl.Make (String)
+module Opams_cache = Hashtbl.Make (String)
+module Revdeps_cache = Hashtbl.Make (String)
 
 type merge =
   | Old
   | New
 
-module Pkg_htbl = Oca_lib.Hashtbl.Make (struct
+module Pkg_htbl = CCHashtbl.Make (struct
     type t = string * Compiler.t
-    let hash = Oca_lib.Hashtbl.hash (* TODO: Improve *)
+    let hash = Hashtbl.hash (* TODO: Improve *)
     let equal (full_name, comp) y =
       String.equal full_name (fst y) &&
       Intf.Compiler.equal comp (snd y)

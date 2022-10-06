@@ -6,32 +6,32 @@ let get_compilers logdir =
   let%lwt compilers = Server_workdirs.logdir_get_compilers logdir in
   Lwt.return (List.sort Intf.Compiler.compare compilers)
 
-module Pkg_tbl = Oca_lib.Hashtbl.Make (String)
+module Pkg_map = Map.Make (String)
 
-let pkg_update ~pool pkg_tbl logdir comp state pkg =
+let pkg_update ~pool logdir comp state pkg_map pkg =
   let get_content () = Lwt_pool.use pool begin fun () ->
     Server_workdirs.logdir_get_content ~comp ~state ~pkg logdir
   end in
   let content = Intf.Log.create get_content in
   let instances =
-    match Pkg_tbl.find_opt pkg_tbl pkg with
+    match Pkg_map.find_opt pkg pkg_map with
     | Some instances -> Intf.Instance.create comp state content :: instances
     | None -> [Intf.Instance.create comp state content]
   in
-  Pkg_tbl.replace pkg_tbl pkg instances
+  Pkg_map.add pkg instances pkg_map
 
-let fill_pkgs_from_dir ~pool pkg_tbl logdir comp =
+let fill_pkgs_from_dir ~pool logdir pkg_map comp =
   let%lwt good_files = Server_workdirs.goodfiles ~switch:comp logdir in
   let%lwt partial_files = Server_workdirs.partialfiles ~switch:comp logdir in
   let%lwt bad_files = Server_workdirs.badfiles ~switch:comp logdir in
   let%lwt notavailable_files = Server_workdirs.notavailablefiles ~switch:comp logdir in
   let%lwt internalfailure_files = Server_workdirs.internalfailurefiles ~switch:comp logdir in
-  List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.Good) good_files;
-  List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.Partial) partial_files;
-  List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.Bad) bad_files;
-  List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.NotAvailable) notavailable_files;
-  List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.InternalFailure) internalfailure_files;
-  Lwt.return ()
+  let pkg_map = List.fold_left (pkg_update ~pool logdir comp Intf.State.Good) pkg_map good_files in
+  let pkg_map = List.fold_left (pkg_update ~pool logdir comp Intf.State.Partial) pkg_map partial_files in
+  let pkg_map = List.fold_left (pkg_update ~pool logdir comp Intf.State.Bad) pkg_map bad_files in
+  let pkg_map = List.fold_left (pkg_update ~pool logdir comp Intf.State.NotAvailable) pkg_map notavailable_files in
+  let pkg_map = List.fold_left (pkg_update ~pool logdir comp Intf.State.InternalFailure) pkg_map internalfailure_files in
+  Lwt.return pkg_map
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) in (* TODO: Remove this horror *)
@@ -41,9 +41,8 @@ let add_pkg full_name instances acc =
   Lwt.return (Intf.Pkg.create ~full_name ~instances ~opam ~revdeps :: acc)
 
 let get_pkgs ~pool ~compilers logdir =
-  let pkg_tbl = Pkg_tbl.create 10_000 in
-  let%lwt () = Lwt_list.iter_s (fill_pkgs_from_dir ~pool pkg_tbl logdir) compilers in
-  let%lwt pkgs = Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil in
+  let%lwt pkg_map = Lwt_list.fold_left_s (fill_pkgs_from_dir ~pool logdir) Pkg_map.empty compilers in
+  let%lwt pkgs = Pkg_map.fold add_pkg pkg_map Lwt.return_nil in
   Lwt.return (List.sort Intf.Pkg.compare pkgs)
 
 let get_log _ ~logdir ~comp ~state ~pkg =

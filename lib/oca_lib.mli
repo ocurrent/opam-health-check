@@ -28,5 +28,3 @@ val default_auto_run_interval : int
 val default_processes : int
 val default_list_command : string
 val localhost : string
-
-module Hashtbl = Tbl
