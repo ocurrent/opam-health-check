@@ -48,13 +48,12 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
             let%lwt () = Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e) in
             Lwt.return (Error ())
       in
-      (* NOTE: any processes shouldn't take more than 2 hours *)
       let timeout =
-        let hours = 2 in
-        let%lwt () = Lwt_unix.sleep (float_of_int (hours * 60 * 60)) in
+        let hours = Server_configfile.job_timeout conf in
+        let%lwt () = Lwt_unix.sleep (hours *. 60.0 *. 60.0) in
         let cancel =
           let%lwt cancel_result = Cluster_api.Job.cancel job in
-          let%lwt () = Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" in
+          let%lwt () = Lwt_io.write_line stdout ("+++ Timeout!! ("^string_of_float hours^" hours) +++") in
           match cancel_result with
           | Ok () ->
               Lwt_io.write_line stdout "+++ Job cancelled +++"
@@ -67,7 +66,7 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
           Lwt_io.write_line stdout "+++ Cancellation failed +++"
         in
         let%lwt () = Lwt.pick [cancel; timeout] in
-        let%lwt () = Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_int hours^" hours).") in
+        let%lwt () = Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_float hours^" hours).") in
         Lwt.return (Error ())
       in
       Lwt.pick [timeout; proc]
@@ -115,7 +114,8 @@ let ocluster_build_str ~important ~debug ~cap ~conf ~base_obuilder ~stderr ~defa
       | None -> Lwt.fail (Failure ("Failure in ocluster: "^c)) (* TODO: Replace this with "send message to debug slack webhook" *)
       | Some v -> Lwt.return v
 
-let failure_kind logfile =
+let failure_kind conf logfile =
+  let timeout = Server_configfile.job_timeout conf in
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
     let rec lookup res =
       match%lwt Lwt_io.read_line_opt ic with
@@ -123,7 +123,7 @@ let failure_kind logfile =
       | Some "+- The following actions were aborted" -> Lwt.return `Partial
       | Some "[ERROR] Package conflict!" -> lookup `NotAvailable
       | Some "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field." -> lookup `AcceptFailures
-      | Some "+++ Timeout!! (2 hours) +++" -> Lwt.return `Timeout
+      | Some line when String.equal ("+++ Timeout!! ("^string_of_float timeout^" hours) +++") line -> Lwt.return `Timeout
       | Some line when String.prefix ~pre:"#=== ERROR while fetching sources for " line -> Lwt.return `Other
       | Some _ -> lookup res
       | None -> Lwt.return res
@@ -191,7 +191,7 @@ let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
         let%lwt () = Lwt_io.write_line stderr ("["^num^"] succeeded.") in
         Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
     | Error () ->
-        begin match%lwt failure_kind logfile with
+        begin match%lwt failure_kind conf logfile with
         | `Partial ->
             let%lwt () = Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") in
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir))
