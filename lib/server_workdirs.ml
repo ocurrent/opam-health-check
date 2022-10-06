@@ -61,7 +61,7 @@ let get_logdir_time (Logdir (_, time, _, _, _)) = time
 
 let get_files ~name ~switch (Logdir (_, _, _, _, files)) =
   let switch = Intf.Compiler.to_string switch in
-  let%lwt files = files () in
+  let%lwt files = files in
   List.filter_map (fun file ->
     match String.split_on_char '/' file with
     | [_switch; _name; ""] -> None
@@ -77,7 +77,7 @@ let notavailablefiles = get_files ~name:"not-available"
 let internalfailurefiles = get_files ~name:"internal-failure"
 
 let logdir_get_compilers (Logdir (_, _, _, _, files)) =
-  let%lwt files = files () in
+  let%lwt files = files in
   List.filter_map (fun file ->
     match String.split_on_char '/' file with
     | [switch; ""] -> Some (Intf.Compiler.from_string switch)
