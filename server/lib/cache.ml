@@ -54,8 +54,8 @@ let generate_diff old_pkgs new_pkgs =
 
 type data = {
   mutable logdirs : Server_workdirs.logdir list Lwt.t;
-  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t) list Lwt.t;
-  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list Lwt.t) list Lwt.t;
+  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t Lazy.t) list Lwt.t;
+  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list Lwt.t Lazy.t) list Lwt.t;
   mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
 }
@@ -85,10 +85,7 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   self.compilers <- begin
     let%lwt logdirs = self.logdirs in
     List.map (fun logdir ->
-      let c =
-        let%lwt () = Lwt.pause () in
-        compilers logdir
-      in
+      let c = lazy (compilers logdir) in
       (logdir, c)
     ) logdirs |>
     Lwt.return
@@ -96,11 +93,10 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   self.pkgs <- begin
     let%lwt compilers = self.compilers in
     List.map (fun (logdir, compilers) ->
-      let p =
-        let%lwt () = Lwt.pause () in
-        let%lwt compilers = compilers in
+      let p = lazy begin
+        let%lwt compilers = Lazy.force compilers in
         pkgs ~compilers logdir
-      in
+      end in
       (logdir, p)
     ) compilers |>
     Lwt.return
@@ -114,8 +110,8 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   let%lwt () = Lwt_mvar.put mvar () in
   match%lwt self.pkgs with
   | [] -> Lwt.return_unit
-  | [(_, v)] -> let%lwt _ = v in Lwt.return_unit
-  | (_, v1)::(_, v2)::_ -> let%lwt _ = v1 and _ = v2 in Lwt.return_unit
+  | [(_, v)] -> let%lwt _ = Lazy.force v in Lwt.return_unit
+  | (_, v1)::(_, v2)::_ -> let%lwt _ = Lazy.force v1 and _ = Lazy.force v2 in Lwt.return_unit
 
 let is_deprecated flag =
   String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
@@ -209,7 +205,7 @@ let get_html ~conf self query logdir =
   in
   let%lwt pkgs = self.pkgs in
   let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
-  aux ~logdir pkgs
+  aux ~logdir (Lazy.force pkgs)
 
 let get_latest_logdir self =
   let%lwt self = !self in
@@ -228,12 +224,12 @@ let get_logdirs self =
 let get_pkgs ~logdir self =
   let%lwt self = !self in
   let%lwt pkgs = self.pkgs in
-  List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs
+  Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
 
 let get_compilers ~logdir self =
   let%lwt self = !self in
   let%lwt compilers = self.compilers in
-  List.assoc ~eq:Server_workdirs.logdir_equal logdir compilers
+  Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir compilers)
 
 let get_opam self k =
   let%lwt self = !self in
@@ -271,7 +267,7 @@ let get_json_latest_packages self =
       | [] -> Lwt.return []
       | logdir::_ ->
           let%lwt pkgs = self.pkgs in
-          List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs
+          Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
     in
     let json = Json.pkgs_to_json pkgs in
     Lwt.return (Yojson.Safe.to_string json)
