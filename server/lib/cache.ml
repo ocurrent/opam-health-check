@@ -108,10 +108,11 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
     (let%lwt _ = self.compilers in Lwt.return_unit);
   ] in
   let%lwt () = Lwt_mvar.put mvar () in
-  match%lwt self.pkgs with
-  | [] -> Lwt.return_unit
-  | [(_, v)] -> let%lwt _ = Lazy.force v in Lwt.return_unit
-  | (_, v1)::(_, v2)::_ -> let%lwt _ = Lazy.force v1 and _ = Lazy.force v2 in Lwt.return_unit
+  let%lwt pkgs = self.pkgs in
+  Lwt_list.iter_s begin fun (_, p) ->
+    let%lwt _ = Lazy.force p in
+    Lwt.return_unit
+  end pkgs
 
 let is_deprecated flag =
   String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
