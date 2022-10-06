@@ -23,6 +23,7 @@ val platform_distribution : t -> string
 val platform_image : t -> string
 val ocaml_switches : t -> Intf.Switch.t list option
 val slack_webhooks : t -> Uri.t list
+val job_timeout : t -> float
 
 val set_auto_run_interval : t -> int -> unit Lwt.t
 val set_processes : t -> int -> unit Lwt.t

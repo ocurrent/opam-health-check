@@ -21,6 +21,7 @@ type t = {
   mutable platform_image : string option;
   mutable ocaml_switches : Intf.Switch.t list option;
   mutable slack_webhooks : Uri.t list option;
+  mutable job_timeout : float option;
 }
 
 let create_conf yamlfile = {
@@ -46,6 +47,7 @@ let create_conf yamlfile = {
   platform_image = None;
   ocaml_switches = None;
   slack_webhooks = None;
+  job_timeout = None;
 }
 
 let set_field ~field set = function
@@ -133,6 +135,8 @@ let set_config conf = function
   | "slack-webhooks" as field, `A webhooks ->
       let webhooks = List.map get_uri webhooks in
       set_field ~field (fun () -> conf.slack_webhooks <- Some webhooks) conf.slack_webhooks
+  | "job-timeout" as field, `Float job_timeout ->
+      set_field ~field (fun () -> conf.job_timeout <- Some job_timeout) conf.job_timeout
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
@@ -184,6 +188,7 @@ let yaml_of_conf conf =
     ];
     "ocaml-switches", Option.map_or ~default:`Null yaml_of_ocaml_switches conf.ocaml_switches;
     "slack-webhooks", Option.map_or ~default:`Null yaml_of_slack_webhooks conf.slack_webhooks;
+    "job-timeout", `Float (Option.get_exn_or "conf.job-timeout" conf.job_timeout);
   ]
 
 let set_defaults conf =
@@ -223,6 +228,8 @@ let set_defaults conf =
     conf.platform_image <- Some "ocaml/opam:debian-unstable@sha256:a13c01aab19715953d47831effb2beb0ac90dc98c13b216893db2550799e3b9f";
   if Option.is_none conf.slack_webhooks then
     conf.slack_webhooks <- Some [];
+  if Option.is_none conf.job_timeout then
+    conf.job_timeout <- Some 2.0; (* NOTE: 2 hours by default. TODO: Maybe move to 1 hour when the cluster is more stable *)
   let yaml = Yaml.to_string_exn (yaml_of_conf conf) in
   IO.with_out (Fpath.to_string conf.yamlfile) (fun out -> output_string out yaml)
 
@@ -305,3 +312,4 @@ let platform_distribution {platform_distribution; _} = Option.get_exn_or "platfo
 let platform_image {platform_image; _} = Option.get_exn_or "platform_image" platform_image
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let slack_webhooks {slack_webhooks; _} = Option.get_exn_or "slack_webhooks" slack_webhooks
+let job_timeout {job_timeout; _} = Option.get_exn_or "job_timeout" job_timeout

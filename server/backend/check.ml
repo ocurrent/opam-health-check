@@ -50,8 +50,8 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
       in
       (* NOTE: any processes shouldn't take more than 2 hours *)
       let timeout =
-        let hours = 2 in
-        let%lwt () = Lwt_unix.sleep (float_of_int (hours * 60 * 60)) in
+        let hours = Server_configfile.job_timeout conf in
+        let%lwt () = Lwt_unix.sleep (hours *. 60.0 *. 60.0) in
         let cancel =
           let%lwt cancel_result = Cluster_api.Job.cancel job in
           let%lwt () = Lwt_io.write_line stdout "+++ Timeout!! (2 hours) +++" in
@@ -67,7 +67,7 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
           Lwt_io.write_line stdout "+++ Cancellation failed +++"
         in
         let%lwt () = Lwt.pick [cancel; timeout] in
-        let%lwt () = Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_int hours^" hours).") in
+        let%lwt () = Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_float hours^" hours).") in
         Lwt.return (Error ())
       in
       Lwt.pick [timeout; proc]
