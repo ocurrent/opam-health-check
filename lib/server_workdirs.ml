@@ -16,7 +16,7 @@ let keyfile ~username workdir = keysdir workdir/username+"key"
 type logdir_files = string list
 
 type logdir_ty = Uncompressed | Compressed
-type logdir = Logdir of (logdir_ty * float * string * t * (unit -> logdir_files Lwt.t))
+type logdir = Logdir of (logdir_ty * float * string * t * logdir_files Lwt.t)
 (* TODO: differenciate logdir and tmplogdir *)
 
 let base_logdir workdir = workdir/"logs"
@@ -24,7 +24,7 @@ let base_tmpdir workdir = workdir/"tmp"
 
 let new_logdir ~compressed ~hash ~start_time workdir =
   let ty = if compressed then Compressed else Uncompressed in
-  Logdir (ty, start_time, hash, workdir, (fun () -> Lwt.return []))
+  Logdir (ty, start_time, hash, workdir, Lwt.return [])
 
 let logdirs workdir =
   let base_logdir = base_logdir workdir in
@@ -35,8 +35,8 @@ let logdirs workdir =
     | [time; hash] ->
         let logdir = base_logdir/dir in
         begin match String.split_on_char '.' hash with
-        | [hash] -> Logdir (Uncompressed, float_of_string time, hash, workdir, (fun () -> Oca_lib.scan_dir logdir))
-        | [hash; "txz"] -> Logdir (Compressed, float_of_string time, hash, workdir, (fun () -> Oca_lib.scan_tpxz_archive logdir))
+        | [hash] -> Logdir (Uncompressed, float_of_string time, hash, workdir, Oca_lib.scan_dir logdir)
+        | [hash; "txz"] -> Logdir (Compressed, float_of_string time, hash, workdir, Oca_lib.scan_tpxz_archive logdir)
         | _ -> assert false
         end
     | _ -> assert false
