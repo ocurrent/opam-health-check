@@ -109,10 +109,14 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   ] in
   let%lwt () = Lwt_mvar.put mvar () in
   let%lwt pkgs = self.pkgs in
-  Lwt_list.iter_s begin fun (_, p) ->
-    let%lwt _ = Lazy.force p in
-    Lwt.return_unit
-  end pkgs
+  let%lwt () =
+    Lwt_list.iter_s begin fun (_, p) ->
+      let%lwt _ = Lazy.force p in
+      Lwt.return_unit
+    end pkgs
+  in
+  let%lwt () = Lwt_io.write_line Lwt_io.stderr "Cache has finished pre-fetching" in
+  Lwt_io.flush Lwt_io.stderr
 
 let is_deprecated flag =
   String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
