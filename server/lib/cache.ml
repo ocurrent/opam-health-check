@@ -101,17 +101,20 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
     ) compilers |>
     Lwt.return
   end;
-  let%lwt () = Lwt.join [
-    (let%lwt _ = self.opams in Lwt.return_unit);
-    (let%lwt _ = self.revdeps in Lwt.return_unit);
-    (let%lwt _ = self.logdirs in Lwt.return_unit);
-    (let%lwt _ = self.compilers in Lwt.return_unit);
-  ] in
+  let%lwt _ = self.opams in
+  let%lwt _ = self.revdeps in
+  let%lwt _ = self.logdirs in
+  let%lwt _ = self.compilers in
   let%lwt () = Lwt_mvar.put mvar () in
-  match%lwt self.pkgs with
-  | [] -> Lwt.return_unit
-  | [(_, v)] -> let%lwt _ = Lazy.force v in Lwt.return_unit
-  | (_, v1)::(_, v2)::_ -> let%lwt _ = Lazy.force v1 and _ = Lazy.force v2 in Lwt.return_unit
+  let%lwt () =
+    let%lwt pkgs = self.pkgs in
+    Lwt_list.iter_s begin fun (_, p) ->
+      let%lwt _ = Lazy.force p in
+      Lwt.return_unit
+    end pkgs
+  in
+  let%lwt () = Lwt_io.write_line Lwt_io.stderr "Cache has finished pre-fetching" in
+  Lwt_io.flush Lwt_io.stderr
 
 let is_deprecated flag =
   String.equal (OpamTypesBase.string_of_pkg_flag flag) "deprecated"
