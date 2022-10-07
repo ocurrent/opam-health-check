@@ -101,15 +101,13 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
     ) compilers |>
     Lwt.return
   end;
-  let%lwt () = Lwt.join [
-    (let%lwt _ = self.opams in Lwt.return_unit);
-    (let%lwt _ = self.revdeps in Lwt.return_unit);
-    (let%lwt _ = self.logdirs in Lwt.return_unit);
-    (let%lwt _ = self.compilers in Lwt.return_unit);
-  ] in
+  let%lwt _ = self.opams in
+  let%lwt _ = self.revdeps in
+  let%lwt _ = self.logdirs in
+  let%lwt _ = self.compilers in
   let%lwt () = Lwt_mvar.put mvar () in
-  let%lwt pkgs = self.pkgs in
   let%lwt () =
+    let%lwt pkgs = self.pkgs in
     Lwt_list.iter_s begin fun (_, p) ->
       let%lwt _ = Lazy.force p in
       Lwt.return_unit
