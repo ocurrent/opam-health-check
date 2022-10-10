@@ -156,6 +156,7 @@ let timer_log timer c msg =
   let end_time = Unix.time () in
   let time_span = end_time -. start_time in
   let%lwt () = Lwt_io.write_line c ("Done. "^msg^" took: "^string_of_float time_span^" seconds") in
+  let%lwt () = Lwt_io.flush c in
   timer := Unix.time ();
   Lwt.return_unit
 
