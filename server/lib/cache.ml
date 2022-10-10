@@ -52,9 +52,13 @@ let generate_diff old_pkgs new_pkgs =
   List.fold_left (add_diff pkg_htbl) [] |>
   List.fold_left split_diff ([], [], [], [], [])
 
+type 'a prefetched_or_recompute =
+  | Prefetched of 'a
+  | Recompute of (unit -> 'a)
+
 type data = {
   mutable logdirs : Server_workdirs.logdir list Lwt.t;
-  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t Lazy.t) list Lwt.t;
+  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t prefetched_or_recompute) list Lwt.t;
   mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list Lwt.t Lazy.t) list Lwt.t;
   mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
@@ -93,11 +97,16 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   end;
   self.pkgs <- begin
     let%lwt compilers = self.compilers in
-    List.map (fun (logdir, compilers) ->
-      let p = lazy begin
-        let%lwt compilers = Lazy.force compilers in
-        pkgs ~compilers logdir
-      end in
+    List.mapi (fun i (logdir, compilers) ->
+      let p =
+        let aux () =
+          let%lwt compilers = Lazy.force compilers in
+          pkgs ~compilers logdir
+        in
+        match i with
+        | 0 | 1 -> Prefetched (aux ())
+        | _ -> Recompute aux
+      in
       (logdir, p)
     ) compilers |>
     Lwt.return
@@ -109,10 +118,12 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   let%lwt () = Lwt_mvar.put mvar () in
   let%lwt () =
     let%lwt pkgs = self.pkgs in
-    Lwt_list.iter_s begin fun (_, p) ->
-      let%lwt _ = Lazy.force p in
-      Lwt.return_unit
-    end pkgs
+    Lwt_list.iter_s (function
+      | _, Prefetched p ->
+          let%lwt _ = p in
+          Lwt.return_unit
+      | _, Recompute _ -> Lwt.return_unit
+    ) pkgs
   in
   Oca_lib.timer_log timer Lwt_io.stderr "Cache prefetching"
 
@@ -197,6 +208,10 @@ let get_logsearch ~query ~logdir =
 let revdeps_cmp p1 p2 =
   Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
 
+let get_or_recompute = function
+  | Prefetched p -> p
+  | Recompute f -> f ()
+
 let get_html ~conf self query logdir =
   let aux ~logdir pkgs =
     let%lwt pkgs = pkgs in
@@ -208,7 +223,7 @@ let get_html ~conf self query logdir =
   in
   let%lwt pkgs = self.pkgs in
   let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
-  aux ~logdir (Lazy.force pkgs)
+  aux ~logdir (get_or_recompute pkgs)
 
 let get_latest_logdir self =
   let%lwt self = !self in
@@ -227,7 +242,7 @@ let get_logdirs self =
 let get_pkgs ~logdir self =
   let%lwt self = !self in
   let%lwt pkgs = self.pkgs in
-  Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
+  get_or_recompute (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
 
 let get_compilers ~logdir self =
   let%lwt self = !self in
@@ -270,7 +285,7 @@ let get_json_latest_packages self =
       | [] -> Lwt.return []
       | logdir::_ ->
           let%lwt pkgs = self.pkgs in
-          Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
+          get_or_recompute (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
     in
     let json = Json.pkgs_to_json pkgs in
     Lwt.return (Yojson.Safe.to_string json)
