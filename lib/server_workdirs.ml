@@ -30,16 +30,17 @@ let logdirs workdir =
   let base_logdir = base_logdir workdir in
   let%lwt dirs = Oca_lib.get_files base_logdir in
   let dirs = List.sort (fun x y -> -String.compare x y) dirs in
-  Lwt_list.map_s (fun dir ->
+  let pool = Lwt_pool.create 32 (fun () -> Lwt.return_unit) in
+  Lwt_list.map_p (fun dir ->
     match String.split_on_char '-' dir with
     | [time; hash] ->
         let logdir = base_logdir/dir in
         begin match String.split_on_char '.' hash with
         | [hash] ->
-            let%lwt files = Oca_lib.scan_dir logdir in
+            let%lwt files = Lwt_pool.use pool (fun () -> Oca_lib.scan_dir logdir) in
             Lwt.return (Logdir (Uncompressed, float_of_string time, hash, workdir, files))
         | [hash; "txz"] ->
-            let%lwt files = Oca_lib.scan_tpxz_archive logdir in
+            let%lwt files = Lwt_pool.use pool (fun () -> Oca_lib.scan_tpxz_archive logdir) in
             Lwt.return (Logdir (Compressed, float_of_string time, hash, workdir, files))
         | _ -> assert false
         end
