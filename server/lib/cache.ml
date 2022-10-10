@@ -59,7 +59,7 @@ type 'a prefetched_or_recompute =
 type data = {
   mutable logdirs : Server_workdirs.logdir list Lwt.t;
   mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t prefetched_or_recompute) list Lwt.t;
-  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list Lwt.t Lazy.t) list Lwt.t;
+  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list) list Lwt.t;
   mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
 }
@@ -89,20 +89,16 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   self.logdirs <- logdirs ();
   self.compilers <- begin
     let%lwt logdirs = self.logdirs in
-    List.map (fun logdir ->
-      let c = lazy (compilers logdir) in
-      (logdir, c)
-    ) logdirs |>
-    Lwt.return
+    Lwt_list.map_s (fun logdir ->
+      let%lwt c = compilers logdir in
+      Lwt.return (logdir, c)
+    ) logdirs
   end;
   self.pkgs <- begin
     let%lwt compilers = self.compilers in
     List.mapi (fun i (logdir, compilers) ->
       let p =
-        let aux () =
-          let%lwt compilers = Lazy.force compilers in
-          pkgs ~compilers logdir
-        in
+        let aux () = pkgs ~compilers logdir in
         match i with
         | 0 | 1 -> Prefetched (aux ())
         | _ -> Recompute aux
@@ -247,7 +243,7 @@ let get_pkgs ~logdir self =
 let get_compilers ~logdir self =
   let%lwt self = !self in
   let%lwt compilers = self.compilers in
-  Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir compilers)
+  Lwt.return (List.assoc ~eq:Server_workdirs.logdir_equal logdir compilers)
 
 let get_opam self k =
   let%lwt self = !self in

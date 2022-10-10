@@ -3,8 +3,8 @@ type t = Server_workdirs.t
 let cache = Oca_server.Cache.create ()
 
 let get_compilers logdir =
-  let%lwt compilers = Server_workdirs.logdir_get_compilers logdir in
-  Lwt.return (List.sort Intf.Compiler.compare compilers)
+  let compilers = Server_workdirs.logdir_get_compilers logdir in
+  List.sort Intf.Compiler.compare compilers
 
 module Pkg_tbl = Hashtbl.Make (String)
 
@@ -21,17 +21,17 @@ let pkg_update ~pool pkg_tbl logdir comp state pkg =
   Pkg_tbl.replace pkg_tbl pkg instances
 
 let fill_pkgs_from_dir ~pool pkg_tbl logdir comp =
-  let%lwt good_files = Server_workdirs.goodfiles ~switch:comp logdir in
-  let%lwt partial_files = Server_workdirs.partialfiles ~switch:comp logdir in
-  let%lwt bad_files = Server_workdirs.badfiles ~switch:comp logdir in
-  let%lwt notavailable_files = Server_workdirs.notavailablefiles ~switch:comp logdir in
-  let%lwt internalfailure_files = Server_workdirs.internalfailurefiles ~switch:comp logdir in
+  let good_files = Server_workdirs.goodfiles ~switch:comp logdir in
+  let partial_files = Server_workdirs.partialfiles ~switch:comp logdir in
+  let bad_files = Server_workdirs.badfiles ~switch:comp logdir in
+  let notavailable_files = Server_workdirs.notavailablefiles ~switch:comp logdir in
+  let internalfailure_files = Server_workdirs.internalfailurefiles ~switch:comp logdir in
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.Good) good_files;
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.Partial) partial_files;
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.Bad) bad_files;
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.NotAvailable) notavailable_files;
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.InternalFailure) internalfailure_files;
-  Lwt.return ()
+  ()
 
 let add_pkg full_name instances acc =
   let pkg = Intf.Pkg.name (Intf.Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) in (* TODO: Remove this horror *)
@@ -42,7 +42,7 @@ let add_pkg full_name instances acc =
 
 let get_pkgs ~pool ~compilers logdir =
   let pkg_tbl = Pkg_tbl.create 10_000 in
-  let%lwt () = Lwt_list.iter_s (fill_pkgs_from_dir ~pool pkg_tbl logdir) compilers in
+  List.iter (fill_pkgs_from_dir ~pool pkg_tbl logdir) compilers;
   let%lwt pkgs = Pkg_tbl.fold add_pkg pkg_tbl Lwt.return_nil in
   Lwt.return (List.sort Intf.Pkg.compare pkgs)
 
@@ -103,7 +103,7 @@ let cache_clear_and_init workdir =
   Oca_server.Cache.clear_and_init
     cache
     ~pkgs:(fun ~compilers logdir -> get_pkgs ~pool ~compilers logdir)
-    ~compilers:(fun logdir -> get_compilers logdir)
+    ~compilers:(fun logdir -> Lwt.return (get_compilers logdir))
     ~logdirs:(fun () -> Server_workdirs.logdirs workdir)
     ~opams:(fun () -> get_opams workdir)
     ~revdeps:(fun () -> get_revdeps workdir)
