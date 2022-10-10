@@ -1,22 +1,22 @@
 open Intf
 
-module Opams_cache = Hashtbl.Make (String)
-module Revdeps_cache = Hashtbl.Make (String)
+module Opams_cache = Map.Make (String)
+module Revdeps_cache = Map.Make (String)
 
 type merge =
   | Old
   | New
 
-module Pkg_htbl = CCHashtbl.Make (struct
+module Pkg_htbl = Map.Make (struct
     type t = string * Compiler.t
-    let hash = Hashtbl.hash (* TODO: Improve *)
-    let equal (full_name, comp) y =
-      String.equal full_name (fst y) &&
-      Intf.Compiler.equal comp (snd y)
+    let compare (full_name, comp) y =
+      let full_name = String.compare full_name (fst y) in
+      if full_name <> 0 then full_name
+      else Intf.Compiler.compare comp (snd y)
   end)
 
 let add_diff htbl acc ((full_name, comp) as pkg) =
-  match Pkg_htbl.find_all htbl pkg with
+  match Pkg_htbl.find pkg htbl with
   | [((Old | New), Intf.State.NotAvailable)] -> acc
   | [(Old, state)] -> Intf.Pkg_diff.{full_name; comp; diff = NotAvailableAnymore state} :: acc
   | [(New, state)] -> Intf.Pkg_diff.{full_name; comp; diff = NowInstallable state} :: acc
@@ -37,18 +37,21 @@ let split_diff (bad, partial, not_available, internal_failure, good) diff =
   | {diff = NowInstallable NotAvailable; _} -> assert false
 
 let generate_diff old_pkgs new_pkgs =
-  let pkg_htbl = Pkg_htbl.create 10_000 in
-  let aux pos pkg =
+  let pkg_htbl = Pkg_htbl.empty in
+  let aux pos pkg_htbl pkg =
     Intf.Pkg.instances pkg |>
-    List.iter begin fun inst ->
+    List.fold_left begin fun pkg_htbl inst ->
       let comp = Intf.Instance.compiler inst in
       let state = Intf.Instance.state inst in
-      Pkg_htbl.add pkg_htbl (Intf.Pkg.full_name pkg, comp) (pos, state)
-    end
+      let key = (Intf.Pkg.full_name pkg, comp) in
+      match Pkg_htbl.find_opt key pkg_htbl with
+      | Some acc -> Pkg_htbl.add key ((pos, state) :: acc) pkg_htbl
+      | None -> Pkg_htbl.add key [(pos, state)] pkg_htbl
+    end pkg_htbl
   in
-  List.iter (aux Old) old_pkgs;
-  List.iter (aux New) new_pkgs;
-  List.sort_uniq ~cmp:Ord.(pair string Intf.Compiler.compare) (Pkg_htbl.keys_list pkg_htbl) |>
+  let pkg_htbl = List.fold_left (aux Old) pkg_htbl old_pkgs in
+  let pkg_htbl = List.fold_left (aux New) pkg_htbl new_pkgs in
+  List.sort_uniq ~cmp:Ord.(pair string Intf.Compiler.compare) (List.map fst (Pkg_htbl.bindings pkg_htbl)) |>
   List.fold_left (add_diff pkg_htbl) [] |>
   List.fold_left split_diff ([], [], [], [], [])
 
@@ -70,8 +73,8 @@ let create_data () = {
   logdirs = Lwt.return_nil;
   pkgs = Lwt.return_nil;
   compilers = Lwt.return_nil;
-  opams = Lwt.return (Opams_cache.create 0);
-  revdeps = Lwt.return (Revdeps_cache.create 0);
+  opams = Lwt.return Opams_cache.empty;
+  revdeps = Lwt.return Revdeps_cache.empty;
 }
 
 let create () = ref (Lwt.return (create_data ()))
@@ -248,12 +251,12 @@ let get_compilers ~logdir self =
 let get_opam self k =
   let%lwt self = !self in
   let%lwt opams = self.opams in
-  Lwt.return (Option.get_or ~default:OpamFile.OPAM.empty (Opams_cache.find_opt opams k))
+  Lwt.return (Option.get_or ~default:OpamFile.OPAM.empty (Opams_cache.find_opt k opams))
 
 let get_revdeps self k =
   let%lwt self = !self in
   let%lwt revdeps = self.revdeps in
-  Lwt.return (Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k))
+  Lwt.return (Option.get_or ~default:(-1) (Revdeps_cache.find_opt k revdeps))
 
 let get_html_diff ~conf ~old_logdir ~new_logdir self =
   let%lwt old_pkgs = get_pkgs ~logdir:old_logdir self in

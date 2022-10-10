@@ -1,5 +1,5 @@
-module Opams_cache : Hashtbl.S with type key = string
-module Revdeps_cache : Hashtbl.S with type key = string
+module Opams_cache : Map.S with type key = string
+module Revdeps_cache : Map.S with type key = string
 
 type t
 

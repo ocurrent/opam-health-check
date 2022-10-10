@@ -64,30 +64,30 @@ let get_log _ ~logdir ~comp ~state ~pkg =
 let get_opams workdir =
   let dir = Server_workdirs.opamsdir workdir in
   let%lwt files = Oca_lib.get_files dir in
-  let opams = Oca_server.Cache.Opams_cache.create 10_000 in
-  let%lwt () =
-    Lwt_list.iter_s begin fun pkg ->
+  let opams = Oca_server.Cache.Opams_cache.empty in
+  let%lwt opams =
+    Lwt_list.fold_left_s begin fun opams pkg ->
       let file = Server_workdirs.opamfile ~pkg workdir in
       let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
       let content = try OpamFile.OPAM.read_from_string content with _ -> OpamFile.OPAM.empty in
-      Lwt.return (Oca_server.Cache.Opams_cache.add opams pkg content)
-    end files
+      Lwt.return (Oca_server.Cache.Opams_cache.add pkg content opams)
+    end opams files
   in
   Lwt.return opams
 
 let get_revdeps workdir =
   let dir = Server_workdirs.revdepsdir workdir in
   let%lwt files = Oca_lib.get_files dir in
-  let revdeps = Oca_server.Cache.Revdeps_cache.create 10_000 in
-  let%lwt () =
-    Lwt_list.iter_s begin fun pkg ->
+  let revdeps = Oca_server.Cache.Revdeps_cache.empty in
+  let%lwt revdeps =
+    Lwt_list.fold_left_s begin fun revdeps pkg ->
       let file = Server_workdirs.revdepsfile ~pkg workdir in
       let%lwt content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
       let content = String.split_on_char '\n' content in
       let content = List.hd content in
       let content = int_of_string content in
-      Lwt.return (Oca_server.Cache.Revdeps_cache.add revdeps pkg content)
-    end files
+      Lwt.return (Oca_server.Cache.Revdeps_cache.add pkg content revdeps)
+    end revdeps files
   in
   Lwt.return revdeps
 
