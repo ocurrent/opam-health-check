@@ -116,8 +116,8 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   let%lwt _ = self.revdeps in
   let%lwt _ = self.logdirs in
   let%lwt _ = self.compilers in
-  let%lwt _ = self.pkgs in
   let%lwt () = Lwt_mvar.put mvar () in
+  let%lwt _ = self.pkgs in
   Oca_lib.timer_log timer Lwt_io.stderr "Cache prefetching"
 
 let is_deprecated flag =
