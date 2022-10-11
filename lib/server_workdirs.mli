@@ -15,13 +15,13 @@ val get_logdir_name : logdir -> string
 val get_logdir_hash : logdir -> string
 val get_logdir_time : logdir -> float
 
-val goodfiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
-val partialfiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
-val badfiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
-val notavailablefiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
-val internalfailurefiles : switch:Intf.Compiler.t -> logdir -> string list Lwt.t
+val goodfiles : switch:Intf.Compiler.t -> logdir -> string list
+val partialfiles : switch:Intf.Compiler.t -> logdir -> string list
+val badfiles : switch:Intf.Compiler.t -> logdir -> string list
+val notavailablefiles : switch:Intf.Compiler.t -> logdir -> string list
+val internalfailurefiles : switch:Intf.Compiler.t -> logdir -> string list
 val logdir_get_content : comp:Intf.Compiler.t -> state:Intf.State.t -> pkg:string -> logdir -> string Lwt.t
-val logdir_get_compilers : logdir -> Intf.Compiler.t list Lwt.t
+val logdir_get_compilers : logdir -> Intf.Compiler.t list
 val logdir_move : switches:Intf.Compiler.t list -> logdir -> unit Lwt.t
 val logdir_search : switch:string -> regexp:string -> logdir -> string list Lwt.t
 

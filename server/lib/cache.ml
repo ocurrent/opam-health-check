@@ -1,22 +1,22 @@
 open Intf
 
-module Opams_cache = Hashtbl.Make (String)
-module Revdeps_cache = Hashtbl.Make (String)
+module Opams_cache = Map.Make (String)
+module Revdeps_cache = Map.Make (String)
 
 type merge =
   | Old
   | New
 
-module Pkg_htbl = CCHashtbl.Make (struct
+module Pkg_htbl = Map.Make (struct
     type t = string * Compiler.t
-    let hash = Hashtbl.hash (* TODO: Improve *)
-    let equal (full_name, comp) y =
-      String.equal full_name (fst y) &&
-      Intf.Compiler.equal comp (snd y)
+    let compare (full_name, comp) y =
+      let full_name = String.compare full_name (fst y) in
+      if full_name <> 0 then full_name
+      else Intf.Compiler.compare comp (snd y)
   end)
 
 let add_diff htbl acc ((full_name, comp) as pkg) =
-  match Pkg_htbl.find_all htbl pkg with
+  match Pkg_htbl.find pkg htbl with
   | [((Old | New), Intf.State.NotAvailable)] -> acc
   | [(Old, state)] -> Intf.Pkg_diff.{full_name; comp; diff = NotAvailableAnymore state} :: acc
   | [(New, state)] -> Intf.Pkg_diff.{full_name; comp; diff = NowInstallable state} :: acc
@@ -37,25 +37,32 @@ let split_diff (bad, partial, not_available, internal_failure, good) diff =
   | {diff = NowInstallable NotAvailable; _} -> assert false
 
 let generate_diff old_pkgs new_pkgs =
-  let pkg_htbl = Pkg_htbl.create 10_000 in
-  let aux pos pkg =
+  let pkg_htbl = Pkg_htbl.empty in
+  let aux pos pkg_htbl pkg =
     Intf.Pkg.instances pkg |>
-    List.iter begin fun inst ->
+    List.fold_left begin fun pkg_htbl inst ->
       let comp = Intf.Instance.compiler inst in
       let state = Intf.Instance.state inst in
-      Pkg_htbl.add pkg_htbl (Intf.Pkg.full_name pkg, comp) (pos, state)
-    end
+      let key = (Intf.Pkg.full_name pkg, comp) in
+      match Pkg_htbl.find_opt key pkg_htbl with
+      | Some acc -> Pkg_htbl.add key ((pos, state) :: acc) pkg_htbl
+      | None -> Pkg_htbl.add key [(pos, state)] pkg_htbl
+    end pkg_htbl
   in
-  List.iter (aux Old) old_pkgs;
-  List.iter (aux New) new_pkgs;
-  List.sort_uniq ~cmp:Ord.(pair string Intf.Compiler.compare) (Pkg_htbl.keys_list pkg_htbl) |>
+  let pkg_htbl = List.fold_left (aux Old) pkg_htbl old_pkgs in
+  let pkg_htbl = List.fold_left (aux New) pkg_htbl new_pkgs in
+  List.sort_uniq ~cmp:Ord.(pair string Intf.Compiler.compare) (List.map fst (Pkg_htbl.bindings pkg_htbl)) |>
   List.fold_left (add_diff pkg_htbl) [] |>
   List.fold_left split_diff ([], [], [], [], [])
 
+type 'a prefetched_or_recompute =
+  | Prefetched of 'a
+  | Recompute of (unit -> 'a Lwt.t)
+
 type data = {
   mutable logdirs : Server_workdirs.logdir list Lwt.t;
-  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list Lwt.t Lazy.t) list Lwt.t;
-  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list Lwt.t Lazy.t) list Lwt.t;
+  mutable pkgs : (Server_workdirs.logdir * Intf.Pkg.t list prefetched_or_recompute) list Lwt.t;
+  mutable compilers : (Server_workdirs.logdir * Intf.Compiler.t list) list Lwt.t;
   mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
 }
@@ -66,8 +73,8 @@ let create_data () = {
   logdirs = Lwt.return_nil;
   pkgs = Lwt.return_nil;
   compilers = Lwt.return_nil;
-  opams = Lwt.return (Opams_cache.create 0);
-  revdeps = Lwt.return (Revdeps_cache.create 0);
+  opams = Lwt.return Opams_cache.empty;
+  revdeps = Lwt.return Revdeps_cache.empty;
 }
 
 let create () = ref (Lwt.return (create_data ()))
@@ -85,35 +92,32 @@ let clear_and_init r_self ~pkgs ~compilers ~logdirs ~opams ~revdeps =
   self.logdirs <- logdirs ();
   self.compilers <- begin
     let%lwt logdirs = self.logdirs in
-    List.map (fun logdir ->
-      let c = lazy (compilers logdir) in
-      (logdir, c)
-    ) logdirs |>
-    Lwt.return
+    Lwt_list.map_s (fun logdir ->
+      let%lwt c = compilers logdir in
+      Lwt.return (logdir, c)
+    ) logdirs
   end;
   self.pkgs <- begin
     let%lwt compilers = self.compilers in
-    List.map (fun (logdir, compilers) ->
-      let p = lazy begin
-        let%lwt compilers = Lazy.force compilers in
-        pkgs ~compilers logdir
-      end in
-      (logdir, p)
-    ) compilers |>
-    Lwt.return
+    Lwt_list.mapi_s (fun i (logdir, compilers) ->
+      let%lwt p =
+        let aux () = pkgs ~compilers logdir in
+        match i with
+        | 0 | 1 ->
+            let%lwt p = aux () in
+            Lwt.return (Prefetched p)
+        | _ ->
+            Lwt.return (Recompute aux)
+      in
+      Lwt.return (logdir, p)
+    ) compilers
   end;
   let%lwt _ = self.opams in
   let%lwt _ = self.revdeps in
   let%lwt _ = self.logdirs in
   let%lwt _ = self.compilers in
+  let%lwt _ = self.pkgs in
   let%lwt () = Lwt_mvar.put mvar () in
-  let%lwt () =
-    let%lwt pkgs = self.pkgs in
-    Lwt_list.iter_s begin fun (_, p) ->
-      let%lwt _ = Lazy.force p in
-      Lwt.return_unit
-    end pkgs
-  in
   Oca_lib.timer_log timer Lwt_io.stderr "Cache prefetching"
 
 let is_deprecated flag =
@@ -197,6 +201,10 @@ let get_logsearch ~query ~logdir =
 let revdeps_cmp p1 p2 =
   Int.neg (Int.compare (Intf.Pkg.revdeps p1) (Intf.Pkg.revdeps p2))
 
+let get_or_recompute = function
+  | Prefetched p -> Lwt.return p
+  | Recompute f -> f ()
+
 let get_html ~conf self query logdir =
   let aux ~logdir pkgs =
     let%lwt pkgs = pkgs in
@@ -208,7 +216,7 @@ let get_html ~conf self query logdir =
   in
   let%lwt pkgs = self.pkgs in
   let pkgs = List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs in
-  aux ~logdir (Lazy.force pkgs)
+  aux ~logdir (get_or_recompute pkgs)
 
 let get_latest_logdir self =
   let%lwt self = !self in
@@ -227,22 +235,22 @@ let get_logdirs self =
 let get_pkgs ~logdir self =
   let%lwt self = !self in
   let%lwt pkgs = self.pkgs in
-  Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
+  get_or_recompute (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
 
 let get_compilers ~logdir self =
   let%lwt self = !self in
   let%lwt compilers = self.compilers in
-  Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir compilers)
+  Lwt.return (List.assoc ~eq:Server_workdirs.logdir_equal logdir compilers)
 
 let get_opam self k =
   let%lwt self = !self in
   let%lwt opams = self.opams in
-  Lwt.return (Option.get_or ~default:OpamFile.OPAM.empty (Opams_cache.find_opt opams k))
+  Lwt.return (Option.get_or ~default:OpamFile.OPAM.empty (Opams_cache.find_opt k opams))
 
 let get_revdeps self k =
   let%lwt self = !self in
   let%lwt revdeps = self.revdeps in
-  Lwt.return (Option.get_or ~default:(-1) (Revdeps_cache.find_opt revdeps k))
+  Lwt.return (Option.get_or ~default:(-1) (Revdeps_cache.find_opt k revdeps))
 
 let get_html_diff ~conf ~old_logdir ~new_logdir self =
   let%lwt old_pkgs = get_pkgs ~logdir:old_logdir self in
@@ -270,7 +278,7 @@ let get_json_latest_packages self =
       | [] -> Lwt.return []
       | logdir::_ ->
           let%lwt pkgs = self.pkgs in
-          Lazy.force (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
+          get_or_recompute (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
     in
     let json = Json.pkgs_to_json pkgs in
     Lwt.return (Yojson.Safe.to_string json)
