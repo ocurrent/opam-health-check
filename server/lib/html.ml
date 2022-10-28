@@ -1,5 +1,15 @@
 open Intf
 
+(* TODO: Remove this hack? *)
+module Tyxml = struct
+  module Html = struct
+    include Tyxml.Html
+
+    let head ?a title meta =
+      head ?a title (style [Unsafe.data "a { color: blue; }"] :: meta)
+  end
+end
+
 type query = {
   available_compilers : Compiler.t list;
   compilers : Compiler.t list;
