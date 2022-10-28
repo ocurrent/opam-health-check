@@ -114,13 +114,20 @@ let ocluster_build_str ~important ~debug ~cap ~conf ~base_obuilder ~stderr ~defa
       | None -> Lwt.fail (Failure ("Failure in ocluster: "^c)) (* TODO: Replace this with "send message to debug slack webhook" *)
       | Some v -> Lwt.return v
 
-let failure_kind conf logfile =
+let failure_kind conf ~pkg logfile =
+  let pkgname, pkgversion = match Astring.String.cut ~sep:"." pkg with
+    | Some x -> x
+    | None -> Fmt.failwith "Package %S could not be parsed" pkg
+  in
   let timeout = Server_configfile.job_timeout conf in
   Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
     let rec lookup res =
       match%lwt Lwt_io.read_line_opt ic with
       | Some "+- The following actions failed" -> lookup `Failure
       | Some "+- The following actions were aborted" -> Lwt.return `Partial
+      | Some line when String.equal ("[ERROR] No package named "^pkgname^" found.") line ||
+                       String.equal ("[ERROR] Package "^pkgname^" has no version "^pkgversion^".") line ->
+          lookup `NotAvailable
       | Some "[ERROR] Package conflict!" -> lookup `NotAvailable
       | Some "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field." -> lookup `AcceptFailures
       | Some line when String.equal ("+++ Timeout!! ("^string_of_float timeout^" hours) +++") line -> Lwt.return `Timeout
@@ -191,7 +198,7 @@ let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
         let%lwt () = Lwt_io.write_line stderr ("["^num^"] succeeded.") in
         Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
     | Error () ->
-        begin match%lwt failure_kind conf logfile with
+        begin match%lwt failure_kind conf ~pkg logfile with
         | `Partial ->
             let%lwt () = Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") in
             Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir))
