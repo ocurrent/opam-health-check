@@ -237,7 +237,7 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
   stage ~from begin
-    [ user ~uid:1000 ~gid:1000;
+    [ user_unix ~uid:1000 ~gid:1000;
       env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
       env "OPAMEXTERNALSOLVER" "builtin-0install";
