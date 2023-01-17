@@ -107,7 +107,7 @@ let set_ocaml_switch_cmd ~confdir ~conffile =
   Cmd.v info term
 
 let rm_ocaml_switch ~confdir ~conffile profilename name =
-  send_msg ~profilename ~confdir ~conffile ["rm-ocaml-switches";name]
+  send_msg ~profilename ~confdir ~conffile ["rm-ocaml-switch";name]
 
 let rm_ocaml_switch_cmd ~confdir ~conffile =
   let term =
