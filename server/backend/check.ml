@@ -262,10 +262,13 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       user;
       env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
-      env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
+      env "OPAMEXTERNALSOLVER" "builtin-0install";
     ] @ (
-      if windows then [] else [ run "sudo ln -f /usr/bin/opam-dev /usr/bin/opam" ]
+      if windows then
+        [ (* Override fdopen's opam with opam-dev *)
+          run {|mklink C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-dev.exe|}; ]
+      else [ run "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"; ]
     ) @ [
       run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
       run "rm -rf ~/.opam && %s init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository" opam;
@@ -279,7 +282,7 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
         ]
       ) extra_repos
     ) @ [
-      run ~cache ~network "%s switch create --repositories=%sdefault '%s' '%s'"
+      run ~cache ~network "%s switch create --repositories=%sdefault %S %S"
         opam
         (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
         (Intf.Compiler.to_string (Intf.Switch.name switch))
