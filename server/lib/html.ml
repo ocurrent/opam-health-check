@@ -92,20 +92,21 @@ let get_opam_repository_commit_url ~hash ~content conf =
 
 let get_run_info pkgs =
   List.fold_left (fun (number_pkgs, number_hard_fail, number_soft_fail) pkg ->
-    let first_fail =
-      List.find_map (fun instance -> match Instance.state instance with
-        | State.Good -> None
-        | State.Partial -> Some `Soft
-        | State.Bad -> Some `Hard
-        | State.NotAvailable -> None
-        | State.InternalFailure -> None
-      ) (Intf.Pkg.instances pkg)
+    let (hard_fail, soft_fail) =
+      List.fold_left (fun ((hard_fail, soft_fail) as unchanged) instance ->
+        match Instance.state instance with
+        | State.Good -> unchanged
+        | State.Partial -> (hard_fail, true)
+        | State.Bad -> (true, soft_fail)
+        | State.NotAvailable -> unchanged
+        | State.InternalFailure -> unchanged
+      ) (false, false) (Intf.Pkg.instances pkg)
     in
     let (number_hard_fail, number_soft_fail) =
-      match first_fail with
-      | None -> (number_hard_fail, number_soft_fail)
-      | Some `Soft -> (number_hard_fail, succ number_soft_fail)
-      | Some `Hard -> (succ number_hard_fail, number_soft_fail)
+      match (hard_fail, soft_fail) with
+      | false, false -> (number_hard_fail, number_soft_fail)
+      | false, true -> (number_hard_fail, succ number_soft_fail)
+      | true, _ -> (succ number_hard_fail, number_soft_fail)
     in
     (succ number_pkgs, number_hard_fail, number_soft_fail)
   ) (0, 0, 0) pkgs
