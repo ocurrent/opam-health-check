@@ -24,10 +24,10 @@ end
 module Switch : sig
   type t
 
-  val create : name:string -> switch:string -> t
+  val create : name:string -> args:string -> t
 
   val name : t -> Compiler.t
-  val switch : t -> string
+  val args : t -> string
 
   val equal : t -> t -> bool
   val compare : t -> t -> int
