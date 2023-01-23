@@ -90,16 +90,19 @@ let get_opam_repository_commit_url ~hash ~content conf =
   let open Tyxml.Html in
   a ~a:[a_href (github_url conf^"/commit/"^hash)] [content]
 
-let get_run_info pkgs =
+let get_run_info ~compilers pkgs =
   List.fold_left (fun (number_pkgs, number_hard_fail, number_soft_fail) pkg ->
     let (hard_fail, soft_fail) =
       List.fold_left (fun ((hard_fail, soft_fail) as unchanged) instance ->
-        match Instance.state instance with
-        | State.Good -> unchanged
-        | State.Partial -> (hard_fail, true)
-        | State.Bad -> (true, soft_fail)
-        | State.NotAvailable -> unchanged
-        | State.InternalFailure -> unchanged
+        if List.mem ~eq:Compiler.equal (Instance.compiler instance) compilers then
+          match Instance.state instance with
+          | State.Good -> unchanged
+          | State.Partial -> (hard_fail, true)
+          | State.Bad -> (true, soft_fail)
+          | State.NotAvailable -> unchanged
+          | State.InternalFailure -> unchanged
+        else
+          unchanged
       ) (false, false) (Intf.Pkg.instances pkg)
     in
     let (number_hard_fail, number_soft_fail) =
@@ -111,7 +114,7 @@ let get_run_info pkgs =
     (succ number_pkgs, number_hard_fail, number_soft_fail)
   ) (0, 0, 0) pkgs
 
-let run_info ~logdir ~pkgs conf =
+let run_info ~logdir ~compilers ~pkgs conf =
   let open Tyxml.Html in
   let opam_repo_uri =
     let content = b [txt "🔗 opam-repository commit hash"] in
@@ -121,7 +124,7 @@ let run_info ~logdir ~pkgs conf =
   let date = Server_workdirs.get_logdir_time logdir in
   let date = date_to_string date in
   let legend = legend [b [txt "About this run:"]] in
-  let number_pkgs, number_hard_fail, number_soft_fail = get_run_info pkgs in
+  let number_pkgs, number_hard_fail, number_soft_fail = get_run_info ~compilers pkgs in
   fieldset ~legend ~a:[a_style "float: right;"] [
     div ~a:[a_style "text-align: right;"] [opam_repo_uri];
     p ~a:[a_style "text-align: right;"] [
@@ -134,13 +137,13 @@ let run_info ~logdir ~pkgs conf =
     p ~a:[a_style "text-align: right;"] [i [small [txt ("Run made on the "^date)]]];
   ]
 
-let gen_table_form ~logdir ~pkgs ~conf l =
+let gen_table_form ~logdir ~compilers ~pkgs ~conf l =
   let open Tyxml.Html in
   let aux (txt, elts) = tr [td txt; td elts] in
   let legend = legend [b [txt "Filter form:"]] in
   form [fieldset ~legend [table [tr [
     td ~a:[a_style "width: 100%;"] [table (List.map aux l)];
-    td [result_legend; run_info ~logdir ~pkgs conf]
+    td [result_legend; run_info ~logdir ~compilers ~pkgs conf]
   ]]]]
 
 let comp_checkboxes ~name checked query =
@@ -340,7 +343,7 @@ let get_html ~logdir ~conf query pkgs =
   end query.compilers in
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
   let submit_form = input ~a:[a_input_type `Submit; a_value "Submit"] () in
-  let filter_form = gen_table_form ~pkgs:pkgs' ~logdir ~conf [
+  let filter_form = gen_table_form ~compilers:query.compilers ~pkgs:pkgs' ~logdir ~conf [
     (compilers_text, [compilers]);
     (show_available_text, [show_available]);
     (show_only_text, [show_only]);
