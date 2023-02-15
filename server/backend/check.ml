@@ -257,6 +257,22 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let open Obuilder_spec in
   let user = if windows then user_windows ~name:"ContainerAdministrator"
              else user_unix ~uid:1000 ~gid:1000 in
+  let sandbox = if windows then "nosandbox" else "sandbox" in
+  let run_sh ?network fmt =
+    (* Commands to be run in a POSIX shell, even on Windows. *)
+    if windows then
+      Printf.ksprintf (run ?network {|C:\cygwin64\bin\bash.exe --login -c "%s"|}) fmt
+    else
+      run ?network fmt
+  in
+  let with_sh op =
+    if windows then
+      [ shell [{|C:\cygwin64\bin\bash.exe|}; "--login"; "-c"];
+        op;
+        shell [{|cmd|}; "/S"; "/C"]; ]
+    else
+      [ op ]
+  in
   stage ~from begin
     [
       user;
@@ -268,19 +284,18 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       if windows then
         [ (* Override fdopen's opam with opam-dev *)
           run {|copy /v /b C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-2.0.exe && del C:\cygwin64\bin\opam.exe && mklink C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-dev.exe|};
-          shell ["/cygwin64/bin/bash.exe"; "--login"; "-c"];
         ]
       else [ run "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"; ]
-    ) @ [
-      run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
-      run "rm -rf ~/.opam && %s init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository" opam;
-    ] @
+    ) @ [ run ~network "rm -rf ~/opam-repository && git clone '%s' ~/opam-repository && git -C ~/opam-repository checkout %s" (Intf.Github.url opam_repo) opam_repo_commit; ]
+     @
+       with_sh (run "rm -rf ~/.opam && %s init -ya --bare --config ~/.opamrc-%s ~/opam-repository" opam sandbox)
+     @
     List.flatten (
       List.map (fun (repo, hash) ->
         let name = Filename.quote (Intf.Repository.name repo) in
         let url = Intf.Github.url (Intf.Repository.github repo) in
-        [ run ~network "git clone -q '%s' ~/%s && git -C ~/%s checkout -q %s" url name name hash;
-          run "%s repository add --dont-select %s ~/%s" opam name name;
+        [ run_sh ~network "git clone -q '%s' ~/%s && git -C ~/%s checkout -q %s" url name name hash;
+          run_sh "%s repository add --dont-select %s ~/%s" opam name name;
         ]
       ) extra_repos
     ) @ [
@@ -293,7 +308,6 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       if windows then
         [
           run ~network {|C:\cygwin-setup-x86_64.exe --quiet-mode --no-shortcuts --no-startmenu --no-desktop --only-site --local-package-dir C:\TEMP\cache --root=C:\cygwin64 --site https://mirrors.kernel.org/sourceware/cygwin/ --upgrade-also|};
-          shell ["cmd"; "/S"; "/C"];
         ]
       else
         ([ run ~network "opam update --depexts"; ]
