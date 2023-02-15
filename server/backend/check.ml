@@ -267,7 +267,9 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
     ] @ (
       if windows then
         [ (* Override fdopen's opam with opam-dev *)
-          run {|mklink C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-dev.exe|}; ]
+          run {|copy /v /b C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-2.0.exe && del C:\cygwin64\bin\opam.exe && mklink C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-dev.exe|};
+          shell ["/cygwin64/bin/bash.exe"; "--login"; "-c"];
+        ]
       else [ run "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"; ]
     ) @ [
       run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
@@ -289,9 +291,10 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
         (Intf.Switch.switch switch);
     ] @ (
       if windows then
-        [ shell ["cmd"; "/S"; "/C"];
+        [
           run ~network {|C:\cygwin-setup-x86_64.exe --quiet-mode --no-shortcuts --no-startmenu --no-desktop --only-site --local-package-dir C:\TEMP\cache --root=C:\cygwin64 --site https://mirrors.kernel.org/sourceware/cygwin/ --upgrade-also|};
-          shell ["/cygwin64/bin/bash.exe"; "--login"; "-c"]; ]
+          shell ["cmd"; "/S"; "/C"];
+        ]
       else
         ([ run ~network "opam update --depexts"; ]
         (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
