@@ -240,6 +240,13 @@ let () =
     flush stderr;
   end
 
+(* From dockerfile-opam. *)
+let sanitize_reg_path =
+  Obuilder_spec.run
+    {|for /f "tokens=1,2,*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /V Path ^| findstr /r "\\$"') do `
+     for /f "delims=" %%l in ('cmd /v:on /c "set v=%%c&& echo !v:~0,-1!"') do `
+     reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /V Path /t REG_EXPAND_SZ /f /d "%%l"|}
+
 let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
@@ -265,14 +272,6 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
     else
       run ?network fmt
   in
-  let with_sh op =
-    if windows then
-      [ shell [{|C:\cygwin64\bin\bash.exe|}; "--login"; "-c"];
-        op;
-        shell [{|cmd|}; "/S"; "/C"]; ]
-    else
-      [ op ]
-  in
   stage ~from begin
     [
       user;
@@ -282,13 +281,13 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       env "OPAMEXTERNALSOLVER" "builtin-0install";
     ] @ (
       if windows then
-        [ (* Override fdopen's opam with opam-dev *)
+        [ sanitize_reg_path;
+          (* Override fdopen's opam with opam-dev *)
           run {|copy /v /b C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-2.0.exe && del C:\cygwin64\bin\opam.exe && mklink C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-dev.exe|};
         ]
       else [ run "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"; ]
-    ) @ [ run ~network "rm -rf ~/opam-repository && git clone '%s' ~/opam-repository && git -C ~/opam-repository checkout %s" (Intf.Github.url opam_repo) opam_repo_commit; ]
-     @
-       with_sh (run "rm -rf ~/.opam && %s init -ya --bare --config ~/.opamrc-%s ~/opam-repository" opam sandbox)
+    ) @ [ run_sh ~network "rm -rf ~/opam-repository && git clone '%s' ~/opam-repository && git -C ~/opam-repository checkout %s" (Intf.Github.url opam_repo) opam_repo_commit;
+          run_sh "rm -rf ~/.opam && %s init -ya --bare --config ~/.opamrc-%s ~/opam-repository" opam sandbox; ]
      @
     List.flatten (
       List.map (fun (repo, hash) ->
