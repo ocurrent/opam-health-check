@@ -236,7 +236,7 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let is_macos = String.equal os "macos" in
   let from = match os  with
     | "linux" -> "ocaml/opam:"^Server_configfile.platform_distribution conf
-    | "macos" -> "macos-"^Server_configfile.platform_distribution conf^"-ocaml-4.13" (*TODO: Will macOS cope with creating a new switch... *)
+    | "macos" -> "macos-"^Server_configfile.platform_distribution conf^"-ocaml-5.0" (*TODO: Will macOS cope with creating a new switch... *)
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
   let prefix = if is_macos then "~/local" else "/usr" in
