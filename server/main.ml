@@ -1,12 +1,6 @@
 module Server = Oca_server.Server.Make (Backend)
 
-let setup_log style_renderer level =
-  Fmt_tty.setup_std_outputs ?style_renderer ();
-  Logs.set_level level;
-  Logs.set_reporter (Logs_fmt.reporter ());
-  ()
-
-let main () debug workdir cap_file = Lwt_main.run (Server.main ~debug ~cap_file ~workdir)
+let main debug workdir cap_file = Lwt_main.run (Server.main ~debug ~cap_file ~workdir)
 
 (* Command-line parsing *)
 
@@ -16,10 +10,6 @@ module Term = Cmdliner.Term
 
 let ( $ ) = Term.( $ )
 let ( & ) = Arg.( & )
-
-let setup_log =
-  let docs = Cmdliner.Manpage.s_common_options in
-  Term.const setup_log $ Fmt_cli.style_renderer ~docs () $ Logs_cli.level ~docs ()
 
 let debug = Arg.value & Arg.flag & Arg.info ["debug"]
 
@@ -34,7 +24,7 @@ let connect_addr =
     ~docv:"ADDR"
     ["c"; "connect"]
 
-let term = Term.const main $ setup_log $ debug $ workdir $ connect_addr
+let term = Term.const main $ debug $ workdir $ connect_addr
 
 let info =
   Cmd.info
