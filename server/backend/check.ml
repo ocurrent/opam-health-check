@@ -51,10 +51,11 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
         in
         let%lwt () = tail job 0L in
         match%lwt Cluster_api.Job.result job with
-        | Ok _ ->
+        | Ok s ->
+            let%lwt () = Lwt_io.write stdout (Fmt.str "HERE %s" s) in
             Lwt.return (Ok ())
         | Error (`Capnp e) ->
-            let%lwt () = Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e) in
+            let%lwt () = Lwt_io.write stderr (Fmt.str "%a" Capnp_rpc.Error.pp e) in
             Lwt.return (Error ())
       in
       let timeout =
