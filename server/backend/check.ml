@@ -240,13 +240,6 @@ let () =
     flush stderr;
   end
 
-(* From dockerfile-opam. *)
-let sanitize_reg_path =
-  Obuilder_spec.run
-    {|for /f "tokens=1,2,*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /V Path ^| findstr /r "\\$"') do `
-     for /f "delims=" %%l in ('cmd /v:on /c "set v=%%c&& echo !v:~0,-1!"') do `
-     reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /V Path /t REG_EXPAND_SZ /f /d "%%l"|}
-
 let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
@@ -266,11 +259,10 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
              else user_unix ~uid:1000 ~gid:1000 in
   let sandbox = if windows then "nosandbox" else "sandbox" in
   let run_sh ?network fmt =
-    (* Commands to be run in a POSIX shell, even on Windows. *)
-    if windows then
       Printf.ksprintf (run ?network {|C:\cygwin64\bin\bash.exe --login -c "%s"|}) fmt
-    else
-      run ?network fmt
+  in
+  let run_powershell ?network ?(escape = Fun.id) fmt =
+    Printf.ksprintf (fun s -> run ?network {|powershell -Command "%s"|} (escape s)) fmt
   in
   stage ~from begin
     [
@@ -281,14 +273,18 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       env "OPAMEXTERNALSOLVER" "builtin-0install";
     ] @ (
       if windows then
-        [ sanitize_reg_path;
-          (* Override fdopen's opam with opam-dev *)
+        let home = {|C:\cygwin64\home\opam|} in
+        [ (* Override fdopen's opam with opam-dev *)
           run {|copy /v /b C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-2.0.exe && del C:\cygwin64\bin\opam.exe && mklink C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-dev.exe|};
-        ]
-      else [ run "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"; ]
-    ) @ [ run_sh ~network "rm -rf ~/opam-repository && git clone '%s' ~/opam-repository && git -C ~/opam-repository checkout %s" (Intf.Github.url opam_repo) opam_repo_commit;
-          run_sh "rm -rf ~/.opam && %s init -ya --bare --config ~/.opamrc-%s ~/opam-repository" opam sandbox; ]
-     @
+          run_powershell {|Remove -Recurse -Force %s\opam-repository && & git clone '%s' %s\opam-repository && & git -C %s\opam-repository checkout %s|}
+            home (Intf.Github.url opam_repo) home home opam_repo_commit;
+          run {|Remove -Recurse -Force %s\.opam && & %s init -ya --bare --config %s\.opamrc-%s %s\opam-repository|}
+            home opam home sandbox home;
+        ] else [
+          run "sudo ln -f /usr/bin/opam-dev /usr/bin/opam";
+          run ~network "rm -rf ~/opam-repository && git clone '%s' ~/opam-repository && git -C ~/opam-repository checkout %s" (Intf.Github.url opam_repo) opam_repo_commit;
+          run "rm -rf ~/.opam && %s init -ya --bare --config ~/.opamrc-%s ~/opam-repository" opam sandbox;
+    ]) @
     List.flatten (
       List.map (fun (repo, hash) ->
         let name = Filename.quote (Intf.Repository.name repo) in
