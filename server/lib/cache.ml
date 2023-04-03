@@ -284,3 +284,15 @@ let get_json_latest_packages self =
     Lwt.return (Yojson.Safe.to_string json)
   in
   Lwt.return json
+
+  let get_json_run_packages self logdir =
+    let%lwt self = !self in
+    let%lwt json =
+      let%lwt pkgs =
+        let%lwt pkgs = self.pkgs in
+        get_or_recompute (List.assoc ~eq:Server_workdirs.logdir_equal logdir pkgs)
+      in
+      let json = Json.pkgs_to_json pkgs in
+      Lwt.return (Yojson.Safe.to_string json)
+    in
+    Lwt.return json
