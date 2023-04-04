@@ -429,18 +429,18 @@ let trigger_slack_webhooks ~stderr ~old_logdir ~new_logdir conf =
   Lwt_list.iter_s begin fun webhook ->
     let%lwt () = Lwt_io.write_line stderr ("Triggering Slack webhook "^Uri.to_string webhook) in
     match%lwt
-      Http_lwt_client.one_request
+      Http_lwt_client.request
         ~config:(`HTTP_1_1 Httpaf.Config.default) (* TODO: Remove this when https://github.com/roburio/http-lwt-client/issues/7 is fixed *)
         ~meth:`POST
         ~headers:[("Content-type", "application/json")]
         ~body
         (Uri.to_string webhook)
+        (fun _resp acc x -> Lwt.return (acc ^ x)) ""
     with
     | Ok ({Http_lwt_client.status = `OK; _}, _body) -> Lwt.return_unit
     | Ok (resp, body) ->
         let resp = Format.sprintf "%a" Http_lwt_client.pp_response resp in
-        let body = match body with None -> "" | Some body -> "\nBody: "^body in
-        Lwt_io.write_line stderr ("Webhook returned failure: "^resp^body)
+        Lwt_io.write_line stderr (fmt "Webhook returned failure: %s\nBody: %s" resp body)
     | Error (`Msg msg) -> Lwt_io.write_line stderr ("Webhook failed with: "^msg)
   end
 

@@ -15,12 +15,14 @@ depends: [
   "cohttp"
   "cohttp-lwt"
   "cohttp-lwt-unix"
-  "http-lwt-client"
+  "conduit-lwt-unix" {>= "6.2.0"}
+  "http-lwt-client" {>= "0.2.0"}
   "containers" {>= "3.4"}
   "opam-core"
   "opam-format"
-  "mirage-crypto-pk" {>= "0.7.0"}
-  "mirage-crypto-rng" {>= "0.7.0"}
+  "mirage-crypto-pk" {>= "0.11.0"}
+  "mirage-crypto-rng" {>= "0.11.0"}
+  "mirage-crypto-rng-lwt" {>= "0.11.0"}
   "cmdliner" {>= "1.1.0"}
   "fpath"
   "fmt" {>= "0.8.7"}
@@ -45,7 +47,7 @@ depends: [
   "uri"
   "docker_hub" {>= "0.1.0"}
   "memtrace"
-  "tls" {>= "0.12.0"} # activate conduit with TLS for slack webhooks
+  "tls-lwt" {>= "0.16.0"} # activate conduit with TLS for slack webhooks
   "conf-libev" # Required for lwt to avoid hitting the limits of select(2)
   "conf-pixz" # TODO: Make it a library
   # TODO: Add conf-ugrep
