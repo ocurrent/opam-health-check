@@ -15,12 +15,12 @@ depends: [
   "cohttp"
   "cohttp-lwt"
   "cohttp-lwt-unix"
-  "http-lwt-client"
+  "http-lwt-client" { <= "0.0.8" }
   "containers" {>= "3.4"}
   "opam-core"
   "opam-format"
   "mirage-crypto-pk" {>= "0.7.0"}
-  "mirage-crypto-rng" {>= "0.7.0"}
+  "mirage-crypto-rng" {>= "0.7.0" & <= "0.10.7" }
   "cmdliner" {>= "1.1.0"}
   "fpath"
   "fmt" {>= "0.8.7"}
