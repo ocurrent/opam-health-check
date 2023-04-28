@@ -186,6 +186,18 @@ exit $res
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
+    let already_finished =
+      let switch = Intf.Switch.name switch in
+      let%lwt good = Lwt_unix.file_exists (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir)) in
+      let%lwt partial = Lwt_unix.file_exists (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir)) in
+      let%lwt bad = Lwt_unix.file_exists (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch logdir)) in
+      let%lwt unavailable = Lwt_unix.file_exists (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch logdir)) in
+      let%lwt internal = Lwt_unix.file_exists (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch logdir)) in
+      Lwt.return (good || partial || bad || unavailable || internal)
+    in
+    if%lwt already_finished then
+      Lwt_io.write_line stderr ("["^num^"] Skipping "^pkg^" on "^Intf.Switch.switch switch^"…")
+    else
     let%lwt () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"…") in
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
@@ -527,13 +539,14 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
     failwith "operation locked";
   run_locked := true;
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
-    let start_time = Unix.time () in
+    let start_time = float_of_string "" in
     with_stderr ~start_time workdir begin fun ~stderr ->
       try%lwt
         let timer = Oca_lib.timer_start () in
         let%lwt () = update_docker_image conf in
         let%lwt cap = get_cap ~stderr ~cap_file in
-        let%lwt (opam_repo, opam_repo_commit) = get_commit_hash_default conf in
+        let%lwt (opam_repo, _opam_repo_commit) = get_commit_hash_default conf in
+        let opam_repo_commit = "" in
         let%lwt extra_repos = get_commit_hash_extra_repos conf in
         let switches' = switches in
         let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
