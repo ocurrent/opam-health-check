@@ -65,3 +65,42 @@ give the key to your new user. She now just need to do the same procedure but wi
 Side note: every user have the same rights and can add new users.
 
 Enjoy.
+
+## Troubleshooting
+
+**My `config.yaml` file is getting reset when I edit it!**
+
+You should make sure no instance of `opam-health-serve` is running before editing an instance configuration file.
+
+**I started `opam-health-serve`, ran `opam-health-check run`, and nothing seems to be happening.**
+
+When using a remote server to perform the actual builds, depending on the cluster availability, it might be a while before logs start appearing on your local machine. Look out for them in `<instance dir>/tmp/<run ID>/logs` and be patient.
+
+**Can I use opam-health-check to build packages on a custom compiler switch?**
+
+Sure, to do that, you need to fork [opam-repository](https://github.com/ocaml/opam-repository/), add your compiler switch to it, and point to your forked repository in the `extra-repositories` field of the `config.yaml` file. E.g.:
+
+```
+name: default
+port: 8080
+# [...]
+default-repository: ocaml/opam-repository
+extra-repositories:
+- alpha:
+    github: kit-ty-kate/opam-alpha-repository
+    for-switches:
+    - 5.0+more_volatile
+- more-volatile-switch:
+    github: OlivierNicole/opam-repository#more_volatile_switch
+    for-switches:
+    - 5.0+more_volatile
+with-test: false
+with-lower-bound: false
+list-command: opam list --available --installable --short --all-versions
+# [...]
+ocaml-switches:
+- "4.14": 4.14.0
+- "5.0": 5.0.0
+- "5.0+more_volatile": ocaml-variants.5.0.0+more_volatile
+slack-webhooks: []
+```
