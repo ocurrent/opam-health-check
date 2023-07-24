@@ -1,11 +1,11 @@
 opam-version: "2.0"
 version: "0.1~"
 license: "MIT"
-maintainer: "Kate <kit.ty.kate@disroot.org>"
+maintainer: ["Kate <kit.ty.kate@disroot.org>" "Tim McGilchrist <timmcgil@gmail.com>"]
 authors: "Kate <kit.ty.kate@disroot.org>"
-homepage: "https://github.com/kit-ty-kate/opam-health-check"
-dev-repo: "git://github.com/kit-ty-kate/opam-health-check.git"
-bug-reports: "https://github.com/kit-ty-kate/opam-health-check/issues"
+homepage: "https://github.com/ocurrent/opam-health-check"
+dev-repo: "git://github.com/ocurrent/opam-health-check.git"
+bug-reports: "https://github.com/ocurrent/opam-health-check/issues"
 tags: ["opam" "check"]
 build: ["dune" "build" "-p" name "-j" jobs]
 depends: [
