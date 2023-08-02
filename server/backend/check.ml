@@ -1,12 +1,19 @@
 let fmt = Printf.sprintf
 
 let cache ~conf =
-  let opam_cache = Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache" in
+  let os = Server_configfile.platform_os conf in
+  let opam_cache = match os with
+    | "linux" -> Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache"
+    | "macos" -> Obuilder_spec.Cache.v "opam-archives" ~target:"/Users/mac1000/.opam/download-cache"
+    | os -> failwith ("Opam cache not supported on '" ^ os) (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *) in
+  let brew_cache = match os with
+    | "macos" -> Obuilder_spec.Cache.v "homebrew" ~target:"/Users/mac1000/Library/Caches/Homebrew"
+    | os -> failwith ("Brew cache not supported on '" ^ os) (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *) in
   if Server_configfile.enable_dune_cache conf then
     let dune_cache = Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune" in
     [opam_cache; dune_cache]
   else
-    [opam_cache]
+    [opam_cache; brew_cache]
 
 let network = ["host"]
 
