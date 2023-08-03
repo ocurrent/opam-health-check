@@ -74,7 +74,7 @@ You should make sure no instance of `opam-health-serve` is running before editin
 
 **I started `opam-health-serve`, ran `opam-health-check run`, and nothing seems to be happening.**
 
-When using a remote server to perform the actual builds, depending on the cluster availability, it might be a while before logs start appearing on your local machine. Look out for them in `<instance dir>/tmp/<run ID>/logs` and be patient.
+Overall this takes a while. You can run `opam-health-check log` to follow the progress. Once it's done, you can visit `http://localhost:port` (where `port` is set in your `config.yaml`) to visualize the results.
 
 **Can I use opam-health-check to build packages on a custom compiler switch?**
 
