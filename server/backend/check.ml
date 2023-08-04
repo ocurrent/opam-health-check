@@ -3,17 +3,18 @@ let fmt = Printf.sprintf
 let cache ~conf =
   let os = Server_configfile.platform_os conf in
   let opam_cache = match os with
-    | "linux" -> Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache"
-    | "macos" -> Obuilder_spec.Cache.v "opam-archives" ~target:"/Users/mac1000/.opam/download-cache"
+    | "linux"
+    | "freebsd" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache")
+    | "macos" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/Users/mac1000/.opam/download-cache")
     | os -> failwith ("Opam cache not supported on '" ^ os) (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *) in
   let brew_cache = match os with
-    | "macos" -> Obuilder_spec.Cache.v "homebrew" ~target:"/Users/mac1000/Library/Caches/Homebrew"
-    | os -> failwith ("Brew cache not supported on '" ^ os) (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *) in
-  if Server_configfile.enable_dune_cache conf then
-    let dune_cache = Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune" in
-    [opam_cache; dune_cache]
-  else
-    [opam_cache; brew_cache]
+    | "macos" -> Some (Obuilder_spec.Cache.v "homebrew" ~target:"/Users/mac1000/Library/Caches/Homebrew")
+    | _ -> None in
+  let dune_cache =
+    if Server_configfile.enable_dune_cache conf then
+      Some (Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune")
+    else None in
+  List.filter_map (fun x -> x) [opam_cache; brew_cache; dune_cache]
 
 let network = ["host"]
 
@@ -241,21 +242,28 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let cache = cache ~conf in
   let os = Server_configfile.platform_os conf in
   let is_macos = String.equal os "macos" in
+  let is_freebsd = String.equal os "freebsd" in
   let from = match os  with
     | "linux" -> "ocaml/opam:"^Server_configfile.platform_distribution conf
+    | "freebsd" -> (Server_configfile.platform_distribution conf)^"-ocaml-4.14"
     | "macos" -> "macos-"^Server_configfile.platform_distribution conf^"-ocaml-5.0" (*TODO: Will macOS cope with creating a new switch... *)
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
-  let prefix = if is_macos then "~/local" else "/usr" in
+  let opam = match os with
+    | "linux" -> "sudo ln -f /usr/bin/opam-2.1 /usr/bin/opam"
+    | "freebsd" -> "sudo ln -f /usr/local/bin/opam-2.1 /usr/local/bin/opam"
+    | "macos" -> "ln -f ~/local/bin/opam-2.1 ~/local/usr/bin/opam"
+    | _ -> ""
+  in
   stage ~from begin
     [ user_unix ~uid:1000 ~gid:1000;
       env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
-      run "%sln -f %s/bin/opam-2.1 %s/bin/opam" (if is_macos then "" else "sudo ") prefix prefix;
+      run "%s" opam;
       run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
-      run "rm -rf ~/.opam && opam init -ya --bare%s ~/opam-repository" (if is_macos then "" else "--config ~/.opamrc-sandbox");
+      run "rm -rf ~/.opam && opam init -ya --bare %s ~/opam-repository" (if is_macos || is_freebsd then "" else "--config ~/.opamrc-sandbox");
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
