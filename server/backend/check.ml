@@ -4,7 +4,7 @@ let cache ~conf =
   let os = Server_configfile.platform_os conf in
   let opam_cache = match os with
     | "linux"
-    | "freebsd" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache")
+    | "freebsd" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/usr/home/opam/.opam/download-cache")
     | "macos" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/Users/mac1000/.opam/download-cache")
     | os -> failwith ("Opam cache not supported on '" ^ os) (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *) in
   let brew_cache = match os with
