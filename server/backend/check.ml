@@ -8,12 +8,21 @@ let cache ~conf =
   else
     [opam_cache]
 
-let network = ["host"]
+let platform_os conf =
+  match Server_configfile.platform_os conf with
+  | "linux" -> `Linux
+  | "windows" -> `Windows
+  | os ->
+     (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
+     failwith ("OS '"^os^"' not supported")
+
+let network = function `Linux -> ["host"] | `Windows -> ["nat"]
 
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_mach (Obuilder_spec.sexp_of_t spec)
 
 let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
+  let network = network (platform_os conf) in
   let obuilder_content =
     let {Obuilder_spec.child_builds; from; ops} = base_obuilder in
     Obuilder_spec.stage
@@ -42,10 +51,11 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
         in
         let%lwt () = tail job 0L in
         match%lwt Cluster_api.Job.result job with
-        | Ok _ ->
+        | Ok s ->
+            let%lwt () = Lwt_io.write stdout (Fmt.str "HERE %s" s) in
             Lwt.return (Ok ())
         | Error (`Capnp e) ->
-            let%lwt () = Lwt_io.write stdout (Fmt.str "%a" Capnp_rpc.Error.pp e) in
+            let%lwt () = Lwt_io.write stderr (Fmt.str "%a" Capnp_rpc.Error.pp e) in
             Lwt.return (Error ())
       in
       let timeout =
@@ -138,51 +148,61 @@ let failure_kind conf ~pkg logfile =
     lookup `Other
   end
 
-let with_test pkg = {|
+let with_test ~opam pkg =
+  fmt {|
 if [ $res = 0 ]; then
-    opam remove -y "|}^pkg^{|"
-    opam install -vty "|}^pkg^{|"
+    %s remove -y %s
+    %s install -vty %s
     res=$?
     if [ $res = 20 ]; then
         res=0
     fi
 fi
-|}
+|} opam pkg opam pkg
 
 let with_test ~conf pkg =
   if Server_configfile.with_test conf then
-    with_test pkg
+    let opam = match platform_os conf with `Windows -> "ocaml-env exec --64 -- opam" | _ -> "opam" in
+    with_test ~opam pkg
   else
     ""
 
-let with_lower_bound pkg = {|
+let with_lower_bound ~opam pkg =
+  fmt {|
 if [ $res = 0 ]; then
-    opam remove -y "|}^pkg^{|"
-    env OPAMCRITERIA="+removed,+count[version-lag,solution]" opam install -vy "|}^pkg^{|"
+    %s remove -y "%s"
+    env OPAMCRITERIA="+removed,+count[version-lag,solution]" opam install -vy "%s"
     res=$?
 fi
-|}
+|} opam pkg pkg
 
 let with_lower_bound ~conf pkg =
   if Server_configfile.with_lower_bound conf then
-    with_lower_bound pkg
+    let opam = match platform_os conf with `Windows -> "ocaml-env exec --64 -- opam" | _ -> "opam" in
+    with_lower_bound ~opam pkg
   else
     ""
 
-let run_script ~conf pkg = {|
-opam remove -y "|}^pkg^{|"
-opam install -vy "|}^pkg^{|"
+let run_script ~conf pkg =
+  let windows = match platform_os conf with `Windows -> true | _ -> false in
+  let opam = if windows then "ocaml-env exec --64 -- opam" else "opam" in
+  let platform_distribution = Server_configfile.platform_distribution conf in
+  let with_test = with_test ~conf pkg in
+  let with_lower_bound = with_lower_bound ~conf pkg in
+  fmt {|
+%s remove -y "%s"
+%s install -vy "%s"
 res=$?
 if [ $res = 31 ]; then
-    if opam show -f x-ci-accept-failures: "|}^pkg^{|" | grep -q '"|}^Server_configfile.platform_distribution conf^{|"'; then
+    if %s show -f x-ci-accept-failures: "%s" | grep -q '"%s"'; then
         echo "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field."
         exit 69
     fi
 fi
-|}^with_test ~conf pkg^{|
-|}^with_lower_bound ~conf pkg^{|
+%s
+%s
 exit $res
-|}
+|} opam pkg opam pkg opam pkg platform_distribution with_test with_lower_bound
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
@@ -221,6 +241,13 @@ let () =
     flush stderr;
   end
 
+(* From dockerfile-opam. *)
+let sanitize_reg_path =
+  Obuilder_spec.run
+    {|for /f "tokens=1,2,*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /V Path ^| findstr /r "\\$"') do `
+     for /f "delims=" %%l in ('cmd /v:on /c "set v=%%c&& echo !v:~0,-1!"') do `
+     reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /V Path /t REG_EXPAND_SZ /f /d "%%l"|}
+
 let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
@@ -230,51 +257,74 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       | Some for_switches -> List.exists (Intf.Compiler.equal switch) for_switches
     ) extra_repos
   in
-  let open Obuilder_spec in
   let cache = cache ~conf in
-  let from = match Server_configfile.platform_os conf with
-    | "linux" -> Server_configfile.platform_image conf
-    | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
+  let network = network (platform_os conf) in
+  let from = Server_configfile.platform_image conf in
+  let windows = match platform_os conf with `Windows -> true | _ -> false in
+  let opam = if windows then "ocaml-env exec --64 -- opam" else "opam" in
+  let open Obuilder_spec in
+  let user = if windows then user_windows ~name:"ContainerAdministrator"
+             else user_unix ~uid:1000 ~gid:1000 in
+  let sandbox = if windows then "nosandbox" else "sandbox" in
+  let run_sh ?network fmt =
+    (* Commands to be run in a POSIX shell, even on Windows. *)
+    if windows then
+      Printf.ksprintf (run ?network {|C:\cygwin64\bin\bash.exe --login -c "%s"|}) fmt
+    else
+      run ?network fmt
   in
   stage ~from begin
-    [ user_unix ~uid:1000 ~gid:1000;
+    [
+      user;
       env "OPAMPRECISETRACKING" "1"; (* NOTE: See https://github.com/ocaml/opam/issues/3997 *)
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
-      env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
-      run "sudo ln -f /usr/bin/opam-dev /usr/bin/opam";
-      run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
-      run "rm -rf ~/.opam && opam init -ya --bare --config ~/.opamrc-sandbox ~/opam-repository";
-    ] @
+      env "OPAMEXTERNALSOLVER" "builtin-0install";
+    ] @ (
+      if windows then
+        [ sanitize_reg_path;
+          (* Override fdopen's opam with opam-dev *)
+          run {|copy /v /b C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-2.0.exe && del C:\cygwin64\bin\opam.exe && mklink C:\cygwin64\bin\opam.exe C:\cygwin64\bin\opam-dev.exe|};
+        ]
+      else [ run "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"; ]
+    ) @ [ run_sh ~network "rm -rf ~/opam-repository && git clone '%s' ~/opam-repository && git -C ~/opam-repository checkout %s" (Intf.Github.url opam_repo) opam_repo_commit;
+          run_sh "rm -rf ~/.opam && %s init -ya --bare --config ~/.opamrc-%s ~/opam-repository" opam sandbox; ]
+     @
     List.flatten (
       List.map (fun (repo, hash) ->
         let name = Filename.quote (Intf.Repository.name repo) in
         let url = Intf.Github.url (Intf.Repository.github repo) in
-        [ run ~network "git clone -q '%s' ~/%s && git -C ~/%s checkout -q %s" url name name hash;
-          run "opam repository add --dont-select %s ~/%s" name name;
+        [ run_sh ~network "git clone -q '%s' ~/%s && git -C ~/%s checkout -q %s" url name name hash;
+          run_sh "%s repository add --dont-select %s ~/%s" opam name name;
         ]
       ) extra_repos
     ) @ [
-      run ~cache ~network "opam switch create --repositories=%sdefault '%s' '%s'"
+      run ~cache ~network "%s switch create --repositories=%sdefault %S %S"
+        opam
         (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
         (Intf.Compiler.to_string (Intf.Switch.name switch))
         (Intf.Switch.switch switch);
-      run ~network "opam update --depexts";
-    ] @
-    (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
-    (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
-       [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
-       (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
-                and https://github.com/ocaml/opam-repository/pull/15642 *)
-     else
-       []
+    ] @ (
+      if windows then
+        [
+          run ~network {|C:\cygwin-setup-x86_64.exe --quiet-mode --no-shortcuts --no-startmenu --no-desktop --only-site --local-package-dir C:\TEMP\cache --root=C:\cygwin64 --site https://mirrors.kernel.org/sourceware/cygwin/ --upgrade-also|};
+        ]
+      else
+        ([ run ~network "opam update --depexts"; ]
+        (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
+        @ (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
+             [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
+           (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
+              and https://github.com/ocaml/opam-repository/pull/15642 *)
+           else
+             []))
     ) @
     (match Server_configfile.extra_command conf with
      | Some c -> [run ~cache ~network "%s" c]
      | None -> []
     ) @
     (if Server_configfile.enable_dune_cache conf then
-       [ run ~cache ~network "opam pin add -k version dune $(opam show -f version dune)";
+       [ run ~cache ~network "%s pin add -k version dune $(%s show -f version dune)" opam opam;
          env "DUNE_CACHE" "enabled";
          env "DUNE_CACHE_TRANSPORT" "direct";
          env "DUNE_CACHE_DUPLICATION" "copy";
@@ -327,14 +377,16 @@ let with_stderr ~start_time workdir f =
 
 module Pkg_set = Set.Make (String)
 
-let revdeps_script pkg =
+let revdeps_script ~conf pkg =
+  let opam = match platform_os conf with `Windows -> "ocaml-env exec --64 -- opam" | _ -> "opam" in
   let pkg = Filename.quote pkg in
-  {|opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| && \
-    opam list --color=never -s --with-test --with-doc --depopts --depends-on |}^pkg
+  fmt {|%s list --color=never -s --recursive --depopts --depends-on %s && \
+        %s list --color=never -s --with-test --with-doc --depopts --depends-on %s|}
+    opam pkg opam pkg
 
 let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkgname ~pkg ~logdir =
-    let%lwt revdeps = ocluster_build_str ~important:false ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) in
+    let%lwt revdeps = ocluster_build_str ~important:false ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script ~conf pkg) in
     let module Set = Set.Make(String) in
     let revdeps = Set.of_list revdeps in
     let revdeps = Set.remove pkgname revdeps in (* https://github.com/ocaml/opam/issues/4446 *)
@@ -344,8 +396,9 @@ let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder)
   in
   let get_latest_metadata ~base_obuilder ~pkgname ~logdir = (* TODO: Get this locally by merging all the repository and parsing the opam files using opam-core *)
     let%lwt opam =
+      let opam = match platform_os conf with `Windows -> "ocaml-env exec --64 -- opam" | _ -> "opam" in
       ocluster_build_str ~important:false ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
-        ("opam show --raw "^Filename.quote pkgname)
+        (opam ^ " show --raw " ^ Filename.quote pkgname)
     in
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpopamfile ~pkg:pkgname logdir)) (fun c ->
       Lwt_io.write c (String.concat "\n" opam)
