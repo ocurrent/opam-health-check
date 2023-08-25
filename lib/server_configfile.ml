@@ -83,7 +83,8 @@ let get_repo = function
         | `String rank -> (
             try int_of_string rank
             with Failure _ -> failwith "unexpected non-integer value for key 'rank'")
-        | _ | exception Not_found -> 1
+        | _ -> failwith "unexpected non-integer value for key 'rank'"
+        | exception Not_found -> 1
       in
       Intf.Repository.create ~name ~github ~for_switches ~rank
   | `O [name, `O [("github", `String github); ("for-switches", `A for_switches)]] ->
