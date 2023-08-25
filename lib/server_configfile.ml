@@ -65,10 +65,30 @@ let get_comp = function
 let get_repo = function
   | `O [name, `O ["github", `String github]]
   | `O [name, `String github] ->
-      Intf.Repository.create ~name ~github ~for_switches:None
+      Intf.Repository.create ~name ~github ~for_switches:None ~rank:1
+  | `O [name, `O attrs] when List.mem_assoc ~eq:String.equal "github" attrs ->
+      let github =
+        match List.assoc ~eq:String.equal "github" attrs with
+        | `String github -> github
+        | _ -> failwith "unexpected non-string type for key 'github'"
+      in
+      let for_switches =
+        match List.assoc ~eq:String.equal "for-switches" attrs with
+        | `A for_switches -> Some for_switches
+        | _ | exception Not_found -> None
+      in
+      let for_switches = Option.map (List.map get_comp_str) for_switches in
+      let rank =
+        match List.assoc ~eq:String.equal "rank" attrs with
+        | `String rank -> (
+            try int_of_string rank
+            with Failure _ -> failwith "unexpected non-integer value for key 'rank'")
+        | _ | exception Not_found -> 1
+      in
+      Intf.Repository.create ~name ~github ~for_switches ~rank
   | `O [name, `O [("github", `String github); ("for-switches", `A for_switches)]] ->
       let for_switches = List.map get_comp_str for_switches in
-      Intf.Repository.create ~name ~github ~for_switches:(Some for_switches)
+      Intf.Repository.create ~name ~github ~for_switches:(Some for_switches) ~rank:1
   | _ ->
       failwith "key and value expected"
 

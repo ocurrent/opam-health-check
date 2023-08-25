@@ -89,15 +89,17 @@ module Repository = struct
     name : string;
     github : Github.t;
     for_switches : Compiler.t list option;
+    rank : int;
   }
 
-  let create ~name ~github ~for_switches =
+  let create ~name ~github ~for_switches ~rank =
     let github = Github.create github in
-    {name; github; for_switches}
+    {name; github; for_switches; rank}
 
   let name {name; _} = name
   let github {github; _} = github
   let for_switches {for_switches; _} = for_switches
+  let rank {rank; _} = rank
 end
 
 module Log = struct

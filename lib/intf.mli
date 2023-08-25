@@ -49,11 +49,12 @@ end
 module Repository : sig
   type t
 
-  val create : name:string -> github:string -> for_switches:Compiler.t list option -> t
+  val create : name:string -> github:string -> for_switches:Compiler.t list option -> rank:int -> t
 
   val name : t -> string
   val github : t -> Github.t
   val for_switches : t -> Compiler.t list option
+  val rank : t -> int
 end
 
 module Log : sig
