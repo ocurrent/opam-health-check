@@ -3,7 +3,7 @@ let fmt = Printf.sprintf
 let cache ~conf =
   let os = Server_configfile.platform_os conf in
   let opam_cache = match os with
-    | "linux"
+    | "linux" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache")
     | "freebsd" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/usr/home/opam/.opam/download-cache")
     | "macos" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/Users/mac1000/.opam/download-cache")
     | os -> failwith ("Opam cache not supported on '" ^ os) (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *) in
@@ -241,19 +241,24 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let open Obuilder_spec in
   let cache = cache ~conf in
   let os = Server_configfile.platform_os conf in
-  let is_macos = String.equal os "macos" in
-  let is_freebsd = String.equal os "freebsd" in
-  let from = match os  with
-    | "linux" -> "ocaml/opam:"^Server_configfile.platform_distribution conf
-    | "freebsd" -> (Server_configfile.platform_distribution conf)^"-ocaml-4.14"
-    | "macos" -> "macos-"^Server_configfile.platform_distribution conf^"-ocaml-5.0" (*TODO: Will macOS cope with creating a new switch... *)
+  let distribution = Server_configfile.platform_distribution conf in
+  let from = match os with
+    | "linux" -> "ocaml/opam:"^distribution (* typically this is 'debian-unstable' which is 5.0.0 *)
+    | "freebsd" -> distribution^"-ocaml-5.0" (* Either 4.14.1 or 5.0.0 could be selected *)
+    | "macos" -> "macos-"^distribution^"-ocaml-5.0" (* Either 4.14.1 or 5.0.0 could be selected *)
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
   let opam = match os with
-    | "linux" -> "sudo ln -f /usr/bin/opam-2.1 /usr/bin/opam"
+    | "linux" -> "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"
     | "freebsd" -> "sudo ln -f /usr/local/bin/opam-2.1 /usr/local/bin/opam"
-    | "macos" -> "ln -f ~/local/bin/opam-2.1 ~/local/usr/bin/opam"
-    | _ -> ""
+    | "macos" -> "ln -f ~/local/bin/opam-2.1 ~/local/bin/opam"
+    | os -> failwith ("OS '"^os^"' not supported")
+  in
+  let config = match os with
+    | "linux" -> "--config ~/.opamrc-sandbox"
+    | "freebsd"
+    | "macos" -> ""
+    | os -> failwith ("OS '"^os^"' not supported")
   in
   stage ~from begin
     [ user_unix ~uid:1000 ~gid:1000;
@@ -263,7 +268,7 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       env "OPAMCRITERIA" "+removed";
       run "%s" opam;
       run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
-      run "rm -rf ~/.opam && opam init -ya --bare %s ~/opam-repository" (if is_macos || is_freebsd then "" else "--config ~/.opamrc-sandbox");
+      run "rm -rf ~/.opam && opam init -ya --bare %s ~/opam-repository" config;
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
