@@ -6,14 +6,17 @@ let cache ~conf =
     | "linux" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache")
     | "freebsd" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/usr/home/opam/.opam/download-cache")
     | "macos" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/Users/mac1000/.opam/download-cache")
-    | os -> failwith ("Opam cache not supported on '" ^ os) (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *) in
+    | os -> failwith ("Opam cache not supported on '" ^ os) (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
+  in
   let brew_cache = match os with
     | "macos" -> Some (Obuilder_spec.Cache.v "homebrew" ~target:"/Users/mac1000/Library/Caches/Homebrew")
-    | _ -> None in
+    | _ -> None
+  in
   let dune_cache =
-    if Server_configfile.enable_dune_cache conf then
-      Some (Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune")
-    else None in
+    if Server_configfile.enable_dune_cache conf
+    then Some (Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune")
+    else None
+  in
   List.filter_map (fun x -> x) [opam_cache; brew_cache; dune_cache]
 
 let network = ["host"]
@@ -248,14 +251,14 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
     | "macos" -> "macos-"^distribution^"-ocaml-5.0" (* Either 4.14.1 or 5.0.0 could be selected *)
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
-  let opam = match os with
+  let ln_opam = match os with
     | "linux" -> "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"
     | "freebsd" -> "sudo ln -f /usr/local/bin/opam-2.1 /usr/local/bin/opam"
     | "macos" -> "ln -f ~/local/bin/opam-2.1 ~/local/bin/opam"
     | os -> failwith ("OS '"^os^"' not supported")
   in
-  let config = match os with
-    | "linux" -> "--config ~/.opamrc-sandbox"
+  let opam_init_options = match os with
+    | "linux" -> " --config ~/.opamrc-sandbox"
     | "freebsd"
     | "macos" -> ""
     | os -> failwith ("OS '"^os^"' not supported")
@@ -266,9 +269,9 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
-      run "%s" opam;
+      run "%s" ln_opam;
       run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
-      run "rm -rf ~/.opam && opam init -ya --bare %s ~/opam-repository" config;
+      run "rm -rf ~/.opam && opam init -ya --bare%s ~/opam-repository" opam_init_options;
     ] @
     List.flatten (
       List.map (fun (repo, hash) ->
