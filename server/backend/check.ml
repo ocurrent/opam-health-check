@@ -247,14 +247,14 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let distribution = Server_configfile.platform_distribution conf in
   let from = match os with
     | "linux" -> "ocaml/opam:"^distribution (* typically this is 'debian-unstable' which is 5.0.0 *)
-    | "freebsd" -> distribution^"-ocaml-5.0" (* Either 4.14.1 or 5.0.0 could be selected *)
-    | "macos" -> "macos-"^distribution^"-ocaml-5.0" (* Either 4.14.1 or 5.0.0 could be selected *)
+    | "freebsd" -> distribution
+    | "macos" -> "macos-"^distribution
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
   let ln_opam = match os with
     | "linux" -> "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"
-    | "freebsd" -> "sudo ln -f /usr/local/bin/opam-2.1 /usr/local/bin/opam"
-    | "macos" -> "ln -f ~/local/bin/opam-2.1 ~/local/bin/opam"
+    | "freebsd" -> "sudo ln -f /usr/local/bin/opam-dev /usr/local/bin/opam"
+    | "macos" -> "ln -f ~/local/bin/opam-dev ~/local/bin/opam"
     | os -> failwith ("OS '"^os^"' not supported")
   in
   let opam_init_options = match os with
