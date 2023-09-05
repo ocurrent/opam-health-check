@@ -356,8 +356,9 @@ module Pkg_set = Set.Make (String)
 
 let revdeps_script pkg =
   let pkg = Filename.quote pkg in
-  {|opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| && \
-    opam list --color=never -s --with-test --with-doc --depopts --depends-on |}^pkg
+  let latest_ocaml = Ocaml_version.to_string Ocaml_version.Releases.latest in
+  {|opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| --coinstallable-with ocaml.|}^latest_ocaml^{| && \
+    opam list --color=never -s --with-test --with-doc --depopts --depends-on |}^pkg^{| --coinstallable-with ocaml.|}^latest_ocaml
 
 let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkgname ~pkg ~logdir =

@@ -19,6 +19,7 @@
     containers
     oca_server
     opam-core
+    ocaml-version
     opam-format
     obuilder-spec
     ocluster-api
