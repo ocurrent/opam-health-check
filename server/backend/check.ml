@@ -308,7 +308,9 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
        ]
      else
        []
-    )
+    ) @ [
+      env "OCAMLPARAM" "warn-error=+8,_"; (* https://github.com/ocaml/ocaml/issues/12475 *)
+    ]
   end
 
 let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
