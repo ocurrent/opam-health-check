@@ -18,8 +18,8 @@ depends: [
   "conduit-lwt-unix" {>= "6.2.0"}
   "http-lwt-client" {>= "0.2.0"}
   "containers" {>= "3.4"}
-  "opam-core"
-  "opam-format"
+  "opam-core" {>= "2.2"}
+  "opam-format" {>= "2.2"}
   "mirage-crypto-pk" {>= "0.11.0"}
   "mirage-crypto-rng" {>= "0.11.0"}
   "mirage-crypto-rng-lwt" {>= "0.11.0"}
