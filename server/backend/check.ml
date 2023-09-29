@@ -271,6 +271,7 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
       env "OPAMUTF8" "never"; (* Disable UTF-8 characters so that output stay consistant accross platforms *)
       env "OPAMEXTERNALSOLVER" "builtin-0install";
       env "OPAMCRITERIA" "+removed";
+      env "CI" "true"; env "OPAM_HEALTH_CHECK_CI" "true"; (* Advertise CI for test frameworks *)
       run "%s" ln_opam;
       run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
       run "rm -rf ~/.opam && opam init -ya --bare%s ~/opam-repository" opam_init_options;
