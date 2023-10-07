@@ -25,3 +25,4 @@ val get_html_diff : conf:Server_configfile.t -> old_logdir:Server_workdirs.logdi
 val get_html_diff_list : t -> string Lwt.t
 val get_html_run_list : t -> string Lwt.t
 val get_json_latest_packages : t -> string Lwt.t
+val get_json_run_packages : t -> Server_workdirs.logdir -> string Lwt.t
