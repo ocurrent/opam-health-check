@@ -105,7 +105,7 @@ module Make (Backend : Backend_intf.S) = struct
         begin match%lwt Cache.get_latest_logdir Backend.cache with
         | None ->
             serv_text ~content_type:"text/plain"
-              "opam-health-check: no run exist, please wait for the first run \
+              "opam-health-check: no run exists, please wait for the first run \
                to finish. Please look at the documentation to learn how to \
                start it.\n"
         | Some logdir ->
@@ -149,6 +149,10 @@ module Make (Backend : Backend_intf.S) = struct
     | ["api"; "v1"; "latest"; "packages"] ->
         let%lwt json = Cache.get_json_latest_packages Backend.cache in
         serv_text ~content_type:"application/json" json
+    | ["metrics"] ->
+        let%lwt data = Prometheus.CollectorRegistry.(collect default) in
+        let body = Fmt.to_to_string Prometheus_app.TextFormat_0_0_4.output data in
+        serv_text ~content_type:"text/plain" body
     | _ ->
         Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
 

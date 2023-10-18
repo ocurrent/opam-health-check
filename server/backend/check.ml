@@ -555,6 +555,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
   if !run_locked then
     failwith "operation locked";
   run_locked := true;
+  Prometheus.Gauge.set Metrics.running 1.;
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     let start_time = Unix.time () in
     with_stderr ~start_time workdir begin fun ~stderr ->
@@ -576,6 +577,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
             let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
             let%lwt pkgs = Lwt_list.map_p (get_pkgs ~debug ~cap ~stderr ~conf) switches in
             let pkgs = Pkg_set.of_list (List.concat pkgs) in
+            Prometheus.Gauge.set Metrics.number_of_packages (float_of_int (Pkg_set.cardinal pkgs));
             let%lwt () = Oca_lib.timer_log timer stderr "Initialization" in
             let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
             let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
@@ -596,5 +598,5 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
           let%lwt () = Lwt_io.flush stderr in
           Lwt.return (prerr_endline "The current run failed unexpectedly. Please check the latest log using: opam-health-check log")
     end
-  end (fun () -> run_locked := false; Lwt.return_unit) end;
+  end (fun () -> run_locked := false; Prometheus.Gauge.set Metrics.running 0.; Lwt.return_unit) end;
   Lwt.return_unit
