@@ -115,8 +115,13 @@ let run_action_loop ~conf ~run_trigger f =
         let regular_run =
           let run_interval = Server_configfile.auto_run_interval conf * 60 * 60 in
           if run_interval > 0 then
-            let%lwt () = Lwt_unix.sleep (float_of_int run_interval) in
-            Check.wait_current_run_to_finish ()
+            let rec loop t =
+              Prometheus.Gauge.set Metrics.seconds_until_next_run (float_of_int t);
+              match t with
+              | 0 -> Check.wait_current_run_to_finish ()
+              | n -> let%lwt () = Lwt_unix.sleep 60.0 in loop (n - 60)
+            in
+              loop run_interval
           else
             fst (Lwt.wait ())
         in
