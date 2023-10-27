@@ -14,3 +14,7 @@ let seconds_until_next_run =
 let running =
   let help = "Run is in progress" in
   Gauge.v ~help ~namespace ~subsystem "running"
+
+let statistics =
+  let help = "Package status per switch" in
+  Gauge.v_labels ~label_names:["switch"; "state"] ~help ~namespace ~subsystem "statistics"
