@@ -206,9 +206,11 @@ let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
       )
     with
     | Ok () ->
+        Prometheus.Counter.inc_one Metrics.jobs_ok;
         let%lwt () = Lwt_io.write_line stderr ("["^num^"] succeeded.") in
         Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
     | Error () ->
+        Prometheus.Counter.inc_one Metrics.jobs_error;
         begin match%lwt failure_kind conf ~pkg logfile with
         | `Partial ->
             let%lwt () = Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") in
@@ -434,7 +436,9 @@ let move_tmpdirs_to_final ~switches logdir workdir =
   Oca_lib.rm_rf tmpdir
 
 let run_jobs ~cap ~conf ~pool ~stderr logdir switches pkgs =
-  let len_suffix = "/"^string_of_int (Pkg_set.cardinal pkgs * List.length switches) in
+  let len = Pkg_set.cardinal pkgs * List.length switches in
+  Prometheus.Gauge.set Metrics.jobs_total (float_of_int len);
+  let len_suffix = "/"^string_of_int len in
   Pkg_set.fold begin fun full_name (i, jobs) ->
     List.fold_left begin fun (i, jobs) (switch, base_obuilder) ->
       let i = succ i in
