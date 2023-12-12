@@ -206,9 +206,11 @@ let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
       )
     with
     | Ok () ->
+        Prometheus.Counter.inc_one Metrics.jobs_ok;
         let%lwt () = Lwt_io.write_line stderr ("["^num^"] succeeded.") in
         Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
     | Error () ->
+        Prometheus.Counter.inc_one Metrics.jobs_error;
         begin match%lwt failure_kind conf ~pkg logfile with
         | `Partial ->
             let%lwt () = Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") in
@@ -432,7 +434,9 @@ let move_tmpdirs_to_final ~switches logdir workdir =
   Oca_lib.rm_rf tmpdir
 
 let run_jobs ~cap ~conf ~pool ~stderr logdir switches pkgs =
-  let len_suffix = "/"^string_of_int (Pkg_set.cardinal pkgs * List.length switches) in
+  let len = Pkg_set.cardinal pkgs * List.length switches in
+  Prometheus.Gauge.set Metrics.jobs_total (float_of_int len);
+  let len_suffix = "/"^string_of_int len in
   Pkg_set.fold begin fun full_name (i, jobs) ->
     List.fold_left begin fun (i, jobs) (switch, base_obuilder) ->
       let i = succ i in
@@ -553,6 +557,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
   if !run_locked then
     failwith "operation locked";
   run_locked := true;
+  Prometheus.Gauge.set Metrics.running 1.;
   Lwt.async begin fun () -> Lwt.finalize begin fun () ->
     let start_time = Unix.time () in
     with_stderr ~start_time workdir begin fun ~stderr ->
@@ -574,6 +579,7 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
             let pool = Lwt_pool.create (Server_configfile.processes conf) (fun () -> Lwt.return_unit) in
             let%lwt pkgs = Lwt_list.map_p (get_pkgs ~debug ~cap ~stderr ~conf) switches in
             let pkgs = Pkg_set.of_list (List.concat pkgs) in
+            Prometheus.Gauge.set Metrics.number_of_packages (float_of_int (Pkg_set.cardinal pkgs));
             let%lwt () = Oca_lib.timer_log timer stderr "Initialization" in
             let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
             let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
@@ -594,5 +600,5 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
           let%lwt () = Lwt_io.flush stderr in
           Lwt.return (prerr_endline "The current run failed unexpectedly. Please check the latest log using: opam-health-check log")
     end
-  end (fun () -> run_locked := false; Lwt.return_unit) end;
+  end (fun () -> run_locked := false; Prometheus.Gauge.set Metrics.running 0.; Lwt.return_unit) end;
   Lwt.return_unit

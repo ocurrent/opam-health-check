@@ -27,10 +27,15 @@ let fill_pkgs_from_dir ~pool pkg_tbl logdir comp =
   let notavailable_files = Server_workdirs.notavailablefiles ~switch:comp logdir in
   let internalfailure_files = Server_workdirs.internalfailurefiles ~switch:comp logdir in
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.Good) good_files;
+  Prometheus.Gauge.set (Prometheus.Gauge.labels Metrics.statistics [Intf.Compiler.to_string comp; "good"]) (float_of_int (List.length good_files));
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.Partial) partial_files;
+  Prometheus.Gauge.set (Prometheus.Gauge.labels Metrics.statistics [Intf.Compiler.to_string comp; "partial"]) (float_of_int (List.length partial_files));
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.Bad) bad_files;
+  Prometheus.Gauge.set (Prometheus.Gauge.labels Metrics.statistics [Intf.Compiler.to_string comp; "bad"]) (float_of_int (List.length bad_files));
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.NotAvailable) notavailable_files;
+  Prometheus.Gauge.set (Prometheus.Gauge.labels Metrics.statistics [Intf.Compiler.to_string comp; "not_available"]) (float_of_int (List.length notavailable_files));
   List.iter (pkg_update ~pool pkg_tbl logdir comp Intf.State.InternalFailure) internalfailure_files;
+  Prometheus.Gauge.set (Prometheus.Gauge.labels Metrics.statistics [Intf.Compiler.to_string comp; "internal_failure"]) (float_of_int (List.length internalfailure_files));
   ()
 
 let add_pkg full_name instances acc =
@@ -115,8 +120,13 @@ let run_action_loop ~conf ~run_trigger f =
         let regular_run =
           let run_interval = Server_configfile.auto_run_interval conf * 60 * 60 in
           if run_interval > 0 then
-            let%lwt () = Lwt_unix.sleep (float_of_int run_interval) in
-            Check.wait_current_run_to_finish ()
+            let rec loop t =
+              Prometheus.Gauge.set Metrics.seconds_until_next_run (float_of_int t);
+              match t with
+              | 0 -> Check.wait_current_run_to_finish ()
+              | n -> let%lwt () = Lwt_unix.sleep 60.0 in loop (n - 60)
+            in
+              loop run_interval
           else
             fst (Lwt.wait ())
         in
