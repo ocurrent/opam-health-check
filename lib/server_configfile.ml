@@ -59,7 +59,7 @@ let get_comp_str = function
   | _ -> failwith "string expected"
 
 let get_comp = function
-  | `O [name, `String switch] -> Intf.Switch.create ~name ~switch
+  | `O [name, `String args] -> Intf.Switch.create ~name ~args
   | _ -> failwith "key and value expected"
 
 let get_repo = function
@@ -154,7 +154,7 @@ let yaml_of_extra_repositories l =
   `A (List.map (fun repo -> `O [Intf.Repository.name repo, aux repo]) l)
 
 let yaml_of_ocaml_switches l =
-  `A (List.map (fun s -> `O [Intf.(Compiler.to_string (Switch.name s)), `String (Intf.Switch.switch s)]) l)
+  `A (List.map (fun s -> `O [Intf.(Compiler.to_string (Switch.name s)), `String (Intf.Switch.args s)]) l)
 
 let yaml_of_slack_webhooks l =
   `A (List.map (fun s -> `String (Uri.to_string s)) l)

@@ -73,8 +73,8 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
         else
           let%lwt () = Server_configfile.set_processes conf i in
           Lwt.return (fun () -> Lwt.return_none)
-    | ["add-ocaml-switch";name;switch] ->
-        let switch = Intf.Switch.create ~name ~switch in
+    | ["add-ocaml-switch";name;args] ->
+        let switch = Intf.Switch.create ~name ~args in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         if List.mem ~eq:Intf.Switch.equal switch switches then
           Lwt.fail (Failure "Cannot have duplicate switches names.")
@@ -82,15 +82,15 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
           let switches = List.sort Intf.Switch.compare (switch :: switches) in
           let%lwt () = Server_configfile.set_ocaml_switches conf switches in
           Lwt.return (fun () -> Lwt.return_none)
-    | ["set-ocaml-switch";name;switch] ->
-        let switch = Intf.Switch.create ~name ~switch in
+    | ["set-ocaml-switch";name;args] ->
+        let switch = Intf.Switch.create ~name ~args in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
         let switches = List.set_at_idx idx switch switches in
         let%lwt () = Server_configfile.set_ocaml_switches conf switches in
         Lwt.return (fun () -> Lwt.return_none)
     | ["rm-ocaml-switch";name] ->
-        let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
+        let switch = Intf.Switch.create ~name ~args:"(* TODO: remove this shit *)" in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
         let%lwt () = Server_configfile.set_ocaml_switches conf switches in
