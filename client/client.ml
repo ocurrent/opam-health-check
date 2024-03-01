@@ -1,6 +1,13 @@
 let parse_key key =
   let key = IO.with_in (Fpath.to_string key) (IO.read_all ?size:None) in
-  let key = Mirage_crypto_pk.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key) in
+  let key =
+    try Mirage_crypto_pk.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key) with
+      Sexplib0.Sexp_conv.Of_sexp_error _ ->
+      match X509.Private_key.decode_pem (Cstruct.of_string key) with
+      | Ok `RSA key -> key
+      | Ok _ -> failwith "unsupported key type, only RSA supported"
+      | Error `Msg m -> failwith ("error decoding key: " ^ m)
+  in
   Mirage_crypto_pk.Rsa.pub_of_priv key
 
 let partial_encrypt key msg =
