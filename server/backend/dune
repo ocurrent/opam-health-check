@@ -13,8 +13,6 @@
     cohttp-lwt-unix
     docker_hub
     http-lwt-client
-    sexplib
-    sexplib0
     cstruct
     containers
     oca_server

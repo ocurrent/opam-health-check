@@ -126,12 +126,10 @@ let get_user_key workdir user =
   let keyfile = get_keyfile workdir user in
   let%lwt key = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) (Lwt_io.read ?count:None) in
   Lwt.return
-    (try Mirage_crypto_pk.Rsa.priv_of_sexp (Sexplib.Sexp.of_string key) with
-       Sexplib0.Sexp_conv.Of_sexp_error _ ->
-       match X509.Private_key.decode_pem (Cstruct.of_string key) with
-       | Ok `RSA key -> key
-       | Ok _ -> failwith "unsupported key type, only RSA supported"
-       | Error `Msg m -> failwith ("error decoding key: " ^ m))
+    (match X509.Private_key.decode_pem (Cstruct.of_string key) with
+     | Ok `RSA key -> key
+     | Ok _ -> failwith "unsupported key type, only RSA supported"
+     | Error `Msg m -> failwith ("error decoding key: " ^ m))
 
 let partial_decrypt key msg =
   Cstruct.to_string (Mirage_crypto_pk.Rsa.decrypt ~key (Cstruct.of_string msg))
