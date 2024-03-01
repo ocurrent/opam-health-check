@@ -31,8 +31,6 @@ depends: [
   "fmt" {>= "0.8.7"}
   "re" {>= "1.7.2"}
   "yaml" {>= "2.0.0"}
-  "sexplib" {>= "v0.9.0"}
-  "sexplib0" {>= "v0.9.0"}
   "xdg-basedir" {>= "0.0.4"}
   "obuilder-spec" {>= "0.5"}
   "ocluster-api" {>= "0.1"}

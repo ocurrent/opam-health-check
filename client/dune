@@ -13,7 +13,6 @@
     uri
     lwt
     lwt.unix
-    sexplib
     cstruct
     oca_lib
     cmdliner
