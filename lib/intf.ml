@@ -47,10 +47,10 @@ end
 module Switch = struct
   type t = Switch of Compiler.t * string
 
-  let create ~name ~switch = Switch (Compiler.from_string name, switch)
+  let create ~name ~args = Switch (Compiler.from_string name, args)
 
   let name (Switch (x, _)) = x
-  let switch (Switch (_, x)) = x
+  let args (Switch (_, x)) = x
 
   let equal (Switch (x, _)) (Switch (y, _)) = Compiler.equal x y
   let compare (Switch (x, _)) (Switch (y, _)) = Compiler.compare x y
