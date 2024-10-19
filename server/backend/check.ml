@@ -6,6 +6,7 @@ let cache ~conf =
     | "freebsd"
     | "linux" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/home/opam/.opam/download-cache")
     | "macos" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/Users/mac1000/.opam/download-cache")
+    | "windows" -> Some (Obuilder_spec.Cache.v "opam-archives" ~target:"/Users/opam/AppData/Local/opam/download-cache")
     | os -> failwith ("Opam cache not supported on '" ^ os) (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
   let brew_cache = match os with
@@ -251,17 +252,20 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
     | "linux" -> "ocaml/opam:"^distribution (* typically this is 'debian-unstable' which is 5.0.0 *)
     | "freebsd" -> distribution
     | "macos" -> "macos-"^distribution
+    | "windows" -> distribution
     | os -> failwith ("OS '"^os^"' not supported") (* TODO: Should other platforms simply take the same ocurrent/opam: prefix? *)
   in
   let ln_opam = match os with
     | "linux" -> "sudo ln -f /usr/bin/opam-dev /usr/bin/opam"
     | "freebsd" -> "sudo ln -f /usr/local/bin/opam-dev /usr/local/bin/opam"
     | "macos" -> "ln -f ~/local/bin/opam-dev ~/local/bin/opam"
+    | "windows" -> "ln -f /usr/bin/opam-dev.exe /usr/bin/opam.exe"
     | os -> failwith ("OS '"^os^"' not supported")
   in
   let opam_init_options = match os with
     | "linux" -> " --config ~/.opamrc-sandbox"
     | "freebsd"
+    | "windows"
     | "macos" -> ""
     | os -> failwith ("OS '"^os^"' not supported")
   in
