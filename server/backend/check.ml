@@ -197,7 +197,7 @@ exit $res
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
-    let%lwt () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"…") in
+    let%lwt () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Compiler.to_string (Intf.Switch.name switch)^"…") in
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
     match%lwt
@@ -285,20 +285,12 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
         ]
       ) extra_repos
     ) @ [
-      run ~cache ~network "opam switch create --repositories=%sdefault '%s' '%s'"
+      run ~cache ~network "opam switch create --repositories=%sdefault '%s' %s"
         (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
         (Intf.Compiler.to_string (Intf.Switch.name switch))
-        (Intf.Switch.switch switch);
+        (Intf.Switch.args switch);
       run ~network "opam update --depexts";
     ] @
-    (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
-    (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
-       [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
-       (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
-                and https://github.com/ocaml/opam-repository/pull/15642 *)
-     else
-       []
-    ) @
     (match Server_configfile.extra_command conf with
      | Some c -> [run ~cache ~network "%s" c]
      | None -> []
