@@ -42,7 +42,7 @@ depends: [
   "cstruct"
   "capnp-rpc" {>= "1.2"}
   "capnp-rpc-lwt" {>= "1.2"}
-  "capnp-rpc-unix" {>= "1.2"}
+  "capnp-rpc-unix" {>= "1.2" & < "2.0"}
   "lwt"
   "lwt_ppx"
   "uri"
