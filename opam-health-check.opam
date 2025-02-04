@@ -46,6 +46,7 @@ depends: [
   "lwt"
   "lwt_ppx"
   "uri"
+  "x509" {>= "1.0.0"}
   "docker_hub" {>= "0.1.0" & < "0.2.0"}
   "memtrace" {>= "0.2.3"}
   "tls-lwt" {>= "0.16.0"} # activate conduit with TLS for slack webhooks

@@ -1,7 +1,7 @@
 let parse_key key =
   let key = IO.with_in (Fpath.to_string key) (IO.read_all ?size:None) in
   let key =
-    match X509.Private_key.decode_pem (Cstruct.of_string key) with
+    match X509.Private_key.decode_pem key with
     | Ok `RSA key -> key
     | Ok _ -> failwith "unsupported key type, only RSA supported"
     | Error `Msg m -> failwith ("error decoding key: " ^ m)
@@ -9,7 +9,7 @@ let parse_key key =
   Mirage_crypto_pk.Rsa.pub_of_priv key
 
 let partial_encrypt key msg =
-  Cstruct.to_string (Mirage_crypto_pk.Rsa.encrypt ~key (Cstruct.of_string msg))
+  Mirage_crypto_pk.Rsa.encrypt ~key msg
 
 let rec encrypt_msg ~key msg =
   let max_size = Mirage_crypto_pk.Rsa.pub_bits key / 8 in
