@@ -1,3 +1,5 @@
+open Lwt.Syntax
+
 let parse_key key =
   let key = IO.with_in (Fpath.to_string key) (IO.read_all ?size:None) in
   let key =
@@ -21,15 +23,15 @@ let rec encrypt_msg ~key msg =
 
 let print_body body =
   let stream = Cohttp_lwt.Body.to_stream body in
-  let%lwt () = Lwt_stream.iter (fun s -> print_string s; flush stdout) stream in
-  Lwt.return (print_newline ())
+  let+ () = Lwt_stream.iter (fun s -> print_string s; flush stdout) stream in
+  print_newline ()
 
 let process_response (res, body) =
   match Cohttp.Response.status res with
   | `OK ->
       print_body body
   | `Upgrade_required ->
-      let%lwt () = print_body body in
+      let* () = print_body body in
       Lwt.fail Exit
   | _ ->
       print_endline "A problem occured";
@@ -50,7 +52,7 @@ let send_msg ~profilename ~confdir ~conffile msg =
   let prefix = Oca_lib.protocol_version^"\n"^prefix in
   print_endline "Sending command…";
   Lwt_main.run begin
-    let%lwt resp = Cohttp_lwt_unix.Client.post ~body:(`String (prefix^msg)) uri in
+    let* resp = Cohttp_lwt_unix.Client.post ~body:(`String (prefix^msg)) uri in
     process_response resp
   end
 
