@@ -150,7 +150,7 @@ let start ~debug ~cap_file conf workdir =
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in
   Lwt.ignore_result (cache_clear_and_init workdir);
-  Mirage_crypto_rng_lwt.initialize (module Mirage_crypto_rng.Fortuna);
+  Mirage_crypto_rng_unix.use_default ();
   let+ () = Admin.create_admin_key workdir in
   let task () =
     Lwt.join [
