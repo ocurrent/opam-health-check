@@ -43,8 +43,7 @@ depends: [
   "capnp-rpc" {>= "1.2"}
   "capnp-rpc-lwt" {>= "1.2"}
   "capnp-rpc-unix" {>= "1.2" & < "2.0"}
-  "lwt"
-  "lwt_ppx"
+  "lwt" {>= "5.3.0"}
   "uri"
   "x509" {>= "1.0.0"}
   "docker_hub" {>= "0.1.0" & < "0.2.0"}

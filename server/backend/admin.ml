@@ -1,3 +1,4 @@
+open Lwt.Syntax
 let ( // ) = Fpath.( / )
 
 let with_file_out ~flags file f =
@@ -26,33 +27,34 @@ let create_userkey workdir username =
 let create_admin_key workdir =
   let username = Oca_lib.default_admin_name in
   let keyfile = get_keyfile workdir username in
-  match%lwt Lwt_unix.file_exists (Fpath.to_string keyfile) with
+  let* v = Lwt_unix.file_exists (Fpath.to_string keyfile) in
+  match v with
   | true -> Lwt.return_unit
   | false -> create_userkey workdir username
 
 let get_log workdir =
   let ilogdir = Server_workdirs.ilogdir workdir in
-  let%lwt logs = Oca_lib.get_files ilogdir in
+  let* logs = Oca_lib.get_files ilogdir in
   let logs = List.sort String.compare logs in
   let logfile = Option.get_exn_or "no last log" (List.last_opt logs) in
   let logfile = ilogdir // logfile in
-  let%lwt fd = Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_RDONLY] 0o644 in
+  let* fd = Lwt_unix.openfile (Fpath.to_string logfile) Unix.[O_RDONLY] 0o644 in
   let off = ref 0 in
   let rec loop () =
     let is_running = Check.is_running () in
-    let%lwt new_off = Lwt_unix.lseek fd 0 Unix.SEEK_END in
+    let* new_off = Lwt_unix.lseek fd 0 Unix.SEEK_END in
     if new_off < 0 then
       assert false
     else if !off < new_off then begin
-      let%lwt _ = Lwt_unix.lseek fd !off Unix.SEEK_SET in
+      let* _ = Lwt_unix.lseek fd !off Unix.SEEK_SET in
       let len = new_off - !off in
       let buf = Bytes.create len in
-      let%lwt _ = Lwt_unix.read fd buf 0 len in
+      let* _ = Lwt_unix.read fd buf 0 len in
       off := new_off;
       Lwt.return (Some (Bytes.to_string buf))
     end else if is_running then begin
       off := new_off;
-      let%lwt () = Lwt_unix.sleep 1. in
+      let* () = Lwt_unix.sleep 1. in
       loop ()
     end else
       Lwt.return_none
@@ -60,18 +62,18 @@ let get_log workdir =
   Lwt.return loop
 
 let admin_action ~on_finished ~conf ~run_trigger workdir body =
-  let%lwt resp =
+  let* resp =
     match String.split_on_char '\n' body with
     | ["set-auto-run-interval"; i] ->
-        let%lwt () = Server_configfile.set_auto_run_interval conf (int_of_string i) in
+        let* () = Server_configfile.set_auto_run_interval conf (int_of_string i) in
         Lwt.return (fun () -> Lwt.return_none)
     | ["set-processes"; i] ->
         let i = int_of_string i in
         if i < 0 then
           Lwt.fail (Failure "Cannot set the number of processes to a negative value.")
         else
-          let%lwt () = Server_configfile.set_processes conf i in
-          Lwt.return (fun () -> Lwt.return_none)
+          let+ () = Server_configfile.set_processes conf i in
+          (fun () -> Lwt.return_none)
     | ["add-ocaml-switch";name;switch] ->
         let switch = Intf.Switch.create ~name ~switch in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
@@ -79,37 +81,37 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
           Lwt.fail (Failure "Cannot have duplicate switches names.")
         else
           let switches = List.sort Intf.Switch.compare (switch :: switches) in
-          let%lwt () = Server_configfile.set_ocaml_switches conf switches in
-          Lwt.return (fun () -> Lwt.return_none)
+          let+ () = Server_configfile.set_ocaml_switches conf switches in
+          (fun () -> Lwt.return_none)
     | ["set-ocaml-switch";name;switch] ->
         let switch = Intf.Switch.create ~name ~switch in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
         let switches = List.set_at_idx idx switch switches in
-        let%lwt () = Server_configfile.set_ocaml_switches conf switches in
-        Lwt.return (fun () -> Lwt.return_none)
+        let+ () = Server_configfile.set_ocaml_switches conf switches in
+        (fun () -> Lwt.return_none)
     | ["rm-ocaml-switch";name] ->
         let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
-        let%lwt () = Server_configfile.set_ocaml_switches conf switches in
-        Lwt.return (fun () -> Lwt.return_none)
+        let+ () = Server_configfile.set_ocaml_switches conf switches in
+        (fun () -> Lwt.return_none)
     | "set-slack-webhooks"::webhooks ->
         let webhooks = List.map Uri.of_string webhooks in
-        let%lwt () = Server_configfile.set_slack_webhooks conf webhooks in
-        Lwt.return (fun () -> Lwt.return_none)
+        let+ () = Server_configfile.set_slack_webhooks conf webhooks in
+        (fun () -> Lwt.return_none)
     | ["set-list-command";cmd] ->
-        let%lwt () = Server_configfile.set_list_command conf cmd in
-        Lwt.return (fun () -> Lwt.return_none)
+        let+ () = Server_configfile.set_list_command conf cmd in
+        (fun () -> Lwt.return_none)
     | ["run"] ->
-        let%lwt () = Lwt_mvar.put run_trigger () in
-        Lwt.return (fun () -> Lwt.return_none)
+        let+ () = Lwt_mvar.put run_trigger () in
+        (fun () -> Lwt.return_none)
     | ["add-user";username] ->
-        let%lwt () = create_userkey workdir username in
-        Lwt.return (fun () -> Lwt.return_none)
+        let+ () = create_userkey workdir username in
+        (fun () -> Lwt.return_none)
     | ["clear-cache"] ->
-        let%lwt () = on_finished workdir in
-        Lwt.return (fun () -> Lwt.return_none)
+        let+ () = on_finished workdir in
+        (fun () -> Lwt.return_none)
     | ["log"] ->
         get_log workdir
     | _ ->
@@ -124,12 +126,11 @@ let is_bzero = function
 
 let get_user_key workdir user =
   let keyfile = get_keyfile workdir user in
-  let%lwt key = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) (Lwt_io.read ?count:None) in
-  Lwt.return
-    (match X509.Private_key.decode_pem key with
-     | Ok `RSA key -> key
-     | Ok _ -> failwith "unsupported key type, only RSA supported"
-     | Error `Msg m -> failwith ("error decoding key: " ^ m))
+  let+ key = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string keyfile) (Lwt_io.read ?count:None) in
+  match X509.Private_key.decode_pem key with
+  | Ok `RSA key -> key
+  | Ok _ -> failwith "unsupported key type, only RSA supported"
+  | Error `Msg m -> failwith ("error decoding key: " ^ m)
 
 let partial_decrypt key =
   Mirage_crypto_pk.Rsa.decrypt ~key
@@ -143,14 +144,14 @@ let rec decrypt key msg =
     partial_decrypt key msg ^ decrypt key next
 
 let callback ~on_finished ~conf ~run_trigger workdir _conn _req body =
-  let%lwt body = Cohttp_lwt.Body.to_string body in
+  let* body = Cohttp_lwt.Body.to_string body in
   match String.Split.left ~by:"\n" body with
   | Some (pversion, body) when String.equal Oca_lib.protocol_version pversion ->
       begin match String.Split.left ~by:"\n" body with
       | Some (_, "") ->
           Lwt.fail (Failure "Empty message")
       | Some (user, body) ->
-          let%lwt key = get_user_key workdir user in
+          let* key = get_user_key workdir user in
           let body = decrypt key body in
           begin match String.Split.left ~by:"\n" body with
           | Some (user', body) when String.equal user user' ->
