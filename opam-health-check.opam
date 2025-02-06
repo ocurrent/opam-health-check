@@ -23,7 +23,7 @@ depends: [
   "opam-core" {>= "2.2"}
   "opam-format" {>= "2.2"}
   "mirage-crypto-pk" {>= "0.11.0"}
-  "mirage-crypto-rng" {>= "0.11.0"}
+  "mirage-crypto-rng" {>= "0.11.0" & < "1.2.0"}
   "mirage-crypto-rng-lwt" {>= "0.11.0"}
   "cmdliner" {>= "1.1.0"}
   "prometheus-app" {>= "1.2"}
@@ -42,10 +42,11 @@ depends: [
   "cstruct"
   "capnp-rpc" {>= "1.2"}
   "capnp-rpc-lwt" {>= "1.2"}
-  "capnp-rpc-unix" {>= "1.2"}
+  "capnp-rpc-unix" {>= "1.2" & < "2.0"}
   "lwt"
   "lwt_ppx"
   "uri"
+  "x509" {>= "1.0.0"}
   "docker_hub" {>= "0.1.0" & < "0.2.0"}
   "memtrace" {>= "0.2.3"}
   "tls-lwt" {>= "0.16.0"} # activate conduit with TLS for slack webhooks
