@@ -1,20 +1,20 @@
 (library
-  (name oca_server)
-  (modules_without_implementation backend_intf)
-  (libraries
-    lwt
-    lwt.unix
-    tyxml
-    tyxml.functor
-    cohttp
-    cohttp-lwt-unix
-    ; conduit-lwt-unix ; TODO: Remove this. Not required explicitly but uncomment if you use (implicit_transitive_deps false)
-    opam-format
-    containers
-    fpath
-    uri
-    re
-    yojson
-    current_ansi
-    prometheus-app
-    oca_lib))
+ (name oca_server)
+ (modules_without_implementation backend_intf)
+ (libraries
+  lwt
+  lwt.unix
+  tyxml
+  tyxml.functor
+  cohttp
+  cohttp-lwt-unix
+  ; conduit-lwt-unix ; TODO: Remove this. Not required explicitly but uncomment if you use (implicit_transitive_deps false)
+  opam-format
+  containers
+  fpath
+  uri
+  re
+  yojson
+  current_ansi
+  prometheus-app
+  oca_lib))

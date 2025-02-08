@@ -1,3 +1,5 @@
 (env
- (dev (flags :standard -w A -open Containers))
- (_ (flags :standard -open Containers)))
+ (dev
+  (flags :standard -w A -open Containers))
+ (_
+  (flags :standard -open Containers)))

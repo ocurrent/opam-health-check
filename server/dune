@@ -1,10 +1,11 @@
 (executable
-  (name main)
-  (public_name opam-health-serve)
-  (libraries backend lwt.unix containers cmdliner oca_server memtrace))
+ (name main)
+ (public_name opam-health-serve)
+ (libraries backend lwt.unix containers cmdliner oca_server memtrace))
 
 (rule
-  (with-stdout-to config.ml
-    (progn
-      (echo "let name = {|opam-health-serve|}\n")
-      (echo "let version = {|%{version:opam-health-check}|}\n"))))
+ (with-stdout-to
+  config.ml
+  (progn
+   (echo "let name = {|opam-health-serve|}\n")
+   (echo "let version = {|%{version:opam-health-check}|}\n"))))
