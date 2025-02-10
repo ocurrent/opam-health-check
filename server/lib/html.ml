@@ -1,4 +1,9 @@
-open Server_lib.Intf
+module Compiler = Server_lib.Intf.Compiler
+module State = Server_lib.Intf.State
+module Instance = Server_lib.Intf.Instance
+module Pkg = Server_lib.Intf.Pkg
+module Pkg_diff = Server_lib.Intf.Pkg_diff
+module Github = Server_lib.Intf.Github
 
 (* TODO: Remove this hack? *)
 module Tyxml = struct

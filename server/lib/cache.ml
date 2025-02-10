@@ -1,5 +1,4 @@
 open Lwt.Syntax
-(* open Server_lib.Intf *)
 
 module Opams_cache = Map.Make (String)
 module Revdeps_cache = Map.Make (String)
