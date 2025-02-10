@@ -6,19 +6,19 @@ module Instance = Server_lib.Intf.Instance
 module State = Server_lib.Intf.State
 module Log = Server_lib.Intf.Log
 
-type t = Server_lib.Server_workdirs.t
+type t = Server_lib.Workdirs.t
 
 let cache = Oca_server.Cache.create ()
 
 let get_compilers logdir =
-  let compilers = Server_lib.Server_workdirs.logdir_get_compilers logdir in
+  let compilers = Server_lib.Workdirs.logdir_get_compilers logdir in
   List.sort Compiler.compare compilers
 
 module Pkg_tbl = Hashtbl.Make (String)
 
 let pkg_update ~pool pkg_tbl logdir comp state pkg =
   let get_content () = Lwt_pool.use pool begin fun () ->
-    Server_lib.Server_workdirs.logdir_get_content ~comp ~state ~pkg logdir
+    Server_lib.Workdirs.logdir_get_content ~comp ~state ~pkg logdir
   end in
   let content = Log.create get_content in
   let instances =
@@ -29,11 +29,11 @@ let pkg_update ~pool pkg_tbl logdir comp state pkg =
   Pkg_tbl.replace pkg_tbl pkg instances
 
 let fill_pkgs_from_dir ~pool pkg_tbl logdir comp =
-  let good_files = Server_lib.Server_workdirs.goodfiles ~switch:comp logdir in
-  let partial_files = Server_lib.Server_workdirs.partialfiles ~switch:comp logdir in
-  let bad_files = Server_lib.Server_workdirs.badfiles ~switch:comp logdir in
-  let notavailable_files = Server_lib.Server_workdirs.notavailablefiles ~switch:comp logdir in
-  let internalfailure_files = Server_lib.Server_workdirs.internalfailurefiles ~switch:comp logdir in
+  let good_files = Server_lib.Workdirs.goodfiles ~switch:comp logdir in
+  let partial_files = Server_lib.Workdirs.partialfiles ~switch:comp logdir in
+  let bad_files = Server_lib.Workdirs.badfiles ~switch:comp logdir in
+  let notavailable_files = Server_lib.Workdirs.notavailablefiles ~switch:comp logdir in
+  let internalfailure_files = Server_lib.Workdirs.internalfailurefiles ~switch:comp logdir in
   List.iter (pkg_update ~pool pkg_tbl logdir comp State.Good) good_files;
   Prometheus.Gauge.set (Prometheus.Gauge.labels Metrics.statistics [Compiler.to_string comp; "good"]) (float_of_int (List.length good_files));
   List.iter (pkg_update ~pool pkg_tbl logdir comp State.Partial) partial_files;
@@ -75,12 +75,12 @@ let get_log _ ~logdir ~comp ~state ~pkg =
           Some content
 
 let get_opams workdir =
-  let dir = Server_lib.Server_workdirs.opamsdir workdir in
+  let dir = Server_lib.Workdirs.opamsdir workdir in
   let* files = Oca_lib.get_files dir in
   let opams = Oca_server.Cache.Opams_cache.empty in
   let* opams =
     Lwt_list.fold_left_s begin fun opams pkg ->
-      let file = Server_lib.Server_workdirs.opamfile ~pkg workdir in
+      let file = Server_lib.Workdirs.opamfile ~pkg workdir in
       let+ content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
       let content = try OpamFile.OPAM.read_from_string content with _ -> OpamFile.OPAM.empty in
       Oca_server.Cache.Opams_cache.add pkg content opams
@@ -89,12 +89,12 @@ let get_opams workdir =
   Lwt.return opams
 
 let get_revdeps workdir =
-  let dir = Server_lib.Server_workdirs.revdepsdir workdir in
+  let dir = Server_lib.Workdirs.revdepsdir workdir in
   let* files = Oca_lib.get_files dir in
   let revdeps = Oca_server.Cache.Revdeps_cache.empty in
   let+ revdeps =
     Lwt_list.fold_left_s begin fun revdeps pkg ->
-      let file = Server_lib.Server_workdirs.revdepsfile ~pkg workdir in
+      let file = Server_lib.Workdirs.revdepsfile ~pkg workdir in
       let+ content = Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string file) (Lwt_io.read ?count:None) in
       let content = String.split_on_char '\n' content in
       let content = List.hd content in
@@ -117,7 +117,7 @@ let cache_clear_and_init workdir =
     cache
     ~pkgs:(fun ~compilers logdir -> get_pkgs ~pool ~compilers logdir)
     ~compilers:(fun logdir -> Lwt.return (get_compilers logdir))
-    ~logdirs:(fun () -> Server_lib.Server_workdirs.logdirs workdir)
+    ~logdirs:(fun () -> Server_lib.Workdirs.logdirs workdir)
     ~opams:(fun () -> get_opams workdir)
     ~revdeps:(fun () -> get_revdeps workdir)
 
@@ -126,7 +126,7 @@ let run_action_loop ~conf ~run_trigger f =
     let* () =
       Lwt.catch (fun () ->
         let regular_run =
-          let run_interval = Server_lib.Server_configfile.auto_run_interval conf * 60 * 60 in
+          let run_interval = Server_lib.Configfile.auto_run_interval conf * 60 * 60 in
           if run_interval > 0 then
             let rec loop t =
               Prometheus.Gauge.set Metrics.seconds_until_next_run (float_of_int t);
@@ -151,7 +151,7 @@ let run_action_loop ~conf ~run_trigger f =
   loop ()
 
 let start ~debug ~cap_file conf workdir =
-  let port = Server_lib.Server_configfile.admin_port conf in
+  let port = Server_lib.Configfile.admin_port conf in
   let on_finished = cache_clear_and_init in
   let run_trigger = Lwt_mvar.create_empty () in
   let callback = Admin.callback ~on_finished ~conf ~run_trigger workdir in

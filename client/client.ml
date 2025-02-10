@@ -177,13 +177,13 @@ let add_user_cmd ~confdir ~conffile =
 let init ~confdir ~conffile = function
   | Some local_workdir ->
       let cwd = Sys.getcwd () in
-      let local_workdir = Server_lib.Server_workdirs.create ~cwd ~workdir:local_workdir in
-      let server_conf = Server_lib.Server_configfile.from_workdir local_workdir in
-      let profilename = Server_lib.Server_configfile.name server_conf in
+      let local_workdir = Server_lib.Workdirs.create ~cwd ~workdir:local_workdir in
+      let server_conf = Server_lib.Configfile.from_workdir local_workdir in
+      let profilename = Server_lib.Configfile.name server_conf in
       let hostname = Oca_lib.localhost in
-      let port = Server_lib.Server_configfile.admin_port server_conf in
+      let port = Server_lib.Configfile.admin_port server_conf in
       let username = Oca_lib.default_admin_name in
-      let keyfile = Server_lib.Server_workdirs.keyfile ~username local_workdir in
+      let keyfile = Server_lib.Workdirs.keyfile ~username local_workdir in
       Configfile.init_with_values ~confdir ~profilename ~hostname ~port ~username ~keyfile conffile
   | None ->
       Configfile.init ~confdir conffile

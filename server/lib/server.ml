@@ -84,7 +84,7 @@ module Make (Backend : Backend_intf.S) = struct
   let get_logdir name =
     let+ logdirs = Cache.get_logdirs Backend.cache in
     List.find_opt (fun logdir ->
-      String.equal (Server_lib.Server_workdirs.get_logdir_name logdir) name
+      String.equal (Server_lib.Workdirs.get_logdir_name logdir) name
     ) logdirs
 
   let callback ~conf backend _conn req body_NOT_USED =
@@ -183,10 +183,10 @@ module Make (Backend : Backend_intf.S) = struct
   let main ~debug ~cap_file ~workdir =
     Printexc.record_backtrace debug;
     let* cwd = Lwt_unix.getcwd () in
-    let workdir = Server_lib.Server_workdirs.create ~cwd ~workdir in
-    let* () = Server_lib.Server_workdirs.init_base workdir in
-    let conf = Server_lib.Server_configfile.from_workdir workdir in
-    let port = Server_lib.Server_configfile.port conf in
+    let workdir = Server_lib.Workdirs.create ~cwd ~workdir in
+    let* () = Server_lib.Workdirs.init_base workdir in
+    let conf = Server_lib.Configfile.from_workdir workdir in
+    let port = Server_lib.Configfile.port conf in
     let* (backend, backend_task) = Backend.start ~debug ~cap_file conf workdir in
     Lwt.join [
       tcp_server port (callback ~debug ~conf backend);

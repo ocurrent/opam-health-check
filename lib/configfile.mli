@@ -1,6 +1,6 @@
 type t
 
-val from_workdir : Server_workdirs.t -> t
+val from_workdir : Workdirs.t -> t
 
 val name : t -> string
 val port : t -> int

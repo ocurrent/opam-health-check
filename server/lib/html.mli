@@ -11,8 +11,8 @@ type query = {
 }
 
 val get_html :
-  logdir:Server_lib.Server_workdirs.logdir ->
-  conf:Server_lib.Server_configfile.t ->
+  logdir:Server_lib.Workdirs.logdir ->
+  conf:Server_lib.Configfile.t ->
   query ->
   Server_lib.Intf.Pkg.t list ->
   string
@@ -20,16 +20,16 @@ val get_html :
 type diff = (Server_lib.Intf.Pkg_diff.t list * Server_lib.Intf.Pkg_diff.t list * Server_lib.Intf.Pkg_diff.t list * Server_lib.Intf.Pkg_diff.t list * Server_lib.Intf.Pkg_diff.t list)
 
 val get_diff :
-  old_logdir:Server_lib.Server_workdirs.logdir ->
-  new_logdir:Server_lib.Server_workdirs.logdir ->
-  conf:Server_lib.Server_configfile.t ->
+  old_logdir:Server_lib.Workdirs.logdir ->
+  new_logdir:Server_lib.Workdirs.logdir ->
+  conf:Server_lib.Configfile.t ->
   diff ->
   string
 
 val get_diff_list :
-  (Server_lib.Server_workdirs.logdir * Server_lib.Server_workdirs.logdir) list ->
+  (Server_lib.Workdirs.logdir * Server_lib.Workdirs.logdir) list ->
   string
 
-val get_run_list : Server_lib.Server_workdirs.logdir list -> string
+val get_run_list : Server_lib.Workdirs.logdir list -> string
 
 val get_log : comp:Server_lib.Intf.Compiler.t -> pkg:string -> string -> string

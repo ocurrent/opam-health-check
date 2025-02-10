@@ -284,7 +284,7 @@ let create yamlfile yaml =
   conf
 
 let from_workdir workdir =
-  let yamlfile = Server_workdirs.configfile workdir in
+  let yamlfile = Workdirs.configfile workdir in
   let yaml = IO.with_in ~flags:[Open_creat] (Fpath.to_string yamlfile) (IO.read_all ?size:None) in
   match Yaml.of_string_exn yaml with
   | `O yaml -> create yamlfile yaml

@@ -23,7 +23,7 @@ type query = {
 }
 
 let github_url conf =
-  Github.url (Server_lib.Server_configfile.default_repository conf)
+  Github.url (Server_lib.Configfile.default_repository conf)
 
 (* NOTE: Attempt at finding the right set of colors unambiguous to both colorblinds and non-colorblinds.
    Base work:
@@ -40,7 +40,7 @@ module CUD_pallette = struct
 end
 
 let log_url logdir pkg instance =
-  let logdir = Server_lib.Server_workdirs.get_logdir_name logdir in
+  let logdir = Server_lib.Workdirs.get_logdir_name logdir in
   let comp = Instance.compiler instance in
   let comp = Compiler.to_string comp in
   let state = State.to_string (Instance.state instance) in
@@ -118,10 +118,10 @@ let run_info ~logdir ~compilers ~pkgs conf =
   let open Tyxml.Html in
   let opam_repo_uri =
     let content = b [txt "🔗 opam-repository commit hash"] in
-    let hash = Server_lib.Server_workdirs.get_logdir_hash logdir in
+    let hash = Server_lib.Workdirs.get_logdir_hash logdir in
     get_opam_repository_commit_url ~hash ~content conf
   in
-  let date = Server_lib.Server_workdirs.get_logdir_time logdir in
+  let date = Server_lib.Workdirs.get_logdir_time logdir in
   let date = date_to_string date in
   let legend = legend [b [txt "About this run:"]] in
   let number_pkgs, number_hard_fail, number_soft_fail = get_run_info ~compilers pkgs in
@@ -374,8 +374,8 @@ let generate_diff_html ~old_logdir ~new_logdir {Pkg_diff.full_name; comp; diff} 
     | State.NotAvailable -> not_available
     | State.InternalFailure -> internal_failure
   in
-  let old_logdir = Server_lib.Server_workdirs.get_logdir_name old_logdir in
-  let new_logdir = Server_lib.Server_workdirs.get_logdir_name new_logdir in
+  let old_logdir = Server_lib.Workdirs.get_logdir_name old_logdir in
+  let new_logdir = Server_lib.Workdirs.get_logdir_name new_logdir in
   let get_status_elm ~logdir status =
     let status_str = State.to_string status in
     let status = print_status status in
@@ -406,9 +406,9 @@ let get_diff ~old_logdir ~new_logdir ~conf (bad, partial, not_available, interna
     let hash = String.take 7 hash in
     get_opam_repository_commit_url ~hash ~content:(b [txt hash]) conf
   in
-  let old_hash = Server_lib.Server_workdirs.get_logdir_hash old_logdir in
+  let old_hash = Server_lib.Workdirs.get_logdir_hash old_logdir in
   let old_hash_elm = get_hash_elm old_hash in
-  let new_hash = Server_lib.Server_workdirs.get_logdir_hash new_logdir in
+  let new_hash = Server_lib.Workdirs.get_logdir_hash new_logdir in
   let new_hash_elm = get_hash_elm new_hash in
   let git_diff = a ~a:[a_href (github_url conf^"/compare/"^old_hash^"..."^new_hash)] [txt "git diff"] in
   let good_txt = span ~a:[a_style ("color: "^CUD_pallette.green^";")] [txt "passing"] in
@@ -439,15 +439,15 @@ let get_diff ~old_logdir ~new_logdir ~conf (bad, partial, not_available, interna
 
 let get_diff_url ~old_logdir ~new_logdir content =
   let open Tyxml.Html in
-  let old_logdir = Server_lib.Server_workdirs.get_logdir_name old_logdir in
-  let new_logdir = Server_lib.Server_workdirs.get_logdir_name new_logdir in
+  let old_logdir = Server_lib.Workdirs.get_logdir_name old_logdir in
+  let new_logdir = Server_lib.Workdirs.get_logdir_name new_logdir in
   a ~a:[a_href ("/diff/"^old_logdir^".."^new_logdir)] content
 
 let map_diff (old_logdir, new_logdir) =
   let open Tyxml.Html in
-  let old_date = Server_lib.Server_workdirs.get_logdir_time old_logdir in
+  let old_date = Server_lib.Workdirs.get_logdir_time old_logdir in
   let old_date = date_to_string old_date in
-  let new_date = Server_lib.Server_workdirs.get_logdir_time new_logdir in
+  let new_date = Server_lib.Workdirs.get_logdir_time new_logdir in
   let new_date = date_to_string new_date in
   li [get_diff_url ~old_logdir ~new_logdir
         [txt "Diff between check made on the "; b [txt old_date];
@@ -473,9 +473,9 @@ let get_diff_list diffs =
 
 let map_logdir logdir =
   let open Tyxml.Html in
-  let date = Server_lib.Server_workdirs.get_logdir_time logdir in
+  let date = Server_lib.Workdirs.get_logdir_time logdir in
   let date = date_to_string date in
-  let logdir = Server_lib.Server_workdirs.get_logdir_name logdir in
+  let logdir = Server_lib.Workdirs.get_logdir_name logdir in
   li [a ~a:[a_href ("/run/"^logdir)] [txt ("Run made on the "^date)]]
 
 let get_run_list logdirs =

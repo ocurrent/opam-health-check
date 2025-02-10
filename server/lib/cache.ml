@@ -61,9 +61,9 @@ type 'a prefetched_or_recompute =
   | Recompute of (unit -> 'a Lwt.t)
 
 type data = {
-  mutable logdirs : Server_lib.Server_workdirs.logdir list Lwt.t;
-  mutable pkgs : (Server_lib.Server_workdirs.logdir * Server_lib.Intf.Pkg.t list prefetched_or_recompute) list Lwt.t;
-  mutable compilers : (Server_lib.Server_workdirs.logdir * Server_lib.Intf.Compiler.t list) list Lwt.t;
+  mutable logdirs : Server_lib.Workdirs.logdir list Lwt.t;
+  mutable pkgs : (Server_lib.Workdirs.logdir * Server_lib.Intf.Pkg.t list prefetched_or_recompute) list Lwt.t;
+  mutable compilers : (Server_lib.Workdirs.logdir * Server_lib.Intf.Compiler.t list) list Lwt.t;
   mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
 }
@@ -191,7 +191,7 @@ let get_logsearch ~query ~logdir =
   | _, None -> Lwt.return []
   | regexp, Some (_, comp) ->
       let switch = Server_lib.Intf.Compiler.to_string comp in
-      let+ searches = Server_lib.Server_workdirs.logdir_search ~switch ~regexp logdir in
+      let+ searches = Server_lib.Workdirs.logdir_search ~switch ~regexp logdir in
       searches
       |> List.filter_map (fun s ->
         match String.split_on_char '/' s with
@@ -214,7 +214,7 @@ let get_html ~conf self query logdir =
     Html.get_html ~logdir ~conf query pkgs
   in
   let* pkgs = self.pkgs in
-  let pkgs = List.assoc ~eq:Server_lib.Server_workdirs.logdir_equal logdir pkgs in
+  let pkgs = List.assoc ~eq:Server_lib.Workdirs.logdir_equal logdir pkgs in
   aux ~logdir (get_or_recompute pkgs)
 
 let get_latest_logdir self =
@@ -235,12 +235,12 @@ let get_logdirs self =
 let get_pkgs ~logdir self =
   let* self = !self in
   let* pkgs = self.pkgs in
-  get_or_recompute (List.assoc ~eq:Server_lib.Server_workdirs.logdir_equal logdir pkgs)
+  get_or_recompute (List.assoc ~eq:Server_lib.Workdirs.logdir_equal logdir pkgs)
 
 let get_compilers ~logdir self =
   let* self = !self in
   let+ compilers = self.compilers in
-  List.assoc ~eq:Server_lib.Server_workdirs.logdir_equal logdir compilers
+  List.assoc ~eq:Server_lib.Workdirs.logdir_equal logdir compilers
 
 let get_opam self k =
   let* self = !self in
@@ -276,7 +276,7 @@ let get_json_latest_packages self =
     | [] -> Lwt.return []
     | logdir::_ ->
         let* pkgs = self.pkgs in
-        get_or_recompute (List.assoc ~eq:Server_lib.Server_workdirs.logdir_equal logdir pkgs)
+        get_or_recompute (List.assoc ~eq:Server_lib.Workdirs.logdir_equal logdir pkgs)
   in
   let json = Json.pkgs_to_json pkgs in
   Yojson.Safe.to_string json
