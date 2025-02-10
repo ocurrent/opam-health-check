@@ -1,3 +1,5 @@
+open Lwt.Syntax
+
 type t = {
   yamlfile : Fpath.t;
   mutable name : string option;
@@ -250,7 +252,7 @@ let set_ocaml_switches conf switches =
 
 let set_default_ocaml_switches conf f =
   if Option.is_none conf.ocaml_switches then
-    let%lwt x = f () in
+    let* x = f () in
     set_ocaml_switches conf x
   else
     Lwt.return_unit
