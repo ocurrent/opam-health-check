@@ -1,24 +1,25 @@
 (executable
-  (name client)
-  (public_name opam-health-check)
-  (libraries
-    mirage-crypto-pk
-    cohttp
-    cohttp-lwt
-    cohttp-lwt-unix
-    containers
-    xdg-basedir
-    fpath
-    uri
-    lwt
-    lwt.unix
-    cstruct
-    oca_lib
-    cmdliner
-    yaml))
+ (name client)
+ (public_name opam-health-check)
+ (libraries
+  mirage-crypto-pk
+  cohttp
+  cohttp-lwt
+  cohttp-lwt-unix
+  containers
+  xdg-basedir
+  fpath
+  uri
+  lwt
+  lwt.unix
+  cstruct
+  oca_lib
+  cmdliner
+  yaml))
 
 (rule
-  (with-stdout-to config.ml
-    (progn
-      (echo "let name = {|opam-health-check|}\n")
-      (echo "let version = {|%{version:opam-health-check}|}\n"))))
+ (with-stdout-to
+  config.ml
+  (progn
+   (echo "let name = {|opam-health-check|}\n")
+   (echo "let version = {|%{version:opam-health-check}|}\n"))))
