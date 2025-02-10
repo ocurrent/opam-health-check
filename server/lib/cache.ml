@@ -3,31 +3,37 @@ open Lwt.Syntax
 module Opams_cache = Map.Make (String)
 module Revdeps_cache = Map.Make (String)
 
+module Compiler = Server_lib.Intf.Compiler
+module State = Server_lib.Intf.State
+module Pkg = Server_lib.Intf.Pkg
+module Pkg_diff = Server_lib.Intf.Pkg_diff
+module Instance = Server_lib.Intf.Instance
+
 type merge =
   | Old
   | New
 
 module Pkg_htbl = Map.Make (struct
-    type t = string * Server_lib.Intf.Compiler.t
+    type t = string * Compiler.t
     let compare (full_name, comp) y =
       let full_name = String.compare full_name (fst y) in
       if full_name <> 0 then full_name
-      else Server_lib.Intf.Compiler.compare comp (snd y)
+      else Compiler.compare comp (snd y)
   end)
 
 let add_diff htbl acc ((full_name, comp) as pkg) =
   match Pkg_htbl.find pkg htbl with
-  | [((Old | New), Server_lib.Intf.State.NotAvailable)] -> acc
-  | [(Old, state)] -> Server_lib.Intf.Pkg_diff.{full_name; comp; diff = NotAvailableAnymore state} :: acc
-  | [(New, state)] -> Server_lib.Intf.Pkg_diff.{full_name; comp; diff = NowInstallable state} :: acc
-  | [(New, new_state); (Old, old_state)] when Server_lib.Intf.State.equal new_state old_state -> acc
-  | [(New, new_state); (Old, old_state)] -> Server_lib.Intf.Pkg_diff.{full_name; comp; diff = StatusChanged (old_state, new_state)} :: acc
+  | [((Old | New), State.NotAvailable)] -> acc
+  | [(Old, state)] -> Pkg_diff.{full_name; comp; diff = NotAvailableAnymore state} :: acc
+  | [(New, state)] -> Pkg_diff.{full_name; comp; diff = NowInstallable state} :: acc
+  | [(New, new_state); (Old, old_state)] when State.equal new_state old_state -> acc
+  | [(New, new_state); (Old, old_state)] -> Pkg_diff.{full_name; comp; diff = StatusChanged (old_state, new_state)} :: acc
   | _ -> assert false
   [@@ocaml.warning "-fragile-match"]
 
 let split_diff (bad, partial, not_available, internal_failure, good) diff =
-  let open Server_lib.Intf.State in
-  let open Server_lib.Intf.Pkg_diff in
+  let open State in
+  let open Pkg_diff in
   match diff with
   | {diff = (StatusChanged (_, Bad) | NowInstallable Bad); _} -> (diff :: bad, partial, not_available, internal_failure, good)
   | {diff = (StatusChanged (_, Partial) | NowInstallable Partial); _} -> (bad, diff :: partial, not_available, internal_failure, good)
@@ -39,11 +45,11 @@ let split_diff (bad, partial, not_available, internal_failure, good) diff =
 let generate_diff old_pkgs new_pkgs =
   let pkg_htbl = Pkg_htbl.empty in
   let aux pos pkg_htbl pkg =
-    Server_lib.Intf.Pkg.instances pkg |>
+    Pkg.instances pkg |>
     List.fold_left begin fun pkg_htbl inst ->
-      let comp = Server_lib.Intf.Instance.compiler inst in
-      let state = Server_lib.Intf.Instance.state inst in
-      let key = (Server_lib.Intf.Pkg.full_name pkg, comp) in
+      let comp = Instance.compiler inst in
+      let state = Instance.state inst in
+      let key = (Pkg.full_name pkg, comp) in
       match Pkg_htbl.find_opt key pkg_htbl with
       | Some acc -> Pkg_htbl.add key ((pos, state) :: acc) pkg_htbl
       | None -> Pkg_htbl.add key [(pos, state)] pkg_htbl
@@ -51,7 +57,7 @@ let generate_diff old_pkgs new_pkgs =
   in
   let pkg_htbl = List.fold_left (aux Old) pkg_htbl old_pkgs in
   let pkg_htbl = List.fold_left (aux New) pkg_htbl new_pkgs in
-  List.sort_uniq ~cmp:Ord.(pair string Server_lib.Intf.Compiler.compare) (List.map fst (Pkg_htbl.bindings pkg_htbl)) |>
+  List.sort_uniq ~cmp:Ord.(pair string Compiler.compare) (List.map fst (Pkg_htbl.bindings pkg_htbl)) |>
   List.fold_left (add_diff pkg_htbl) [] |>
   List.fold_left split_diff ([], [], [], [], [])
 
@@ -61,8 +67,8 @@ type 'a prefetched_or_recompute =
 
 type data = {
   mutable logdirs : Server_lib.Workdirs.logdir list Lwt.t;
-  mutable pkgs : (Server_lib.Workdirs.logdir * Server_lib.Intf.Pkg.t list prefetched_or_recompute) list Lwt.t;
-  mutable compilers : (Server_lib.Workdirs.logdir * Server_lib.Intf.Compiler.t list) list Lwt.t;
+  mutable pkgs : (Server_lib.Workdirs.logdir * Pkg.t list prefetched_or_recompute) list Lwt.t;
+  mutable compilers : (Server_lib.Workdirs.logdir * Compiler.t list) list Lwt.t;
   mutable opams : OpamFile.OPAM.t Opams_cache.t Lwt.t;
   mutable revdeps : int Revdeps_cache.t Lwt.t;
 }
@@ -127,29 +133,29 @@ let (>>&&) x f =
   if x then f () else Lwt.return_false
 
 let must_show_package ~logsearch query ~is_latest pkg =
-  let opam = Server_lib.Intf.Pkg.opam pkg in
-  let instances' = Server_lib.Intf.Pkg.instances pkg in
-  let instances = List.filter (fun inst -> List.mem ~eq:Server_lib.Intf.Compiler.equal (Server_lib.Intf.Instance.compiler inst) query.Html.compilers) instances' in
+  let opam = Pkg.opam pkg in
+  let instances' = Pkg.instances pkg in
+  let instances = List.filter (fun inst -> List.mem ~eq:Compiler.equal (Instance.compiler inst) query.Html.compilers) instances' in
   begin
     Lwt.return @@
     List.exists (fun comp ->
-      match List.find_opt (fun inst -> Server_lib.Intf.Compiler.equal comp (Server_lib.Intf.Instance.compiler inst)) instances' with
+      match List.find_opt (fun inst -> Compiler.equal comp (Instance.compiler inst)) instances' with
       | None -> true (* TODO: Maybe switch to assert false? *)
-      | Some inst -> match Server_lib.Intf.Instance.state inst with
-        | Server_lib.Intf.State.NotAvailable -> false
-        | Server_lib.Intf.State.(Good | Partial | Bad | InternalFailure) -> true
+      | Some inst -> match Instance.state inst with
+        | State.NotAvailable -> false
+        | State.(Good | Partial | Bad | InternalFailure) -> true
     ) query.Html.show_available
   end >>&& begin fun () ->
     Lwt.return @@
     List.exists (fun state ->
-      List.exists (fun inst -> Server_lib.Intf.State.equal state (Server_lib.Intf.Instance.state inst)) instances
+      List.exists (fun inst -> State.equal state (Instance.state inst)) instances
     ) query.Html.show_only
   end >>&& begin fun () ->
     Lwt.return @@
     match instances with
     | hd::tl when query.Html.show_diff_only ->
-        let state = Server_lib.Intf.Instance.state hd in
-        List.exists (fun x -> not (Server_lib.Intf.State.equal state (Server_lib.Intf.Instance.state x))) tl
+        let state = Instance.state hd in
+        List.exists (fun x -> not (State.equal state (Instance.state x))) tl
     | [] | _::_ ->
         true
   end >>&& begin fun () ->
@@ -170,14 +176,14 @@ let must_show_package ~logsearch query ~is_latest pkg =
     match snd query.Html.logsearch with
     | Some _ ->
         let+ logsearch = logsearch in
-        List.exists (Server_lib.Intf.Pkg.equal pkg) logsearch
+        List.exists (Pkg.equal pkg) logsearch
     | None -> Lwt.return_true
   end
 
 let filter_pkg ~logsearch query (acc, last) pkg =
   let is_latest = match last with
     | None -> true
-    | Some last -> not (String.equal (Server_lib.Intf.Pkg.name pkg) (Server_lib.Intf.Pkg.name last))
+    | Some last -> not (String.equal (Pkg.name pkg) (Pkg.name last))
   in
   let+ v = must_show_package ~logsearch query ~is_latest pkg in
   match v with
@@ -189,16 +195,16 @@ let get_logsearch ~query ~logdir =
   match query.Html.logsearch with
   | _, None -> Lwt.return []
   | regexp, Some (_, comp) ->
-      let switch = Server_lib.Intf.Compiler.to_string comp in
+      let switch = Compiler.to_string comp in
       let+ searches = Server_lib.Workdirs.logdir_search ~switch ~regexp logdir in
       searches
       |> List.filter_map (fun s ->
         match String.split_on_char '/' s with
-        | [_switch; _state; full_name] -> Some (Server_lib.Intf.Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:(-1))
+        | [_switch; _state; full_name] -> Some (Pkg.create ~full_name ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:(-1))
         | _ -> None)
 
 let revdeps_cmp p1 p2 =
-  Int.neg (Int.compare (Server_lib.Intf.Pkg.revdeps p1) (Server_lib.Intf.Pkg.revdeps p2))
+  Int.neg (Int.compare (Pkg.revdeps p1) (Pkg.revdeps p2))
 
 let get_or_recompute = function
   | Prefetched p -> Lwt.return p
