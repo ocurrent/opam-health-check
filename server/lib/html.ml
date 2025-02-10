@@ -1,4 +1,4 @@
-open Intf
+open Server_lib.Intf
 
 (* TODO: Remove this hack? *)
 module Tyxml = struct
@@ -23,7 +23,7 @@ type query = {
 }
 
 let github_url conf =
-  Github.url (Server_configfile.default_repository conf)
+  Github.url (Server_lib.Server_configfile.default_repository conf)
 
 (* NOTE: Attempt at finding the right set of colors unambiguous to both colorblinds and non-colorblinds.
    Base work:
@@ -40,7 +40,7 @@ module CUD_pallette = struct
 end
 
 let log_url logdir pkg instance =
-  let logdir = Server_workdirs.get_logdir_name logdir in
+  let logdir = Server_lib.Server_workdirs.get_logdir_name logdir in
   let comp = Instance.compiler instance in
   let comp = Compiler.to_string comp in
   let state = State.to_string (Instance.state instance) in
@@ -103,7 +103,7 @@ let get_run_info ~compilers pkgs =
           | State.InternalFailure -> unchanged
         else
           unchanged
-      ) (false, false) (Intf.Pkg.instances pkg)
+      ) (false, false) (Pkg.instances pkg)
     in
     let (number_hard_fail, number_soft_fail) =
       match (hard_fail, soft_fail) with
@@ -118,10 +118,10 @@ let run_info ~logdir ~compilers ~pkgs conf =
   let open Tyxml.Html in
   let opam_repo_uri =
     let content = b [txt "🔗 opam-repository commit hash"] in
-    let hash = Server_workdirs.get_logdir_hash logdir in
+    let hash = Server_lib.Server_workdirs.get_logdir_hash logdir in
     get_opam_repository_commit_url ~hash ~content conf
   in
-  let date = Server_workdirs.get_logdir_time logdir in
+  let date = Server_lib.Server_workdirs.get_logdir_time logdir in
   let date = date_to_string date in
   let legend = legend [b [txt "About this run:"]] in
   let number_pkgs, number_hard_fail, number_soft_fail = get_run_info ~compilers pkgs in
@@ -336,9 +336,9 @@ let get_html ~logdir ~conf query pkgs =
   let logsearch_text = [txt "Only show packages whose log matches [posix regexp]:"] in
   let logsearch = input ~a:[a_input_type `Text; a_name "logsearch"; a_value (fst query.logsearch)] () in
   let opts_comp = List.map begin fun comp ->
-    let comp_str = Intf.Compiler.to_string comp in
+    let comp_str = Compiler.to_string comp in
     option
-      ~a:(a_value comp_str :: match snd query.logsearch with Some (_, c) when Intf.Compiler.equal c comp -> [a_selected ()] | Some _ | None -> [])
+      ~a:(a_value comp_str :: match snd query.logsearch with Some (_, c) when Compiler.equal c comp -> [a_selected ()] | Some _ | None -> [])
       (txt comp_str)
   end query.compilers in
   let logsearch_comp = select ~a:[a_name "logsearch_comp"] opts_comp in
@@ -358,9 +358,9 @@ let get_html ~logdir ~conf query pkgs =
   let doc = html head (body [common_header; filter_form; br (); doc; script javascript]) in
   Format.sprintf "%a\n" (pp ()) doc
 
-let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; diff} =
+let generate_diff_html ~old_logdir ~new_logdir {Pkg_diff.full_name; comp; diff} =
   let open Tyxml.Html in
-  let comp_str = Intf.Compiler.to_string comp in
+  let comp_str = Compiler.to_string comp in
   let prefix = [b [txt full_name]; txt " on "; b [txt comp_str]] in
   let good = span ~a:[a_style ("color: "^CUD_pallette.green^";")] [txt "passing"] in
   let bad = span ~a:[a_style ("color: "^CUD_pallette.red^";")] [txt "failing"] in
@@ -368,34 +368,34 @@ let generate_diff_html ~old_logdir ~new_logdir {Intf.Pkg_diff.full_name; comp; d
   let not_available = span ~a:[a_style ("color: "^CUD_pallette.grey^";")] [txt "not available"] in
   let internal_failure = span ~a:[a_style "border: 2px solid black;"] [txt "internal failure"] in
   let print_status = function
-    | Intf.State.Good -> good
-    | Intf.State.Partial -> partial
-    | Intf.State.Bad -> bad
-    | Intf.State.NotAvailable -> not_available
-    | Intf.State.InternalFailure -> internal_failure
+    | State.Good -> good
+    | State.Partial -> partial
+    | State.Bad -> bad
+    | State.NotAvailable -> not_available
+    | State.InternalFailure -> internal_failure
   in
-  let old_logdir = Server_workdirs.get_logdir_name old_logdir in
-  let new_logdir = Server_workdirs.get_logdir_name new_logdir in
+  let old_logdir = Server_lib.Server_workdirs.get_logdir_name old_logdir in
+  let new_logdir = Server_lib.Server_workdirs.get_logdir_name new_logdir in
   let get_status_elm ~logdir status =
-    let status_str = Intf.State.to_string status in
+    let status_str = State.to_string status in
     let status = print_status status in
     a ~a:[a_href ("/log/"^logdir^"/"^comp_str^"/"^status_str^"/"^full_name)] [status]
   in
   let diff = match diff with
-    | Intf.Pkg_diff.StatusChanged (old_status, new_status) ->
+    | Pkg_diff.StatusChanged (old_status, new_status) ->
         let old_status = get_status_elm ~logdir:old_logdir old_status in
         let new_status = get_status_elm ~logdir:new_logdir new_status in
         [txt " had its build status changed: "; old_status; txt " to "; new_status]
-    | Intf.Pkg_diff.NowInstallable new_status ->
+    | Pkg_diff.NowInstallable new_status ->
         let new_status = get_status_elm ~logdir:new_logdir new_status in
         [txt " is now installable. Current state is: "; new_status]
-    | Intf.Pkg_diff.NotAvailableAnymore old_status ->
+    | Pkg_diff.NotAvailableAnymore old_status ->
         let old_status = get_status_elm ~logdir:old_logdir old_status in
         [txt " is not available anymore. Previous state was: "; old_status]
   in
   li (prefix @ diff)
 
-type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list)
+type diff = (Pkg_diff.t list * Pkg_diff.t list * Pkg_diff.t list * Pkg_diff.t list * Pkg_diff.t list)
 
 let get_diff ~old_logdir ~new_logdir ~conf (bad, partial, not_available, internal_failure, good) =
   let open Tyxml.Html in
@@ -406,9 +406,9 @@ let get_diff ~old_logdir ~new_logdir ~conf (bad, partial, not_available, interna
     let hash = String.take 7 hash in
     get_opam_repository_commit_url ~hash ~content:(b [txt hash]) conf
   in
-  let old_hash = Server_workdirs.get_logdir_hash old_logdir in
+  let old_hash = Server_lib.Server_workdirs.get_logdir_hash old_logdir in
   let old_hash_elm = get_hash_elm old_hash in
-  let new_hash = Server_workdirs.get_logdir_hash new_logdir in
+  let new_hash = Server_lib.Server_workdirs.get_logdir_hash new_logdir in
   let new_hash_elm = get_hash_elm new_hash in
   let git_diff = a ~a:[a_href (github_url conf^"/compare/"^old_hash^"..."^new_hash)] [txt "git diff"] in
   let good_txt = span ~a:[a_style ("color: "^CUD_pallette.green^";")] [txt "passing"] in
@@ -439,15 +439,15 @@ let get_diff ~old_logdir ~new_logdir ~conf (bad, partial, not_available, interna
 
 let get_diff_url ~old_logdir ~new_logdir content =
   let open Tyxml.Html in
-  let old_logdir = Server_workdirs.get_logdir_name old_logdir in
-  let new_logdir = Server_workdirs.get_logdir_name new_logdir in
+  let old_logdir = Server_lib.Server_workdirs.get_logdir_name old_logdir in
+  let new_logdir = Server_lib.Server_workdirs.get_logdir_name new_logdir in
   a ~a:[a_href ("/diff/"^old_logdir^".."^new_logdir)] content
 
 let map_diff (old_logdir, new_logdir) =
   let open Tyxml.Html in
-  let old_date = Server_workdirs.get_logdir_time old_logdir in
+  let old_date = Server_lib.Server_workdirs.get_logdir_time old_logdir in
   let old_date = date_to_string old_date in
-  let new_date = Server_workdirs.get_logdir_time new_logdir in
+  let new_date = Server_lib.Server_workdirs.get_logdir_time new_logdir in
   let new_date = date_to_string new_date in
   li [get_diff_url ~old_logdir ~new_logdir
         [txt "Diff between check made on the "; b [txt old_date];
@@ -473,9 +473,9 @@ let get_diff_list diffs =
 
 let map_logdir logdir =
   let open Tyxml.Html in
-  let date = Server_workdirs.get_logdir_time logdir in
+  let date = Server_lib.Server_workdirs.get_logdir_time logdir in
   let date = date_to_string date in
-  let logdir = Server_workdirs.get_logdir_name logdir in
+  let logdir = Server_lib.Server_workdirs.get_logdir_name logdir in
   li [a ~a:[a_href ("/run/"^logdir)] [txt ("Run made on the "^date)]]
 
 let get_run_list logdirs =
@@ -490,7 +490,7 @@ let get_run_list logdirs =
 let get_log ~comp ~pkg log =
   let open Tyxml.Html in
   let log = Current_ansi.process (Current_ansi.create ()) log in
-  let title = title (txt ("opam-health-check log - "^pkg^" on "^Intf.Compiler.to_string comp)) in
+  let title = title (txt ("opam-health-check log - "^pkg^" on "^Compiler.to_string comp)) in
   let charset = meta ~a:[a_charset "utf-8"] () in
   let head = head title [charset] in
   let doc = html head (body [common_header; hr (); style [Unsafe.data Current_ansi.css]; pre [Unsafe.data log]]) in

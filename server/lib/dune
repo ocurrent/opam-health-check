@@ -17,4 +17,5 @@
   yojson
   current_ansi
   prometheus-app
-  oca_lib))
+  oca_lib
+  server_lib))

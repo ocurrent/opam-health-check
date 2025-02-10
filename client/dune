@@ -14,6 +14,7 @@
   lwt.unix
   cstruct
   oca_lib
+  server_lib
   cmdliner
   yaml))
 

@@ -1,4 +1,12 @@
 (library
- (name oca_lib)
- (wrapped false)
- (libraries lwt lwt.unix opam-core opam-format yaml fpath uri containers))
+ (name server_lib)
+ (libraries
+  oca_lib
+  lwt
+  lwt.unix
+  opam-core
+  opam-format
+  yaml
+  fpath
+  uri
+  containers))

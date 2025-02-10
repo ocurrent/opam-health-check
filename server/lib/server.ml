@@ -1,5 +1,9 @@
 open Lwt.Syntax
 
+(* module Intf = Server_lib.Intf *)
+module Compiler = Server_lib.Intf.Compiler
+module State = Server_lib.Intf.State
+
 module Make (Backend : Backend_intf.S) = struct
   let serv_text ~content_type body =
     let headers = Cohttp.Header.init_with "Content-Type" content_type in
@@ -36,23 +40,23 @@ module Make (Backend : Backend_intf.S) = struct
     let logsearch = if String.is_empty logsearch then None else Some logsearch in
     let logsearch' =
       Option.map2 begin fun re comp ->
-        (Re.Posix.compile_pat ~opts:[`Newline] re, Intf.Compiler.from_string comp)
+        (Re.Posix.compile_pat ~opts:[`Newline] re, Compiler.from_string comp)
       end logsearch (Uri.get_query_param uri "logsearch_comp")
     in
     let logsearch = (option_to_string logsearch, logsearch') in
     let* available_compilers = Cache.get_compilers ~logdir Backend.cache in
     let compilers = match compilers with
       | [] -> available_compilers
-      | compilers -> List.map Intf.Compiler.from_string compilers
+      | compilers -> List.map Compiler.from_string compilers
     in
     let show_available = match show_available with
       | [] -> compilers
-      | show_available -> List.map Intf.Compiler.from_string show_available
+      | show_available -> List.map Compiler.from_string show_available
     in
     let show_only = match show_only with
-      | [] when show_failures_only -> [Intf.State.Bad; Intf.State.Partial]
-      | [] -> Intf.State.all
-      | show_only -> List.map Intf.State.from_string show_only
+      | [] when show_failures_only -> [State.Bad; State.Partial]
+      | [] -> State.all
+      | show_only -> List.map State.from_string show_only
     in
     Lwt.return {
       Html.available_compilers;
@@ -80,7 +84,7 @@ module Make (Backend : Backend_intf.S) = struct
   let get_logdir name =
     let+ logdirs = Cache.get_logdirs Backend.cache in
     List.find_opt (fun logdir ->
-      String.equal (Server_workdirs.get_logdir_name logdir) name
+      String.equal (Server_lib.Server_workdirs.get_logdir_name logdir) name
     ) logdirs
 
   let callback ~conf backend _conn req body_NOT_USED =
@@ -92,8 +96,8 @@ module Make (Backend : Backend_intf.S) = struct
       | None ->
           Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
       | Some logdir ->
-          let comp = Intf.Compiler.from_string comp in
-          let state = Intf.State.from_string state in
+          let comp = Compiler.from_string comp in
+          let state = State.from_string state in
           let* v = Backend.get_log backend ~logdir ~comp ~state ~pkg in
           match v with
           | None ->
@@ -179,10 +183,10 @@ module Make (Backend : Backend_intf.S) = struct
   let main ~debug ~cap_file ~workdir =
     Printexc.record_backtrace debug;
     let* cwd = Lwt_unix.getcwd () in
-    let workdir = Server_workdirs.create ~cwd ~workdir in
-    let* () = Server_workdirs.init_base workdir in
-    let conf = Server_configfile.from_workdir workdir in
-    let port = Server_configfile.port conf in
+    let workdir = Server_lib.Server_workdirs.create ~cwd ~workdir in
+    let* () = Server_lib.Server_workdirs.init_base workdir in
+    let conf = Server_lib.Server_configfile.from_workdir workdir in
+    let port = Server_lib.Server_configfile.port conf in
     let* (backend, backend_task) = Backend.start ~debug ~cap_file conf workdir in
     Lwt.join [
       tcp_server port (callback ~debug ~conf backend);

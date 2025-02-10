@@ -1,35 +1,35 @@
 type query = {
-  available_compilers : Intf.Compiler.t list;
-  compilers : Intf.Compiler.t list;
-  show_available : Intf.Compiler.t list;
-  show_only : Intf.State.t list;
+  available_compilers : Server_lib.Intf.Compiler.t list;
+  compilers : Server_lib.Intf.Compiler.t list;
+  show_available : Server_lib.Intf.Compiler.t list;
+  show_only : Server_lib.Intf.State.t list;
   show_diff_only : bool;
   show_latest_only : bool;
   sort_by_revdeps : bool;
   maintainers : string * Re.re option;
-  logsearch : string * (Re.re * Intf.Compiler.t) option;
+  logsearch : string * (Re.re * Server_lib.Intf.Compiler.t) option;
 }
 
 val get_html :
-  logdir:Server_workdirs.logdir ->
-  conf:Server_configfile.t ->
+  logdir:Server_lib.Server_workdirs.logdir ->
+  conf:Server_lib.Server_configfile.t ->
   query ->
-  Intf.Pkg.t list ->
+  Server_lib.Intf.Pkg.t list ->
   string
 
-type diff = (Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list * Intf.Pkg_diff.t list)
+type diff = (Server_lib.Intf.Pkg_diff.t list * Server_lib.Intf.Pkg_diff.t list * Server_lib.Intf.Pkg_diff.t list * Server_lib.Intf.Pkg_diff.t list * Server_lib.Intf.Pkg_diff.t list)
 
 val get_diff :
-  old_logdir:Server_workdirs.logdir ->
-  new_logdir:Server_workdirs.logdir ->
-  conf:Server_configfile.t ->
+  old_logdir:Server_lib.Server_workdirs.logdir ->
+  new_logdir:Server_lib.Server_workdirs.logdir ->
+  conf:Server_lib.Server_configfile.t ->
   diff ->
   string
 
 val get_diff_list :
-  (Server_workdirs.logdir * Server_workdirs.logdir) list ->
+  (Server_lib.Server_workdirs.logdir * Server_lib.Server_workdirs.logdir) list ->
   string
 
-val get_run_list : Server_workdirs.logdir list -> string
+val get_run_list : Server_lib.Server_workdirs.logdir list -> string
 
-val get_log : comp:Intf.Compiler.t -> pkg:string -> string -> string
+val get_log : comp:Server_lib.Intf.Compiler.t -> pkg:string -> string -> string

@@ -1,1 +1,1 @@
-val pkgs_to_json : Intf.Pkg.t list -> Yojson.Safe.t
+val pkgs_to_json : Server_lib.Intf.Pkg.t list -> Yojson.Safe.t

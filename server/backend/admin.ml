@@ -1,5 +1,9 @@
 open Lwt.Syntax
+
+module Switch = Server_lib.Intf.Switch
+
 let ( // ) = Fpath.( / )
+
 
 let with_file_out ~flags file f =
   let flags = Unix.O_WRONLY::Unix.O_CREAT::Unix.O_TRUNC::Unix.O_NONBLOCK::flags in
@@ -14,7 +18,7 @@ let get_keyfile workdir username =
   (* TODO: Replace this test by Oca_lib.is_valid_filename ? *)
   if String.is_empty username || not (String.for_all is_username_char username) then
     failwith "Invalid username";
-  Server_workdirs.keyfile ~username workdir
+  Server_lib.Server_workdirs.keyfile ~username workdir
 
 let create_userkey workdir username =
   let keyfile = get_keyfile workdir username in
@@ -33,7 +37,7 @@ let create_admin_key workdir =
   | false -> create_userkey workdir username
 
 let get_log workdir =
-  let ilogdir = Server_workdirs.ilogdir workdir in
+  let ilogdir = Server_lib.Server_workdirs.ilogdir workdir in
   let* logs = Oca_lib.get_files ilogdir in
   let logs = List.sort String.compare logs in
   let logfile = Option.get_exn_or "no last log" (List.last_opt logs) in
@@ -65,43 +69,43 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
   let* resp =
     match String.split_on_char '\n' body with
     | ["set-auto-run-interval"; i] ->
-        let* () = Server_configfile.set_auto_run_interval conf (int_of_string i) in
+        let* () = Server_lib.Server_configfile.set_auto_run_interval conf (int_of_string i) in
         Lwt.return (fun () -> Lwt.return_none)
     | ["set-processes"; i] ->
         let i = int_of_string i in
         if i < 0 then
           Lwt.fail (Failure "Cannot set the number of processes to a negative value.")
         else
-          let+ () = Server_configfile.set_processes conf i in
+          let+ () = Server_lib.Server_configfile.set_processes conf i in
           (fun () -> Lwt.return_none)
     | ["add-ocaml-switch";name;switch] ->
-        let switch = Intf.Switch.create ~name ~switch in
-        let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
-        if List.mem ~eq:Intf.Switch.equal switch switches then
+        let switch = Switch.create ~name ~switch in
+        let switches = Option.get_or ~default:[] (Server_lib.Server_configfile.ocaml_switches conf) in
+        if List.mem ~eq:Switch.equal switch switches then
           Lwt.fail (Failure "Cannot have duplicate switches names.")
         else
-          let switches = List.sort Intf.Switch.compare (switch :: switches) in
-          let+ () = Server_configfile.set_ocaml_switches conf switches in
+          let switches = List.sort Switch.compare (switch :: switches) in
+          let+ () = Server_lib.Server_configfile.set_ocaml_switches conf switches in
           (fun () -> Lwt.return_none)
     | ["set-ocaml-switch";name;switch] ->
-        let switch = Intf.Switch.create ~name ~switch in
-        let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
-        let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
+        let switch = Switch.create ~name ~switch in
+        let switches = Option.get_or ~default:[] (Server_lib.Server_configfile.ocaml_switches conf) in
+        let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Switch.equal switch) switches) in
         let switches = List.set_at_idx idx switch switches in
-        let+ () = Server_configfile.set_ocaml_switches conf switches in
+        let+ () = Server_lib.Server_configfile.set_ocaml_switches conf switches in
         (fun () -> Lwt.return_none)
     | ["rm-ocaml-switch";name] ->
-        let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
-        let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
-        let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
-        let+ () = Server_configfile.set_ocaml_switches conf switches in
+        let switch = Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
+        let switches = Option.get_or ~default:[] (Server_lib.Server_configfile.ocaml_switches conf) in
+        let switches = List.remove ~eq:Switch.equal ~key:switch switches in
+        let+ () = Server_lib.Server_configfile.set_ocaml_switches conf switches in
         (fun () -> Lwt.return_none)
     | "set-slack-webhooks"::webhooks ->
         let webhooks = List.map Uri.of_string webhooks in
-        let+ () = Server_configfile.set_slack_webhooks conf webhooks in
+        let+ () = Server_lib.Server_configfile.set_slack_webhooks conf webhooks in
         (fun () -> Lwt.return_none)
     | ["set-list-command";cmd] ->
-        let+ () = Server_configfile.set_list_command conf cmd in
+        let+ () = Server_lib.Server_configfile.set_list_command conf cmd in
         (fun () -> Lwt.return_none)
     | ["run"] ->
         let+ () = Lwt_mvar.put run_trigger () in
