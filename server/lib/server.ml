@@ -1,6 +1,5 @@
 open Lwt.Syntax
 
-(* module Intf = Server_lib.Intf *)
 module Compiler = Server_lib.Intf.Compiler
 module State = Server_lib.Intf.State
 
