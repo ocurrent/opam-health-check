@@ -187,20 +187,78 @@ let with_lower_bound ~conf pkg =
   else
     ""
 
-let run_script ~conf pkg = {|
-opam remove -y "|}^pkg^{|"
-opam install -vy "|}^pkg^{|"
+let repo_url_of_github repository =
+  let user = Intf.Github.user repository in
+  let repo = Intf.Github.repo repository in
+  let possibly_branch = match Intf.Github.branch repository with
+    | None -> ""
+    | Some branch -> Printf.sprintf "#%s" branch
+  in
+  Printf.sprintf "git+https://github.com/%s/%s.git%s" user repo possibly_branch
+
+let extra_repos repos =
+  ListLabels.map repos ~f:(fun repo ->
+    let name = Intf.Repository.name repo in
+    let url = repo |> Intf.Repository.github |> repo_url_of_github in
+    name, url)
+
+let set_up_workspace ~conf =
+  let default_repo = conf |> Server_configfile.default_repository |> repo_url_of_github in
+  let extra_names, extra_config = conf
+    |> Server_configfile.extra_repositories
+    |> extra_repos
+      |> ListLabels.map ~f:(fun (name, url) ->
+      let config = Printf.sprintf {|(repository
+        (name %s)
+        (url %s)|} name url
+      in
+      (name, config))
+    |> List.split in
+  let content = Printf.sprintf {|(lang dune 3.17)
+(lock_dir
+ (repositories overlay default %s))
+
+(repository
+ (name default)
+ (url "%s"))
+
+%s
+|} (String.concat " " extra_names)
+    default_repo
+    (String.concat "\n" extra_config)
+  in
+  Printf.sprintf {|echo '%s' > dune-workspace|} content
+
+let run_script ~conf pkg =
+  match Server_configfile.build_with conf with
+  | Server_configfile.Opam ->
+      let build = Printf.sprintf {|opam remove -y %s
+opam install -vy %s
 res=$?
 if [ $res = 31 ]; then
-    if opam show -f x-ci-accept-failures: "|}^pkg^{|" | grep -q '"|}^Server_configfile.platform_distribution conf^{|"'; then
+    if opam show -f x-ci-accept-failures: %s | grep -q '%s'; then
         echo "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field."
         exit 69
     fi
-fi
-|}^with_test ~conf pkg^{|
-|}^with_lower_bound ~conf pkg^{|
-exit $res
-|}
+fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
+      in
+      let trailer = {|exit $res|} in
+      String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]
+  | Server_configfile.Dune -> (
+    let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
+    let go_home = "cd $HOME" in
+    let retrieve_source = Printf.sprintf {|opam source %s|} pkg in
+    let go_source = Printf.sprintf {|cd %s|} pkg in
+    let dune_path = "PATH=$HOME/.local/bin:$PATH" in
+    let lock = Printf.sprintf {|%s dune pkg lock|} dune_path in
+    let build = Printf.sprintf {|%s dune build|} dune_path in
+    String.concat " && " [
+      install_dune;
+      go_home;
+      retrieve_source;
+      go_source;
+      set_up_workspace ~conf;
+      lock; build])
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->

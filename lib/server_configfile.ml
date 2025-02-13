@@ -1,5 +1,21 @@
 open Lwt.Syntax
 
+type build_with =
+  | Opam
+  | Dune
+
+let yaml_of_build_with = function
+  | Opam -> `String "opam"
+  | Dune -> `String "dune"
+
+let config_parser_fail value =
+  failwith @@ Printf.sprintf "Config parser: value %S is invalid" value
+
+let build_with_of_yaml_exn = function
+  | `String "opam" -> Opam
+  | `String "dune" -> Dune
+  | otherwise -> config_parser_fail @@ Yaml.to_string_exn otherwise
+
 type t = {
   yamlfile : Fpath.t;
   mutable name : string option;
@@ -24,6 +40,7 @@ type t = {
   mutable ocaml_switches : Intf.Switch.t list option;
   mutable slack_webhooks : Uri.t list option;
   mutable job_timeout : float option;
+  mutable build_with : build_with;
 }
 
 let create_conf yamlfile = {
@@ -50,6 +67,7 @@ let create_conf yamlfile = {
   ocaml_switches = None;
   slack_webhooks = None;
   job_timeout = None;
+  build_with = Opam;
 }
 
 let set_field ~field set = function
@@ -139,6 +157,8 @@ let set_config conf = function
       set_field ~field (fun () -> conf.slack_webhooks <- Some webhooks) conf.slack_webhooks
   | "job-timeout" as field, `Float job_timeout ->
       set_field ~field (fun () -> conf.job_timeout <- Some job_timeout) conf.job_timeout
+  | "build-with", (`String _ as value) ->
+      conf.build_with <- build_with_of_yaml_exn value
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
@@ -191,6 +211,7 @@ let yaml_of_conf conf =
     "ocaml-switches", Option.map_or ~default:`Null yaml_of_ocaml_switches conf.ocaml_switches;
     "slack-webhooks", Option.map_or ~default:`Null yaml_of_slack_webhooks conf.slack_webhooks;
     "job-timeout", `Float (Option.get_exn_or "conf.job-timeout" conf.job_timeout);
+    "build-with", yaml_of_build_with conf.build_with;
   ]
 
 let set_defaults conf =
@@ -315,3 +336,4 @@ let platform_image {platform_image; _} = Option.get_exn_or "platform_image" plat
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let slack_webhooks {slack_webhooks; _} = Option.get_exn_or "slack_webhooks" slack_webhooks
 let job_timeout {job_timeout; _} = Option.get_exn_or "job_timeout" job_timeout
+let build_with {build_with; _} = build_with
