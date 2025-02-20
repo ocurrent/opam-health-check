@@ -27,13 +27,16 @@ let network = ["host"]
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_mach (Obuilder_spec.sexp_of_t spec)
 
-let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
+let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr commands =
+  let scripts = ListLabels.map commands ~f:(fun command ->
+    Obuilder_spec.run ~cache:(cache ~conf) ~network "%s" command)
+  in
   let obuilder_content =
     let {Obuilder_spec.child_builds; from; ops} = base_obuilder in
     Obuilder_spec.stage
       ~child_builds
       ~from
-      (ops @ [Obuilder_spec.run ~cache:(cache ~conf) ~network "%s" c])
+      (ops @ scripts)
   in
   let obuilder_content = obuilder_to_string obuilder_content in
   let* service = Capnp_rpc_lwt.Sturdy_ref.connect_exn cap in
@@ -83,7 +86,8 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
           Lwt_io.write_line stdout "+++ Cancellation failed +++"
         in
         let* () = Lwt.pick [cancel; timeout] in
-        let+ () = Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_float hours^" hours).") in
+        let commands_to_string = Fmt.to_to_string (Fmt.Dump.list Fmt.string) in
+        let+ () = Lwt_io.fprintf stderr "Commands %s timed out (%f hours)" (commands_to_string commands) hours in
         Error ()
       in
       Lwt.pick [timeout; proc]
@@ -121,7 +125,7 @@ let ocluster_build_str ~important ~debug ~cap ~conf ~base_obuilder ~stderr ~defa
     | None -> Lwt.return_nil
   in
   let* v = exec_out ~fout:aux ~fexec:(fun ~stdout ->
-      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@OUTPUT && "^c^" && echo @@@OUTPUT"))
+      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ["echo @@@OUTPUT && "^c^" && echo @@@OUTPUT"])
   in
   match v with
   | (Ok (), r) ->
@@ -243,7 +247,7 @@ if [ $res = 31 ]; then
 fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       in
       let trailer = {|exit $res|} in
-      String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]
+      [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
   | Server_configfile.Dune -> (
     let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
     let go_home = "cd $HOME" in
@@ -252,13 +256,16 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
     let dune_path = "PATH=$HOME/.local/bin:$PATH" in
     let lock = Printf.sprintf {|%s dune pkg lock|} dune_path in
     let build = Printf.sprintf {|%s dune build|} dune_path in
-    String.concat " && " [
+    [
       install_dune;
-      go_home;
-      retrieve_source;
-      go_source;
-      set_up_workspace ~conf;
-      lock; build])
+      String.concat " && " [
+        go_home;
+        retrieve_source;
+        go_source;
+        set_up_workspace ~conf;
+        lock;
+        build]
+    ])
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
