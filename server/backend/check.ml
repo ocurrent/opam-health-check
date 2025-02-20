@@ -239,6 +239,30 @@ let set_up_workspace ~conf =
   in
   Printf.sprintf {|echo '%s' > dune-workspace|} content
 
+let dune_path = "PATH=$HOME/.local/bin:$PATH"
+
+let set_up_project_using ~switch =
+  let dune_project = Printf.sprintf {|(lang dune 3.17)
+(package
+  (name dummy)
+  (allow_empty true)
+  (depends (ocaml (= %s))))|} switch in
+  Printf.sprintf {|echo '%s' > dune-project|} dune_project
+
+let prebuild_toolchains ~conf =
+  match Server_configfile.ocaml_switches conf with
+  | None -> []
+  | Some switches ->
+    switches
+    |> ListLabels.map ~f:(fun switch ->
+        let switch = Intf.Switch.switch switch in
+        String.concat " && " [
+          "PLACE=$(mktemp -d) && cd $PLACE";
+          set_up_project_using ~switch;
+          Printf.sprintf {|%s dune pkg lock|} dune_path;
+          Printf.sprintf {|%s dune build|} dune_path;
+        ])
+
 let run_script ~conf pkg =
   match Server_configfile.build_with conf with
   | Server_configfile.Opam ->
@@ -256,22 +280,15 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
   | Server_configfile.Dune -> (
     let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
-    let go_home = "cd $HOME" in
-    let retrieve_source = Printf.sprintf {|opam source %s|} pkg in
-    let go_source = Printf.sprintf {|cd %s|} pkg in
-    let dune_path = "PATH=$HOME/.local/bin:$PATH" in
-    let lock = Printf.sprintf {|%s dune pkg lock|} dune_path in
-    let build = Printf.sprintf {|%s dune build|} dune_path in
-    [
-      install_dune;
+    [ install_dune ] @ prebuild_toolchains ~conf @ [
       String.concat " && " [
-        go_home;
-        retrieve_source;
-        go_source;
+        "cd $HOME";
+        Printf.sprintf {|opam source %s|} pkg;
+        Printf.sprintf {|cd %s|} pkg;
         set_up_workspace ~conf;
-        lock;
-        build]
-    ])
+        Printf.sprintf {|%s dune pkg lock|} dune_path;
+        Printf.sprintf {|%s dune build|} dune_path]]
+    )
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
