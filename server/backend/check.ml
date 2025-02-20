@@ -32,7 +32,7 @@ let network = ["host"]
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_mach (Obuilder_spec.sexp_of_t spec)
 
-let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr commands =
+let ocluster_build ~cap ~conf ~base_obuilder ~debug ~stdout ~stderr commands =
   let* cache = cache ~stderr ~conf in
   let scripts = ListLabels.map commands ~f:(fun command ->
     Obuilder_spec.run ~cache ~network "%s" command)
@@ -45,6 +45,10 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr commands =
       (ops @ scripts)
   in
   let obuilder_content = obuilder_to_string obuilder_content in
+  let* () = match debug with
+    | true -> Lwt_io.fprintf stderr "OBuilder spec:\n%s\n" obuilder_content
+    | false -> Lwt.return ()
+  in
   let* service = Capnp_rpc_lwt.Sturdy_ref.connect_exn cap in
   Capnp_rpc_lwt.Capability.with_ref service @@ fun submission_service ->
   let action = Cluster_api.Submission.obuilder_build obuilder_content in
@@ -131,7 +135,7 @@ let ocluster_build_str ~important ~debug ~cap ~conf ~base_obuilder ~stderr ~defa
     | None -> Lwt.return_nil
   in
   let* v = exec_out ~fout:aux ~fexec:(fun ~stdout ->
-      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ["echo @@@OUTPUT && "^c^" && echo @@@OUTPUT"])
+      ocluster_build ~cap ~conf ~debug ~base_obuilder ~stdout ~stderr ["echo @@@OUTPUT && "^c^" && echo @@@OUTPUT"])
   in
   match v with
   | (Ok (), r) ->
@@ -291,14 +295,14 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         Printf.sprintf {|%s dune build|} dune_path]]
     )
 
-let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
+let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
     let* () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"…") in
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
     let* v =
       Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) (fun stdout ->
-        ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr (run_script ~conf pkg))
+        ocluster_build ~cap ~conf ~debug ~base_obuilder ~stdout ~stderr (run_script ~conf pkg))
     in
     match v with
     | Ok () ->
@@ -533,7 +537,7 @@ let move_tmpdirs_to_final ~switches logdir workdir =
   let* () = Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) in
   Oca_lib.rm_rf tmpdir
 
-let run_jobs ~cap ~conf ~pool ~stderr logdir switches pkgs =
+let run_jobs ~cap ~conf ~debug ~pool ~stderr logdir switches pkgs =
   let len = Pkg_set.cardinal pkgs * List.length switches in
   Prometheus.Gauge.set Metrics.jobs_total (float_of_int len);
   let len_suffix = "/"^string_of_int len in
@@ -541,7 +545,7 @@ let run_jobs ~cap ~conf ~pool ~stderr logdir switches pkgs =
     List.fold_left begin fun (i, jobs) (switch, base_obuilder) ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job = run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
+      let job = run_job ~cap ~conf ~debug ~pool ~stderr ~base_obuilder ~switch ~num logdir full_name in
       (i, job :: jobs)
     end (i, jobs) switches
   end pkgs (0, [])
@@ -686,7 +690,7 @@ let run ~debug ~cap_file ~on_finished ~conf oca_cache workdir =
             let pkgs = Pkg_set.of_list (List.concat pkgs) in
             Prometheus.Gauge.set Metrics.number_of_packages (float_of_int (Pkg_set.cardinal pkgs));
             let* () = Oca_lib.timer_log timer stderr "Initialization" in
-            let (_, jobs) = run_jobs ~cap ~conf ~pool ~stderr new_logdir switches pkgs in
+            let (_, jobs) = run_jobs ~cap ~conf ~debug ~pool ~stderr new_logdir switches pkgs in
             let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
             let* () = Lwt.join jobs in
             let* () = Oca_lib.timer_log timer stderr "Operation" in
