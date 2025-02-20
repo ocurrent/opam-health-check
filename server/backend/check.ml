@@ -2,7 +2,7 @@ open Lwt.Syntax
 
 let fmt = Printf.sprintf
 
-let cache ~conf =
+let cache ~stderr ~conf =
   let os = Server_configfile.platform_os conf in
   let opam_cache = match os with
     | "freebsd"
@@ -15,10 +15,15 @@ let cache ~conf =
     | "macos" -> Some (Obuilder_spec.Cache.v "homebrew" ~target:"/Users/mac1000/Library/Caches/Homebrew")
     | _ -> None
   in
-  let dune_cache =
-    if Server_configfile.enable_dune_cache conf
-    then Some (Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune")
-    else None
+  let+ dune_cache =
+    let enable = Some (Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune") in
+    match (Server_configfile.enable_dune_cache conf, Server_configfile.build_with conf) with
+    | true, _ -> Lwt.return enable
+    | false, Server_configfile.Dune ->
+      let+ () = Lwt_io.fprintf stderr
+        "Cache disabled but building with Dune, automatically enabling. Set `enable-dune-cache` to `true` to silence this warning.\n" in
+      enable
+    | false, Server_configfile.Opam -> Lwt.return None
   in
   List.filter_map (fun x -> x) [opam_cache; brew_cache; dune_cache]
 
@@ -28,8 +33,9 @@ let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_mach (Obuilder_spec.sexp_of_t spec)
 
 let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr commands =
+  let* cache = cache ~stderr ~conf in
   let scripts = ListLabels.map commands ~f:(fun command ->
-    Obuilder_spec.run ~cache:(cache ~conf) ~network "%s" command)
+    Obuilder_spec.run ~cache ~network "%s" command)
   in
   let obuilder_content =
     let {Obuilder_spec.child_builds; from; ops} = base_obuilder in
@@ -307,7 +313,7 @@ let () =
     flush stderr;
   end
 
-let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
+let get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
     List.filter (fun (repo, _) ->
@@ -317,7 +323,6 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
     ) extra_repos
   in
   let open Obuilder_spec in
-  let cache = cache ~conf in
   let os = Server_configfile.platform_os conf in
   let distribution = Server_configfile.platform_distribution conf in
   let from = match os with
@@ -633,7 +638,7 @@ let update_docker_image conf =
       end
   | _ -> Lwt.fail (Failure (fmt "Image name '%s' is not valid" image))
 
-let run ~debug ~cap_file ~on_finished ~conf cache workdir =
+let run ~debug ~cap_file ~on_finished ~conf oca_cache workdir =
   let switches = Option.get_exn_or "no switches" (Server_configfile.ocaml_switches conf) in
   if !run_locked then
     failwith "operation locked";
@@ -648,11 +653,12 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
         let* cap = get_cap ~stderr ~cap_file in
         let* (opam_repo, opam_repo_commit) = get_commit_hash_default conf in
         let* extra_repos = get_commit_hash_extra_repos conf in
+        let* cache = cache ~stderr ~conf in
         let switches' = switches in
-        let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
+        let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
         begin match switches with
         | switch::_ ->
-            let* old_logdir = Oca_server.Cache.get_logdirs cache in
+            let* old_logdir = Oca_server.Cache.get_logdirs oca_cache in
             let compressed = Server_configfile.enable_logs_compression conf in
             let old_logdir = List.head_opt old_logdir in
             let new_logdir = Server_workdirs.new_logdir ~compressed ~hash:opam_repo_commit ~start_time workdir in
