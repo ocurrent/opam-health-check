@@ -2,7 +2,7 @@ open Lwt.Syntax
 
 let fmt = Printf.sprintf
 
-let cache ~conf =
+let cache ~stderr ~conf =
   let os = Server_configfile.platform_os conf in
   let opam_cache = match os with
     | "freebsd"
@@ -15,10 +15,15 @@ let cache ~conf =
     | "macos" -> Some (Obuilder_spec.Cache.v "homebrew" ~target:"/Users/mac1000/Library/Caches/Homebrew")
     | _ -> None
   in
-  let dune_cache =
-    if Server_configfile.enable_dune_cache conf
-    then Some (Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune")
-    else None
+  let+ dune_cache =
+    let enable = Some (Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune") in
+    match (Server_configfile.enable_dune_cache conf, Server_configfile.build_with conf) with
+    | true, _ -> Lwt.return enable
+    | false, Server_configfile.Dune ->
+      let+ () = Lwt_io.fprintf stderr
+        "Cache disabled but building with Dune, automatically enabling. Set `enable-dune-cache` to `true` to silence this warning.\n" in
+      enable
+    | false, Server_configfile.Opam -> Lwt.return None
   in
   List.filter_map (fun x -> x) [opam_cache; brew_cache; dune_cache]
 
@@ -27,13 +32,17 @@ let network = ["host"]
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_mach (Obuilder_spec.sexp_of_t spec)
 
-let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
+let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr commands =
+  let* cache = cache ~stderr ~conf in
+  let scripts = ListLabels.map commands ~f:(fun command ->
+    Obuilder_spec.run ~cache ~network "%s" command)
+  in
   let obuilder_content =
     let {Obuilder_spec.child_builds; from; ops} = base_obuilder in
     Obuilder_spec.stage
       ~child_builds
       ~from
-      (ops @ [Obuilder_spec.run ~cache:(cache ~conf) ~network "%s" c])
+      (ops @ scripts)
   in
   let obuilder_content = obuilder_to_string obuilder_content in
   let* service = Capnp_rpc_lwt.Sturdy_ref.connect_exn cap in
@@ -83,7 +92,8 @@ let ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr c =
           Lwt_io.write_line stdout "+++ Cancellation failed +++"
         in
         let* () = Lwt.pick [cancel; timeout] in
-        let+ () = Lwt_io.write_line stderr ("Command '"^c^"' timed-out ("^string_of_float hours^" hours).") in
+        let commands_to_string = Fmt.to_to_string (Fmt.Dump.list Fmt.string) in
+        let+ () = Lwt_io.fprintf stderr "Commands %s timed out (%f hours)" (commands_to_string commands) hours in
         Error ()
       in
       Lwt.pick [timeout; proc]
@@ -121,7 +131,7 @@ let ocluster_build_str ~important ~debug ~cap ~conf ~base_obuilder ~stderr ~defa
     | None -> Lwt.return_nil
   in
   let* v = exec_out ~fout:aux ~fexec:(fun ~stdout ->
-      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ("echo @@@OUTPUT && "^c^" && echo @@@OUTPUT"))
+      ocluster_build ~cap ~conf ~base_obuilder ~stdout ~stderr ["echo @@@OUTPUT && "^c^" && echo @@@OUTPUT"])
   in
   match v with
   | (Ok (), r) ->
@@ -187,20 +197,99 @@ let with_lower_bound ~conf pkg =
   else
     ""
 
-let run_script ~conf pkg = {|
-opam remove -y "|}^pkg^{|"
-opam install -vy "|}^pkg^{|"
+let repo_url_of_github repository =
+  let user = Intf.Github.user repository in
+  let repo = Intf.Github.repo repository in
+  let possibly_branch = match Intf.Github.branch repository with
+    | None -> ""
+    | Some branch -> Printf.sprintf "#%s" branch
+  in
+  Printf.sprintf "git+https://github.com/%s/%s.git%s" user repo possibly_branch
+
+let extra_repos repos =
+  ListLabels.map repos ~f:(fun repo ->
+    let name = Intf.Repository.name repo in
+    let url = repo |> Intf.Repository.github |> repo_url_of_github in
+    name, url)
+
+let set_up_workspace ~conf =
+  let default_repo = conf |> Server_configfile.default_repository |> repo_url_of_github in
+  let extra_names, extra_config = conf
+    |> Server_configfile.extra_repositories
+    |> extra_repos
+      |> ListLabels.map ~f:(fun (name, url) ->
+      let config = Printf.sprintf {|(repository
+        (name %s)
+        (url %s)|} name url
+      in
+      (name, config))
+    |> List.split in
+  let content = Printf.sprintf {|(lang dune 3.17)
+(lock_dir
+ (repositories overlay default %s))
+
+(repository
+ (name default)
+ (url "%s"))
+
+%s
+|} (String.concat " " extra_names)
+    default_repo
+    (String.concat "\n" extra_config)
+  in
+  Printf.sprintf {|echo '%s' > dune-workspace|} content
+
+let dune_path = "PATH=$HOME/.local/bin:$PATH"
+
+let set_up_project_using ~switch =
+  let dune_project = Printf.sprintf {|(lang dune 3.17)
+(package
+  (name dummy)
+  (allow_empty true)
+  (depends (ocaml (= %s))))|} switch in
+  Printf.sprintf {|echo '%s' > dune-project|} dune_project
+
+let prebuild_toolchains ~conf =
+  match Server_configfile.ocaml_switches conf with
+  | None -> []
+  | Some switches ->
+    switches
+    |> ListLabels.map ~f:(fun switch ->
+        let switch = Intf.Switch.switch switch in
+        String.concat " && " [
+          "PLACE=$(mktemp -d) && cd $PLACE";
+          set_up_project_using ~switch;
+          Printf.sprintf {|%s dune pkg lock|} dune_path;
+          Printf.sprintf {|%s dune build|} dune_path;
+        ])
+
+let run_script ~conf pkg =
+  match Server_configfile.build_with conf with
+  | Server_configfile.Opam ->
+      let build = Printf.sprintf {|opam remove -y %s
+opam install -vy %s
 res=$?
 if [ $res = 31 ]; then
-    if opam show -f x-ci-accept-failures: "|}^pkg^{|" | grep -q '"|}^Server_configfile.platform_distribution conf^{|"'; then
+    if opam show -f x-ci-accept-failures: %s | grep -q '%s'; then
         echo "This package failed and has been disabled for CI using the 'x-ci-accept-failures' field."
         exit 69
     fi
-fi
-|}^with_test ~conf pkg^{|
-|}^with_lower_bound ~conf pkg^{|
-exit $res
-|}
+fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
+      in
+      let trailer = {|exit $res|} in
+      [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
+  | Server_configfile.Dune -> (
+    let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
+    [ install_dune ] @ prebuild_toolchains ~conf @ [
+      String.concat " && " [
+        "cd $HOME";
+        Printf.sprintf {|opam source %s|} pkg;
+        Printf.sprintf {|cd %s|} pkg;
+        "opam install ./ --depext-only --with-test";
+        set_up_workspace ~conf;
+        Printf.sprintf {|%s dune pkg lock|} dune_path;
+        Printf.sprintf {|%s dune build|} dune_path]]
+    )
 
 let run_job ~cap ~conf ~pool ~stderr ~base_obuilder ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
@@ -242,7 +331,7 @@ let () =
     flush stderr;
   end
 
-let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
+let get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
     let switch = Intf.Switch.name switch in
     List.filter (fun (repo, _) ->
@@ -252,7 +341,6 @@ let get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch =
     ) extra_repos
   in
   let open Obuilder_spec in
-  let cache = cache ~conf in
   let os = Server_configfile.platform_os conf in
   let distribution = Server_configfile.platform_distribution conf in
   let from = match os with
@@ -568,7 +656,7 @@ let update_docker_image conf =
       end
   | _ -> Lwt.fail (Failure (fmt "Image name '%s' is not valid" image))
 
-let run ~debug ~cap_file ~on_finished ~conf cache workdir =
+let run ~debug ~cap_file ~on_finished ~conf oca_cache workdir =
   let switches = Option.get_exn_or "no switches" (Server_configfile.ocaml_switches conf) in
   if !run_locked then
     failwith "operation locked";
@@ -583,11 +671,12 @@ let run ~debug ~cap_file ~on_finished ~conf cache workdir =
         let* cap = get_cap ~stderr ~cap_file in
         let* (opam_repo, opam_repo_commit) = get_commit_hash_default conf in
         let* extra_repos = get_commit_hash_extra_repos conf in
+        let* cache = cache ~stderr ~conf in
         let switches' = switches in
-        let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
+        let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
         begin match switches with
         | switch::_ ->
-            let* old_logdir = Oca_server.Cache.get_logdirs cache in
+            let* old_logdir = Oca_server.Cache.get_logdirs oca_cache in
             let compressed = Server_configfile.enable_logs_compression conf in
             let old_logdir = List.head_opt old_logdir in
             let new_logdir = Server_workdirs.new_logdir ~compressed ~hash:opam_repo_commit ~start_time workdir in
