@@ -292,7 +292,7 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         "opam install ./ --depext-only --with-test";
         set_up_workspace ~conf;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
-        Printf.sprintf {|%s dune build|} dune_path]]
+        Printf.sprintf {|%s dune build --profile=release @install|} dune_path]]
     )
 
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~switch ~num logdir pkg =
