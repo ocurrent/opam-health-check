@@ -284,8 +284,8 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       String.concat " && " [
         "cd $HOME";
         Printf.sprintf {|opam source %s|} pkg;
-        Printf.sprintf {|opam install %s --depext-only|} pkg;
         Printf.sprintf {|cd %s|} pkg;
+        "opam install ./ --depext-only --with-test";
         set_up_workspace ~conf;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
         Printf.sprintf {|%s dune build|} dune_path]]
