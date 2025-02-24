@@ -145,16 +145,15 @@ let ocluster_build_str ~important ~debug ~cap ~conf ~base_obuilder ~stderr ~defa
       | None -> Lwt.fail (Failure ("Failure in ocluster: "^c)) (* TODO: Replace this with "send message to debug slack webhook" *)
       | Some v -> Lwt.return v
 
-let failure_kind conf ~pkg logfile =
+let failure_kind_opam ~timeout ~pkg logfile =
   let pkgname, pkgversion = match Astring.String.cut ~sep:"." pkg with
     | Some x -> x
     | None -> Fmt.failwith "Package %S could not be parsed" pkg
   in
-  let timeout = Server_configfile.job_timeout conf in
-  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) begin fun ic ->
+  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) @@ fun ic ->
     let rec lookup res =
-      let* v = Lwt_io.read_line_opt ic in
-      match v with
+      let* line = Lwt_io.read_line_opt ic in
+      match line with
       | Some "+- The following actions failed" -> lookup `Failure
       | Some "+- The following actions were aborted" -> Lwt.return `Partial
       | Some line when String.equal ("[ERROR] No package named "^pkgname^" found.") line ||
@@ -168,7 +167,24 @@ let failure_kind conf ~pkg logfile =
       | None -> Lwt.return res
     in
     lookup `Other
-  end
+
+let failure_kind_dune logfile =
+  Lwt_io.with_file ~mode:Lwt_io.Input (Fpath.to_string logfile) @@ fun ic ->
+    let rec lookup res =
+      let* line = Lwt_io.read_line_opt ic in
+      match line with
+      | Some "opam-health-check: Build failed" -> Lwt.return `Failure
+      | Some _ -> lookup res
+      | None -> Lwt.return res
+    in
+    lookup `Other
+
+let failure_kind conf ~pkg logfile =
+  match Server_configfile.build_with conf with
+  | Server_configfile.Opam ->
+      let timeout = Server_configfile.job_timeout conf in
+      failure_kind_opam ~timeout ~pkg logfile
+  | Server_configfile.Dune -> failure_kind_dune logfile
 
 let with_test pkg = {|
 if [ $res = 0 ]; then
@@ -292,7 +308,7 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         "opam install ./ --depext-only --with-test";
         set_up_workspace ~conf;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
-        Printf.sprintf {|%s dune build|} dune_path]]
+        Printf.sprintf {|%s dune build || echo "opam-health-check: Build failed" && exit 1|} dune_path]]
     )
 
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~switch ~num logdir pkg =
