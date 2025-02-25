@@ -216,9 +216,7 @@ let repo_name_and_url_of_extra_repos repos =
     let url = repo |> Intf.Repository.github |> repo_url_of_github ~commit in
     name, url)
 
-let set_up_workspace ~repo ~extra_repos =
-  let opam_repo, opam_repo_commit = repo in
-  let default_repo = repo_url_of_github ~commit:opam_repo_commit opam_repo in
+let set_up_workspace ~extra_repos =
   let extra_names, extra_config = extra_repos
     |> repo_name_and_url_of_extra_repos
     |> ListLabels.map ~f:(fun (name, url) ->
@@ -235,11 +233,10 @@ let set_up_workspace ~repo ~extra_repos =
 
 (repository
  (name default)
- (url "%s"))
+ (url "file:///home/opam/opam-repository"))
 
 %s
 |} (String.concat " " extra_names)
-    default_repo
     (String.concat "\n" extra_config)
   in
   Printf.sprintf {|echo '%s' > dune-workspace|} content
@@ -268,7 +265,7 @@ let prebuild_toolchains ~conf =
           Printf.sprintf {|%s dune build|} dune_path;
         ])
 
-let run_script ~conf ~repo ~extra_repos pkg =
+let run_script ~conf ~extra_repos pkg =
   match Server_configfile.build_with conf with
   | Server_configfile.Opam ->
       let build = Printf.sprintf {|opam remove -y %s
@@ -291,19 +288,19 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         Printf.sprintf {|opam source %s|} pkg;
         Printf.sprintf {|cd %s|} pkg;
         "opam install ./ --depext-only";
-        set_up_workspace ~repo ~extra_repos;
+        set_up_workspace ~extra_repos;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
         Printf.sprintf {|%s dune build --profile=release @install|} dune_path]]
     )
 
-let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~repo ~extra_repos ~switch ~num logdir pkg =
+let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
     let* () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"…") in
     let switch = Intf.Switch.name switch in
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
     let* v =
       Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) (fun stdout ->
-        ocluster_build ~cap ~conf ~debug ~base_obuilder ~stdout ~stderr (run_script ~conf ~repo ~extra_repos pkg))
+        ocluster_build ~cap ~conf ~debug ~base_obuilder ~stdout ~stderr (run_script ~conf ~extra_repos pkg))
     in
     match v with
     | Ok () ->
@@ -538,7 +535,7 @@ let move_tmpdirs_to_final ~switches logdir workdir =
   let* () = Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) in
   Oca_lib.rm_rf tmpdir
 
-let run_jobs ~cap ~conf ~debug ~pool ~repo ~extra_repos ~stderr logdir switches pkgs =
+let run_jobs ~cap ~conf ~debug ~pool ~extra_repos ~stderr logdir switches pkgs =
   let len = Pkg_set.cardinal pkgs * List.length switches in
   Prometheus.Gauge.set Metrics.jobs_total (float_of_int len);
   let len_suffix = "/"^string_of_int len in
@@ -546,7 +543,7 @@ let run_jobs ~cap ~conf ~debug ~pool ~repo ~extra_repos ~stderr logdir switches 
     List.fold_left begin fun (i, jobs) (switch, base_obuilder) ->
       let i = succ i in
       let num = string_of_int i^len_suffix in
-      let job = run_job ~cap ~conf ~debug ~pool ~stderr ~repo ~extra_repos ~base_obuilder ~switch ~num logdir full_name in
+      let job = run_job ~cap ~conf ~debug ~pool ~stderr ~extra_repos ~base_obuilder ~switch ~num logdir full_name in
       (i, job :: jobs)
     end (i, jobs) switches
   end pkgs (0, [])
@@ -674,7 +671,7 @@ let run ~debug ~cap_file ~on_finished ~conf oca_cache workdir =
         let timer = Oca_lib.timer_start () in
         let* () = update_docker_image conf in
         let* cap = get_cap ~stderr ~cap_file in
-        let* (opam_repo, opam_repo_commit) as repo = get_commit_hash_default conf in
+        let* opam_repo, opam_repo_commit = get_commit_hash_default conf in
         let* extra_repos = get_commit_hash_extra_repos conf in
         let* cache = cache ~stderr ~conf in
         let switches' = switches in
@@ -691,7 +688,7 @@ let run ~debug ~cap_file ~on_finished ~conf oca_cache workdir =
             let pkgs = Pkg_set.of_list (List.concat pkgs) in
             Prometheus.Gauge.set Metrics.number_of_packages (float_of_int (Pkg_set.cardinal pkgs));
             let* () = Oca_lib.timer_log timer stderr "Initialization" in
-            let (_, jobs) = run_jobs ~cap ~conf ~debug ~pool ~stderr ~repo ~extra_repos new_logdir switches pkgs in
+            let (_, jobs) = run_jobs ~cap ~conf ~debug ~pool ~stderr ~extra_repos new_logdir switches pkgs in
             let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
             let* () = Lwt.join jobs in
             let* () = Oca_lib.timer_log timer stderr "Operation" in
