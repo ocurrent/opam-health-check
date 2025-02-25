@@ -264,6 +264,20 @@ let prebuild_toolchains ~conf =
           Printf.sprintf {|%s dune build|} dune_path;
         ])
 
+let remove_packages =
+  let script = {|import sexpdata, sys
+with open("dune-project", "r") as f:
+    content = [i for i in sexpdata.loads("(" + f.read() + ")") if not i[0] == sexpdata.Symbol("package")]
+    print(sexpdata.dumps(content[0]))
+    for i in content[1:]:
+        print(sexpdata.dumps(i))|}
+  in
+  String.concat " && " [
+    Printf.sprintf "echo '%s' > opam-health-check-remove-package.py" script;
+    "python3 opam-health-check-remove-package.py > dune-project-new";
+    "mv dune-project-new dune-project"
+  ]
+
 let run_script ~conf ~extra_repos pkg =
   match Server_configfile.build_with conf with
   | Server_configfile.Opam ->
@@ -281,13 +295,15 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
   | Server_configfile.Dune -> (
     let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
-    [ install_dune ] @ prebuild_toolchains ~conf @ [
+    let install_sexpdata = "sudo apt-get install -y python3-sexpdata" in
+    [ install_dune; install_sexpdata ] @ prebuild_toolchains ~conf @ [
       String.concat " && " [
         "cd $HOME";
         Printf.sprintf {|opam source %s|} pkg;
         Printf.sprintf {|cd %s|} pkg;
         (* replace tarball opam metadata with more accurate opam repository metadata *)
         "for opam in *.opam; do opam show --raw ${opam%.opam} > $opam; done";
+        remove_packages;
         "opam install ./ --depext-only --with-test";
         set_up_workspace ~extra_repos;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
