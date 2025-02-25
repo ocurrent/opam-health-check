@@ -200,36 +200,19 @@ let with_lower_bound ~conf pkg =
     with_lower_bound pkg
   else
     ""
-
-let repo_url_of_github ~commit repository =
-  let user = Intf.Github.user repository in
-  let repo = Intf.Github.repo repository in
-  let possibly_branch = match Intf.Github.branch repository with
-    | None -> Fmt.str "#%s" commit
-    | Some branch -> Fmt.str "#%s" branch
-  in
-  Printf.sprintf "git+https://github.com/%s/%s.git%s" user repo possibly_branch
-
-let repo_name_and_url_of_extra_repos repos =
-  ListLabels.map repos ~f:(fun (repo, commit) ->
-    let name = Intf.Repository.name repo in
-    let url = repo |> Intf.Repository.github |> repo_url_of_github ~commit in
-    name, url)
-
 let set_up_workspace ~extra_repos =
   let extra_names, extra_config = extra_repos
-    |> repo_name_and_url_of_extra_repos
-    |> ListLabels.map ~f:(fun (name, url) ->
+    |> ListLabels.map ~f:(fun (_repo, name) ->
       let config = Printf.sprintf {|(repository
         (name %s)
-        (url %s)|} name url
+        (url "file:///home/opam/%s")|} name name
       in
       (name, config))
     |> List.split
   in
   let content = Printf.sprintf {|(lang dune 3.17)
 (lock_dir
- (repositories overlay default %s))
+ (repositories overlay %s default))
 
 (repository
  (name default)
