@@ -286,6 +286,8 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         "cd $HOME";
         Printf.sprintf {|opam source %s|} pkg;
         Printf.sprintf {|cd %s|} pkg;
+        (* replace tarball opam metadata with more accurate opam repository metadata *)
+        "for opam in *.opam; do opam show --raw ${opam%.opam} > $opam; done";
         "opam install ./ --depext-only --with-test";
         set_up_workspace ~extra_repos;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
