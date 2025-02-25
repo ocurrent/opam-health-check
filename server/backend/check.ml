@@ -264,8 +264,8 @@ let prebuild_toolchains ~conf =
           Printf.sprintf {|%s dune build|} dune_path;
         ])
 
-let remove_packages =
-  let script = {|import sexpdata, sys
+let install_remove_packages =
+  let script = {|import sexpdata
 with open("dune-project", "r") as f:
     content = [i for i in sexpdata.loads("(" + f.read() + ")") if not i[0] == sexpdata.Symbol("package")]
     print(sexpdata.dumps(content[0]))
@@ -273,8 +273,13 @@ with open("dune-project", "r") as f:
         print(sexpdata.dumps(i))|}
   in
   String.concat " && " [
-    Printf.sprintf "echo '%s' > opam-health-check-remove-package.py" script;
-    "python3 opam-health-check-remove-package.py > dune-project-new";
+    "sudo apt-get install -y python3-sexpdata";
+    Printf.sprintf "echo '%s' > /tmp/opam-health-check-remove-package.py" script;
+  ]
+
+let remove_packages =
+  String.concat " && " [
+    "python3 /tmp/opam-health-check-remove-package.py > dune-project-new";
     "mv dune-project-new dune-project"
   ]
 
@@ -295,8 +300,7 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
   | Server_configfile.Dune -> (
     let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
-    let install_sexpdata = "sudo apt-get install -y python3-sexpdata" in
-    [ install_dune; install_sexpdata ] @ prebuild_toolchains ~conf @ [
+    [ install_dune; install_remove_packages ] @ prebuild_toolchains ~conf @ [
       String.concat " && " [
         "cd $HOME";
         Printf.sprintf {|opam source %s|} pkg;
