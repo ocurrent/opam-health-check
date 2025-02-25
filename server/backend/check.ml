@@ -289,7 +289,7 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         "cd $HOME";
         Printf.sprintf {|opam source %s|} pkg;
         Printf.sprintf {|cd %s|} pkg;
-        "opam install ./ --depext-only --with-test";
+        "opam install ./ --depext-only";
         set_up_workspace ~conf;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
         Printf.sprintf {|%s dune build --profile=release @install|} dune_path]]
