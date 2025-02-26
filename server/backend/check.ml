@@ -264,6 +264,29 @@ let prebuild_toolchains ~conf =
           Printf.sprintf {|%s dune build|} dune_path;
         ])
 
+let install_remove_packages =
+  let script = {|import sexpdata
+with open("dune-project", "r") as f:
+    content = [i for i in sexpdata.loads("(" + f.read() + ")") if not i[0] == sexpdata.Symbol("package")]
+    print(sexpdata.dumps(content[0]))
+    for i in content[1:]:
+        print(sexpdata.dumps(i))|}
+  in
+  String.concat " && " [
+    "sudo apt-get install -y python3-sexpdata";
+    Printf.sprintf "echo '%s' > /tmp/opam-health-check-remove-package.py" script;
+  ]
+
+let remove_packages =
+  String.concat " && " [
+    "python3 /tmp/opam-health-check-remove-package.py > dune-project-new";
+    "mv dune-project-new dune-project";
+    (* remove the python installation after we have used it so packages don't
+       accidentally depend on it without the conf-python3 depext *)
+    "sudo apt-get remove -y python3-sexpdata";
+    "sudo apt-get autoremove -y"
+  ]
+
 let run_script ~conf ~extra_repos pkg =
   match Server_configfile.build_with conf with
   | Server_configfile.Opam ->
@@ -281,15 +304,18 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
   | Server_configfile.Dune -> (
     let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
-    [ install_dune ] @ prebuild_toolchains ~conf @ [
+    [ install_dune; install_remove_packages ] @ prebuild_toolchains ~conf @ [
       String.concat " && " [
         "cd $HOME";
         Printf.sprintf {|opam source %s|} pkg;
         Printf.sprintf {|cd %s|} pkg;
-        "opam install ./ --depext-only";
+        (* replace tarball opam metadata with more accurate opam repository metadata *)
+        "for opam in *.opam; do opam show --raw ${opam%.opam} > $opam; done";
+        remove_packages;
+        "opam install ./ --depext-only --with-test --with-doc";
         set_up_workspace ~extra_repos;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
-        Printf.sprintf {|%s dune build --profile=release @install || echo "opam-health-check: Build failed" && exit 1|} dune_path]]
+        Printf.sprintf {|%s dune build --profile=release || (echo "opam-health-check: Build failed" && exit 1)|} dune_path]]
     )
 
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch ~num logdir pkg =
