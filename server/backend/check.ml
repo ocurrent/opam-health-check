@@ -280,7 +280,11 @@ with open("dune-project", "r") as f:
 let remove_packages =
   String.concat " && " [
     "python3 /tmp/opam-health-check-remove-package.py > dune-project-new";
-    "mv dune-project-new dune-project"
+    "mv dune-project-new dune-project";
+    (* remove the python installation after we have used it so packages don't
+       accidentally depend on it without the conf-python3 depext *)
+    "sudo apt-get remove -y python3-sexpdata";
+    "sudo apt-get autoremove -y"
   ]
 
 let run_script ~conf ~extra_repos pkg =
