@@ -311,7 +311,7 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         "opam install ./ --depext-only --with-test --with-doc";
         set_up_workspace ~extra_repos;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
-        Printf.sprintf {|%s dune build --profile=release || echo "opam-health-check: Build failed" && exit 1|} dune_path]]
+        Printf.sprintf {|%s dune build --profile=release || (echo "opam-health-check: Build failed" && exit 1)|} dune_path]]
     )
 
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch ~num logdir pkg =
