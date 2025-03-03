@@ -303,6 +303,10 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       let trailer = {|exit $res|} in
       [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
   | Server_configfile.Dune -> (
+    let pkg_name = match Astring.String.cut ~sep:"." pkg with
+      | Some (name, _version) -> name
+      | None -> Fmt.failwith "Invalid package format, could not generate commands"
+    in
     let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
     [ install_dune; install_remove_packages ] @ prebuild_toolchains ~conf @ [
       String.concat " && " [
@@ -311,12 +315,17 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         Printf.sprintf {|cd %s|} pkg;
         (* replace tarball opam metadata with more accurate opam repository metadata *)
         "for opam in *.opam; do opam show --raw ${opam%.opam} > $opam; done";
-        remove_packages;
         "opam install ./ --depext-only --with-test --with-doc";
+        (* disable all packages by replacing them with dummies *)
+        {|for opam in *.opam; do echo "opam-version: \"2.0\"" > $opam; done|};
+        (* reenable the package to be built *)
+        Printf.sprintf {|opam show --raw %s > %s.opam|} pkg pkg_name;
+        (* remove package info from dune-project *)
+        remove_packages;
         set_up_workspace ~extra_repos;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
-        Printf.sprintf {|%s dune build --profile=release || (echo "opam-health-check: Build failed" && exit 1)|} dune_path]]
-    )
+        Printf.sprintf {|%s dune build --profile=release --only-packages %s || (echo "opam-health-check: Build failed" && exit 1)|} dune_path pkg_name
+      ]])
 
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
