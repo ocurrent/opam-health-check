@@ -324,6 +324,9 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         remove_packages;
         set_up_workspace ~extra_repos;
         Printf.sprintf {|%s dune pkg lock|} dune_path;
+        (* avoid invalid dependency hash errors by removing it *)
+        "grep -v dependency_hash dune.lock/lock.dune > lock.dune";
+        "mv lock.dune dune.lock/lock.dune";
         Printf.sprintf {|%s dune build --profile=release --only-packages %s || (echo "opam-health-check: Build failed" && exit 1)|} dune_path pkg_name
       ]])
 
