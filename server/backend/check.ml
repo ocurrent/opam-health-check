@@ -316,18 +316,32 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         (* replace tarball opam metadata with more accurate opam repository metadata *)
         "for opam in *.opam; do opam show --raw ${opam%.opam} > $opam; done";
         "opam install ./ --depext-only --with-test --with-doc";
-        (* disable all packages by replacing them with dummies *)
-        {|for opam in *.opam; do echo "opam-version: \"2.0\"" > $opam; done|};
+        (* remove all the existing packages but remember which ones exist *)
+        "for opam in *.opam; do rm $opam; echo ${opam%.opam} >> /tmp/packages-locally-available; done";
         (* reenable the package to be built *)
         Printf.sprintf {|opam show --raw %s > %s.opam|} pkg pkg_name;
         (* remove package info from dune-project *)
         remove_packages;
         set_up_workspace ~extra_repos;
+        (* attempt to solve it to see if we need to enable some other local packages *)
+        Printf.sprintf {|%s dune pkg lock &> /tmp/packages-wanted || true|} dune_path;
+        (* always at least build the current package *)
+        Printf.sprintf {|echo %s >> /tmp/packages-to-build|} pkg_name;
+        (* check if other packages have been mentioned in the error message; if so, enable them *)
+        "while read package ; do if grep --quiet $package /tmp/packages-wanted ; then echo $package >> /tmp/packages-to-build ; fi ; done < /tmp/packages-locally-available";
+        (* restore packages that we need as dependencies *)
+        "while read package ; do opam show --raw $package > $package.opam; done < /tmp/packages-to-build";
+        (* create dummies for all other packages *)
+        {|while read package ; do if [ ! -f ${package}.opam ]; then echo "opam-version: \"2.0\"" > ${package}.opam; fi; done < /tmp/packages-locally-available|};
+        (* turn into comma separated list for dune *)
+        "paste -s -d , /tmp/packages-to-build > /tmp/packages-for-dune";
+
+        (* now try lock with all the required local packages in place *)
         Printf.sprintf {|%s dune pkg lock|} dune_path;
-        (* avoid invalid dependency hash errors by removing it *)
-        "grep -v dependency_hash dune.lock/lock.dune > lock.dune";
-        "mv lock.dune dune.lock/lock.dune";
-        Printf.sprintf {|%s dune build --profile=release --only-packages %s || (echo "opam-health-check: Build failed" && exit 1)|} dune_path pkg_name
+        (* avoid invalid dependency hash errors by removing the hash *)
+        "grep -v dependency_hash dune.lock/lock.dune > /tmp/lock.dune";
+        "mv /tmp/lock.dune dune.lock/lock.dune";
+        Printf.sprintf {|%s dune build --profile=release --only-packages $(cat /tmp/packages-for-dune) || (echo "opam-health-check: Build failed" && exit 1)|} dune_path
       ]])
 
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch ~num logdir pkg =
