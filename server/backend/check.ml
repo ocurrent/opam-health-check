@@ -303,6 +303,10 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       let trailer = {|exit $res|} in
       [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
   | Server_configfile.Dune -> (
+    let pkg_name = match Astring.String.cut ~sep:"." pkg with
+      | Some (name, _version) -> name
+      | None -> Fmt.failwith "Invalid package format, could not generate commands"
+    in
     let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
     [ install_dune; install_remove_packages ] @ prebuild_toolchains ~conf @ [
       String.concat " && " [
@@ -311,12 +315,34 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         Printf.sprintf {|cd %s|} pkg;
         (* replace tarball opam metadata with more accurate opam repository metadata *)
         "for opam in *.opam; do opam show --raw ${opam%.opam} > $opam; done";
-        remove_packages;
         "opam install ./ --depext-only --with-test --with-doc";
+        (* remove all the existing packages but remember which ones exist *)
+        "for opam in *.opam; do rm $opam; echo ${opam%.opam} >> /tmp/packages-locally-available; done";
+        (* reenable the package to be built *)
+        Printf.sprintf {|opam show --raw %s > %s.opam|} pkg pkg_name;
+        (* remove package info from dune-project *)
+        remove_packages;
         set_up_workspace ~extra_repos;
+        (* attempt to solve it to see if we need to enable some other local packages *)
+        Printf.sprintf {|%s dune pkg lock &> /tmp/packages-wanted || true|} dune_path;
+        (* always at least build the current package *)
+        Printf.sprintf {|echo %s >> /tmp/packages-to-build|} pkg_name;
+        (* check if other packages have been mentioned in the error message; if so, enable them *)
+        "while read package ; do if grep --quiet $package /tmp/packages-wanted ; then echo $package >> /tmp/packages-to-build ; fi ; done < /tmp/packages-locally-available";
+        (* restore packages that we need as dependencies *)
+        "while read package ; do opam show --raw $package > $package.opam; done < /tmp/packages-to-build";
+        (* create dummies for all other packages *)
+        {|while read package ; do if [ ! -f ${package}.opam ]; then echo "opam-version: \"2.0\"" > ${package}.opam; fi; done < /tmp/packages-locally-available|};
+        (* turn into comma separated list for dune *)
+        "paste -s -d , /tmp/packages-to-build > /tmp/packages-for-dune";
+
+        (* now try lock with all the required local packages in place *)
         Printf.sprintf {|%s dune pkg lock|} dune_path;
-        Printf.sprintf {|%s dune build --profile=release || (echo "opam-health-check: Build failed" && exit 1)|} dune_path]]
-    )
+        (* avoid invalid dependency hash errors by removing the hash *)
+        "grep -v dependency_hash dune.lock/lock.dune > /tmp/lock.dune";
+        "mv /tmp/lock.dune dune.lock/lock.dune";
+        Printf.sprintf {|%s dune build --profile=release --only-packages $(cat /tmp/packages-for-dune) || (echo "opam-health-check: Build failed" && exit 1)|} dune_path
+      ]])
 
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
