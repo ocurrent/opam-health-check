@@ -313,6 +313,8 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         "cd $HOME";
         Printf.sprintf {|opam source %s|} pkg;
         Printf.sprintf {|cd %s|} pkg;
+        (* some projects only have a plain opam file, rename to pkg_name.opam is safe *)
+        Printf.sprintf "if [ -f opam ]; then mv opam %s.opam; fi" pkg_name;
         (* replace tarball opam metadata with more accurate opam repository metadata *)
         "for opam in *.opam; do opam show --raw ${opam%.opam} > $opam; done";
         "opam install ./ --depext-only --with-test --with-doc";
