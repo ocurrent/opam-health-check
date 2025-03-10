@@ -275,7 +275,7 @@ let install_remove_packages =
 
 let remove_packages =
   String.concat " && " [
-    "/tmp/sexp/_opam/bin/sexp change '(try (rewrite (package @X) OHC-DROP))' < dune-project | grep -v OHC-DROP > dune-project-new";
+    "/tmp/sexp/_opam/bin/sexp change '(try (rewrite (package @X) OPAM-HEALTH-CHECK-DROP))' < dune-project | grep -v OPAM-HEALTH-CHECK-DROP > dune-project-new";
     "mv dune-project-new dune-project";
   ]
 
