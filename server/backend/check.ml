@@ -265,26 +265,18 @@ let prebuild_toolchains ~conf =
         ])
 
 let install_remove_packages =
-  let script = {|import sexpdata
-with open("dune-project", "r") as f:
-    content = [i for i in sexpdata.loads("(" + f.read() + ")") if not i[0] == sexpdata.Symbol("package")]
-    print(sexpdata.dumps(content[0]))
-    for i in content[1:]:
-        print(sexpdata.dumps(i))|}
-  in
   String.concat " && " [
-    "sudo apt-get install -y python3-sexpdata";
-    Printf.sprintf "echo '%s' > /tmp/opam-health-check-remove-package.py" script;
+    "mkdir /tmp/sexp";
+    "cd /tmp/sexp";
+    "opam switch create ./ ocaml-base-compiler.5.2.1 --no-install";
+    "opam install -y sexp";
+    "cd -";
   ]
 
 let remove_packages =
   String.concat " && " [
-    "python3 /tmp/opam-health-check-remove-package.py > dune-project-new";
+    "/tmp/sexp/_opam/bin/sexp change '(try (rewrite (package @X) OPAM-HEALTH-CHECK-DROP))' < dune-project | grep -v OPAM-HEALTH-CHECK-DROP > dune-project-new";
     "mv dune-project-new dune-project";
-    (* remove the python installation after we have used it so packages don't
-       accidentally depend on it without the conf-python3 depext *)
-    "sudo apt-get remove -y python3-sexpdata";
-    "sudo apt-get autoremove -y"
   ]
 
 let run_script ~conf ~extra_repos pkg =
