@@ -61,7 +61,16 @@ let get_log workdir =
   in
   Lwt.return loop
 
+let build_with_of_string_exn s =
+  match s with
+  | "dune" -> Intf.Build_with.Dune
+  | "opam" -> Intf.Build_with.Opam
+  | otherwise ->
+      let err = Printf.sprintf "Unexpected build-with value %s" otherwise in
+      failwith err
+
 let admin_action ~on_finished ~conf ~run_trigger workdir body =
+  let build_with = Intf.Build_with.Opam in
   let* resp =
     match String.split_on_char '\n' body with
     | ["set-auto-run-interval"; i] ->
@@ -75,7 +84,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
           let+ () = Server_configfile.set_processes conf i in
           (fun () -> Lwt.return_none)
     | ["add-ocaml-switch";name;switch] ->
-        let switch = Intf.Switch.create ~name ~switch in
+        let switch = Intf.Switch.create ~name ~switch ~build_with in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         if List.mem ~eq:Intf.Switch.equal switch switches then
           Lwt.fail (Failure "Cannot have duplicate switches names.")
@@ -84,14 +93,14 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
           let+ () = Server_configfile.set_ocaml_switches conf switches in
           (fun () -> Lwt.return_none)
     | ["set-ocaml-switch";name;switch] ->
-        let switch = Intf.Switch.create ~name ~switch in
+        let switch = Intf.Switch.create ~name ~switch ~build_with in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
         let switches = List.set_at_idx idx switch switches in
         let+ () = Server_configfile.set_ocaml_switches conf switches in
         (fun () -> Lwt.return_none)
     | ["rm-ocaml-switch";name] ->
-        let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" in
+        let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" ~build_with in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
         let+ () = Server_configfile.set_ocaml_switches conf switches in
