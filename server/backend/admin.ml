@@ -101,11 +101,11 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
         let+ () = Server_configfile.set_ocaml_switches conf switches in
         (fun () -> Lwt.return_none)
     | ["rm-ocaml-switch"; name] ->
-        (* create a dummy switch to be able to use remove *)
-        let build_with = Intf.Build_with.Opam in
-        let switch = Intf.Switch.create ~name ~switch:"(* TODO: remove this shit *)" ~build_with in
+        let to_delete = Intf.Compiler.from_string name in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
-        let switches = List.remove ~eq:Intf.Switch.equal ~key:switch switches in
+        let switches = List.filter (fun switch ->
+          Intf.Compiler.equal (Intf.Switch.name switch) to_delete) switches
+        in
         let+ () = Server_configfile.set_ocaml_switches conf switches in
         (fun () -> Lwt.return_none)
     | "set-slack-webhooks"::webhooks ->
