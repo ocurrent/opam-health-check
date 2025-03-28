@@ -48,13 +48,6 @@ module Build_with = struct
     | Opam
     | Dune
 
-  let equal a b =
-    match a, b with
-    | Dune, Dune
-    | Opam, Opam -> true
-    | Dune, Opam
-    | Opam, Dune -> false
-
   let compare a b =
     match a, b with
     | Opam, Dune -> -1
@@ -85,9 +78,9 @@ module Switch = struct
     | Build_with.Dune -> true
     | Build_with.Opam -> false
 
-  let equal {name; build_with; _} x =
-    Compiler.equal name x.name &&
-    Build_with.equal build_with x.build_with
+  let equal {name; _} x =
+    (* equality of switches is just equality of their names *)
+    Compiler.equal name x.name
 
   let compare {name; build_with; _} x =
     match Compiler.compare name x.name with
