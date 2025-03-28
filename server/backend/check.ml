@@ -173,6 +173,7 @@ let failure_kind_dune logfile =
     let rec lookup res =
       let* line = Lwt_io.read_line_opt ic in
       match line with
+      | Some "opam-health-check: Solve failed" -> Lwt.return `NotAvailable
       | Some "opam-health-check: Build failed" -> Lwt.return `Failure
       | Some _ -> lookup res
       | None -> Lwt.return res
@@ -331,7 +332,7 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         "paste -s -d , /tmp/packages-to-build > /tmp/packages-for-dune";
 
         (* now try lock with all the required local packages in place *)
-        Printf.sprintf {|%s dune pkg lock|} dune_path;
+        Printf.sprintf {|%s dune pkg lock || (echo "opam-health-check: Solve failed" && exit 1) |} dune_path;
         (* avoid invalid dependency hash errors by removing the hash *)
         "grep -v dependency_hash dune.lock/lock.dune > /tmp/lock.dune";
         "mv /tmp/lock.dune dune.lock/lock.dune";
