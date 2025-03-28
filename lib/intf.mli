@@ -11,6 +11,12 @@ module State : sig
   val to_pretty_string : t -> string
 end
 
+module Build_with : sig
+  type t =
+    | Opam
+    | Dune
+end
+
 module Compiler : sig
   type t
 
@@ -24,10 +30,14 @@ end
 module Switch : sig
   type t
 
-  val create : name:string -> switch:string -> t
+  val create : name:string -> switch:string -> build_with:Build_with.t -> t
 
   val name : t -> Compiler.t
   val switch : t -> string
+  val build_with : t -> Build_with.t
+
+  (* [true] if the switch is using Dune package management *)
+  val with_dune : t -> bool
 
   val equal : t -> t -> bool
   val compare : t -> t -> int

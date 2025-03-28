@@ -87,28 +87,33 @@ let set_processes_cmd ~confdir ~conffile =
   let info = Cmd.info "set-processes" in
   Cmd.v info term
 
-let add_ocaml_switch ~confdir ~conffile profilename name switch =
-  send_msg ~profilename ~confdir ~conffile ["add-ocaml-switch";name;switch]
+let add_ocaml_switch ~confdir ~conffile profilename name switch build_with =
+  send_msg ~profilename ~confdir ~conffile ["add-ocaml-switch"; name; switch; build_with]
+
+let build_with_arg =
+  Arg.value & Arg.opt Arg.string "opam" & Arg.info ~docv:"BUILDER" ["build-with"]
 
 let add_ocaml_switch_cmd ~confdir ~conffile =
   let term =
     Term.const (add_ocaml_switch ~confdir ~conffile) $
     (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
     (Arg.required & Arg.pos 0 (Arg.some Arg.string) None & Arg.info ~docv:"NAME" []) $
-    (Arg.required & Arg.pos 1 (Arg.some Arg.string) None & Arg.info ~docv:"SWITCH" [])
+    (Arg.required & Arg.pos 1 (Arg.some Arg.string) None & Arg.info ~docv:"SWITCH" []) $
+    build_with_arg
   in
   let info = Cmd.info "add-ocaml-switch" in
   Cmd.v info term
 
-let set_ocaml_switch ~confdir ~conffile profilename name switch =
-  send_msg ~profilename ~confdir ~conffile ["set-ocaml-switch";name;switch]
+let set_ocaml_switch ~confdir ~conffile profilename name switch build_with =
+  send_msg ~profilename ~confdir ~conffile ["set-ocaml-switch"; name; switch; build_with]
 
 let set_ocaml_switch_cmd ~confdir ~conffile =
   let term =
     Term.const (set_ocaml_switch ~confdir ~conffile) $
     (Arg.value & Arg.opt Arg.string "default" & Arg.info ~docv:"PROFILENAME" ["profile"; "p"]) $
     (Arg.required & Arg.pos 0 (Arg.some Arg.string) None & Arg.info ~docv:"NAME" []) $
-    (Arg.required & Arg.pos 1 (Arg.some Arg.string) None & Arg.info ~docv:"SWITCH" [])
+    (Arg.required & Arg.pos 1 (Arg.some Arg.string) None & Arg.info ~docv:"SWITCH" []) $
+    build_with_arg
   in
   let info = Cmd.info "set-ocaml-switch" in
   Cmd.v info term
