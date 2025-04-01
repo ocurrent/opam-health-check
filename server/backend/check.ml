@@ -345,10 +345,7 @@ let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch 
     let logfile = Server_workdirs.tmplogfile ~pkg ~switch:switch_name logdir in
     let* v =
       Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) (fun stdout ->
-        let with_dune = match Intf.Switch.build_with switch with
-        | Intf.Build_with.Dune -> true
-        | Intf.Build_with.Opam -> false
-        in
+        let with_dune = Intf.Switch.with_dune switch in
         ocluster_build ~cap ~conf ~with_dune ~debug ~base_obuilder ~stdout ~stderr (run_script ~conf ~switch ~extra_repos pkg))
     in
     match v with
