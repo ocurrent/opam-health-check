@@ -2,7 +2,7 @@ open Lwt.Syntax
 
 let fmt = Printf.sprintf
 
-let cache ~stderr ~conf =
+let cache ~stderr ~conf ~with_dune =
   let os = Server_configfile.platform_os conf in
   let opam_cache = match os with
     | "freebsd"
@@ -17,13 +17,13 @@ let cache ~stderr ~conf =
   in
   let+ dune_cache =
     let enable = Some (Obuilder_spec.Cache.v "opam-dune-cache" ~target:"/home/opam/.cache/dune") in
-    match (Server_configfile.enable_dune_cache conf, Server_configfile.build_with conf) with
+    match (Server_configfile.enable_dune_cache conf, with_dune) with
     | true, _ -> Lwt.return enable
-    | false, Server_configfile.Dune ->
+    | false, true ->
       let+ () = Lwt_io.fprintf stderr
         "Cache disabled but building with Dune, automatically enabling. Set `enable-dune-cache` to `true` to silence this warning.\n" in
       enable
-    | false, Server_configfile.Opam -> Lwt.return None
+    | false, false -> Lwt.return None
   in
   List.filter_map (fun x -> x) [opam_cache; brew_cache; dune_cache]
 
@@ -32,8 +32,8 @@ let network = ["host"]
 let obuilder_to_string spec =
   Sexplib0.Sexp.to_string_mach (Obuilder_spec.sexp_of_t spec)
 
-let ocluster_build ~cap ~conf ~base_obuilder ~debug ~stdout ~stderr commands =
-  let* cache = cache ~stderr ~conf in
+let ocluster_build ~cap ~conf ~with_dune ~base_obuilder ~debug ~stdout ~stderr commands =
+  let* cache = cache ~stderr ~conf ~with_dune in
   let scripts = ListLabels.map commands ~f:(fun command ->
     Obuilder_spec.run ~cache ~network "%s" command)
   in
@@ -113,7 +113,7 @@ let exec_out ~fexec ~fout =
   let+ r = proc in
   r, res
 
-let ocluster_build_str ~important ~debug ~cap ~conf ~base_obuilder ~stderr ~default c =
+let ocluster_build_str ~important ~debug ~cap ~conf ~with_dune ~base_obuilder ~stderr ~default c =
   let rec aux ~stdin =
     let* line = Lwt_io.read_line_opt stdin in
     match line with
@@ -135,7 +135,7 @@ let ocluster_build_str ~important ~debug ~cap ~conf ~base_obuilder ~stderr ~defa
     | None -> Lwt.return_nil
   in
   let* v = exec_out ~fout:aux ~fexec:(fun ~stdout ->
-      ocluster_build ~cap ~conf ~debug ~base_obuilder ~stdout ~stderr ["echo @@@OUTPUT && "^c^" && echo @@@OUTPUT"])
+      ocluster_build ~cap ~conf ~with_dune ~debug ~base_obuilder ~stdout ~stderr ["echo @@@OUTPUT && "^c^" && echo @@@OUTPUT"])
   in
   match v with
   | (Ok (), r) ->
@@ -180,12 +180,12 @@ let failure_kind_dune logfile =
     in
     lookup `Other
 
-let failure_kind conf ~pkg logfile =
-  match Server_configfile.build_with conf with
-  | Server_configfile.Opam ->
+let failure_kind conf ~switch ~pkg logfile =
+  match Intf.Switch.build_with switch with
+  | Intf.Build_with.Opam ->
       let timeout = Server_configfile.job_timeout conf in
       failure_kind_opam ~timeout ~pkg logfile
-  | Server_configfile.Dune -> failure_kind_dune logfile
+  | Intf.Build_with.Dune -> failure_kind_dune logfile
 
 let with_test pkg = {|
 if [ $res = 0 ]; then
@@ -280,9 +280,9 @@ let remove_packages =
     "mv dune-project-new dune-project";
   ]
 
-let run_script ~conf ~extra_repos pkg =
-  match Server_configfile.build_with conf with
-  | Server_configfile.Opam ->
+let run_script ~conf ~switch ~extra_repos pkg =
+  match Intf.Switch.build_with switch with
+  | Intf.Build_with.Opam ->
       let build = Printf.sprintf {|opam remove -y %s
 opam install -vy %s
 res=$?
@@ -295,7 +295,7 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       in
       let trailer = {|exit $res|} in
       [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
-  | Server_configfile.Dune -> (
+  | Intf.Build_with.Dune -> (
     let pkg_name = match Astring.String.cut ~sep:"." pkg with
       | Some (name, _version) -> name
       | None -> Fmt.failwith "Invalid package format, could not generate commands"
@@ -342,33 +342,34 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
     let* () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"…") in
-    let switch = Intf.Switch.name switch in
-    let logfile = Server_workdirs.tmplogfile ~pkg ~switch logdir in
+    let switch_name = Intf.Switch.name switch in
+    let logfile = Server_workdirs.tmplogfile ~pkg ~switch:switch_name logdir in
     let* v =
       Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) (fun stdout ->
-        ocluster_build ~cap ~conf ~debug ~base_obuilder ~stdout ~stderr (run_script ~conf ~extra_repos pkg))
+        let with_dune = Intf.Switch.with_dune switch in
+        ocluster_build ~cap ~conf ~with_dune ~debug ~base_obuilder ~stdout ~stderr (run_script ~conf ~switch ~extra_repos pkg))
     in
     match v with
     | Ok () ->
         Prometheus.Counter.inc_one Metrics.jobs_ok;
         let* () = Lwt_io.write_line stderr ("["^num^"] succeeded.") in
-        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch logdir))
+        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch:switch_name logdir))
     | Error () ->
         Prometheus.Counter.inc_one Metrics.jobs_error;
-        let* v = failure_kind conf ~pkg logfile in
+        let* v = failure_kind conf ~switch ~pkg logfile in
         begin match v with
         | `Partial ->
             let* () = Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") in
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch logdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch:switch_name logdir))
         | `Failure ->
             let* () = Lwt_io.write_line stderr ("["^num^"] failed.") in
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch logdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch:switch_name logdir))
         | `NotAvailable ->
             let* () = Lwt_io.write_line stderr ("["^num^"] finished with not available.") in
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch logdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch:switch_name logdir))
         | `Other | `AcceptFailures | `Timeout ->
             let* () = Lwt_io.write_line stderr ("["^num^"] finished with an internal failure.") in
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch logdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch:switch_name logdir))
         end
   end
 
@@ -462,9 +463,10 @@ let get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch =
   end
 
 let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
+  let with_dune = Intf.Switch.with_dune switch in
   let switch = Intf.Compiler.to_string (Intf.Switch.name switch) in
   let* () = Lwt_io.write_line stderr ("Getting packages list for "^switch^"… (this may take an hour or two)") in
-  let* pkgs = ocluster_build_str ~important:true ~debug ~cap ~conf ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) in
+  let* pkgs = ocluster_build_str ~important:true ~debug ~cap ~conf ~with_dune ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) in
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
     match Intf.Pkg.name (Intf.Pkg.create ~full_name:pkg ~instances:[] ~opam:OpamFile.OPAM.empty ~revdeps:0) with (* TODO: Remove this horror *)
@@ -509,9 +511,9 @@ let revdeps_script pkg =
   {|opam list --color=never -s --recursive --depopts --depends-on |}^pkg^{| && \
     opam list --color=never -s --with-test --with-doc --depopts --depends-on |}^pkg
 
-let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder) pkgs =
+let get_metadata ~debug ~jobs ~cap ~conf ~with_dune ~pool ~stderr logdir (_, base_obuilder) pkgs =
   let get_revdeps ~base_obuilder ~pkgname ~pkg ~logdir =
-    let* revdeps = ocluster_build_str ~important:false ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) in
+    let* revdeps = ocluster_build_str ~important:false ~debug ~cap ~conf ~with_dune ~base_obuilder ~stderr ~default:(Some []) (revdeps_script pkg) in
     let module Set = Set.Make(String) in
     let revdeps = Set.of_list revdeps in
     let revdeps = Set.remove pkgname revdeps in (* https://github.com/ocaml/opam/issues/4446 *)
@@ -521,7 +523,7 @@ let get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr logdir (_, base_obuilder)
   in
   let get_latest_metadata ~base_obuilder ~pkgname ~logdir = (* TODO: Get this locally by merging all the repository and parsing the opam files using opam-core *)
     let* opam =
-      ocluster_build_str ~important:false ~debug ~cap ~conf ~base_obuilder ~stderr ~default:(Some [])
+      ocluster_build_str ~important:false ~debug ~cap ~conf ~with_dune ~base_obuilder ~stderr ~default:(Some [])
         ("opam show --raw "^Filename.quote pkgname)
     in
     Lwt_io.with_file ~mode:Lwt_io.output (Fpath.to_string (Server_workdirs.tmpopamfile ~pkg:pkgname logdir)) (fun c ->
@@ -719,7 +721,8 @@ let run ~debug ~cap_file ~on_finished ~conf oca_cache workdir =
         let* cap = get_cap ~stderr ~cap_file in
         let* opam_repo, opam_repo_commit = get_commit_hash_default conf in
         let* extra_repos = get_commit_hash_extra_repos conf in
-        let* cache = cache ~stderr ~conf in
+        let with_dune = List.exists Intf.Switch.with_dune switches in
+        let* cache = cache ~stderr ~conf ~with_dune in
         let switches' = switches in
         let switches = List.map (fun switch -> (switch, get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch)) switches in
         begin match switches with
@@ -735,7 +738,7 @@ let run ~debug ~cap_file ~on_finished ~conf oca_cache workdir =
             Prometheus.Gauge.set Metrics.number_of_packages (float_of_int (Pkg_set.cardinal pkgs));
             let* () = Oca_lib.timer_log timer stderr "Initialization" in
             let (_, jobs) = run_jobs ~cap ~conf ~debug ~pool ~stderr ~extra_repos new_logdir switches pkgs in
-            let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~pool ~stderr new_logdir switch pkgs in
+            let (_, jobs) = get_metadata ~debug ~jobs ~cap ~conf ~with_dune ~pool ~stderr new_logdir switch pkgs in
             let* () = Lwt.join jobs in
             let* () = Oca_lib.timer_log timer stderr "Operation" in
             let* () = Lwt_io.write_line stderr "Finishing up…" in

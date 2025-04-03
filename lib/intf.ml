@@ -43,17 +43,49 @@ module Compiler = struct
   let compare (Comp x) (Comp y) = OpamVersionCompare.compare x y
 end
 
+module Build_with = struct
+  type t =
+    | Opam
+    | Dune
+
+  let compare a b =
+    match a, b with
+    | Opam, Dune -> -1
+    | Dune, Dune
+    | Opam, Opam -> 0
+    | Dune, Opam -> 1
+end
+
+
 (* TODO: Exchange the name with the Compiler module *)
 module Switch = struct
-  type t = Switch of Compiler.t * string
+  type t = {
+    name: Compiler.t;
+    switch: string;
+    build_with: Build_with.t;
+  }
 
-  let create ~name ~switch = Switch (Compiler.from_string name, switch)
+  let create ~name ~switch ~build_with =
+    let name = Compiler.from_string name in
+    { name; switch; build_with; }
 
-  let name (Switch (x, _)) = x
-  let switch (Switch (_, x)) = x
+  let name {name; _} = name
+  let switch {switch; _} = switch
+  let build_with {build_with; _} = build_with
 
-  let equal (Switch (x, _)) (Switch (y, _)) = Compiler.equal x y
-  let compare (Switch (x, _)) (Switch (y, _)) = Compiler.compare x y
+  let with_dune {build_with; _} =
+    match build_with with
+    | Build_with.Dune -> true
+    | Build_with.Opam -> false
+
+  let equal {name; _} x =
+    (* equality of switches is just equality of their names *)
+    Compiler.equal name x.name
+
+  let compare {name; build_with; _} x =
+    match Compiler.compare name x.name with
+    | 0 -> Build_with.compare build_with x.build_with
+    | otherwise -> otherwise
 end
 
 module Github = struct
