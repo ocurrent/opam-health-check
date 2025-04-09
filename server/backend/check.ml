@@ -256,6 +256,7 @@ let prebuild_toolchains ~conf =
   | None -> []
   | Some switches ->
     switches
+    |> ListLabels.filter ~f:Intf.Switch.with_dune
     |> ListLabels.map ~f:(fun switch ->
         let switch = Intf.Switch.switch switch in
         String.concat " && " [
@@ -296,8 +297,8 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
       let trailer = {|exit $res|} in
       [String.concat "\n" [build; with_test ~conf pkg; with_lower_bound ~conf pkg; trailer]]
   | Intf.Build_with.Dune -> (
-    let pkg_name = match Astring.String.cut ~sep:"." pkg with
-      | Some (name, _version) -> name
+    let pkg_name, pkg_version = match Astring.String.cut ~sep:"." pkg with
+      | Some name_version -> name_version
       | None -> Fmt.failwith "Invalid package format, could not generate commands"
     in
     let install_dune = "curl -fsSL https://get.dune.build/install | sh" in
@@ -308,8 +309,17 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         Printf.sprintf {|cd %s|} pkg;
         (* some projects only have a plain opam file, rename to pkg_name.opam is safe *)
         Printf.sprintf "if [ -f opam ]; then mv opam %s.opam; fi" pkg_name;
+
+        (* find all packages in the repo *)
+        Printf.sprintf "echo %s >> /tmp/packages-in-repo" pkg_name;
+        (* populate them from opam files *)
+        "for opam in *.opam; do echo ${opam%.opam} >> /tmp/packages-in-repo; done";
+        (* not all repos have opam files, populate them from dune-project *)
+        {|sed -n 's/(name \(.*\))/\1/p' < dune-project | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//' >> /tmp/packages-in-repo|};
+
         (* replace tarball opam metadata with more accurate opam repository metadata *)
-        "for opam in *.opam; do opam show --raw ${opam%.opam} > $opam; done";
+        Printf.sprintf "while read package ; do opam show --raw ${package}.%s > ${package}.opam; done < /tmp/packages-in-repo" pkg_version;
+
         "opam install ./ --depext-only --with-test --with-doc";
         (* retrieve dependencies as opam would solve them to know which local packages we will need *)
         Printf.sprintf {|opam install --dry-run --with-test ./%s.opam | sed -nE 's/(.*)- install ([^[:blank:]]*)(.*)/\2/p' > /tmp/packages-via-opam|} pkg_name;
