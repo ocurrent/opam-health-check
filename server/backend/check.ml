@@ -256,6 +256,7 @@ let prebuild_toolchains ~conf =
   | None -> []
   | Some switches ->
     switches
+    |> ListLabels.filter ~f:Intf.Switch.with_dune
     |> ListLabels.map ~f:(fun switch ->
         let switch = Intf.Switch.switch switch in
         String.concat " && " [
