@@ -173,7 +173,8 @@ let failure_kind_dune logfile =
     let rec lookup res =
       let* line = Lwt_io.read_line_opt ic in
       match line with
-      | Some "opam-health-check: Solve failed" -> Lwt.return `NotAvailable
+      | Some "opam-health-check: Solve failed"
+      | Some "opam-health-check: Depext unsolvable" -> Lwt.return `NotAvailable
       | Some "opam-health-check: Build failed" -> Lwt.return `Failure
       | Some _ -> lookup res
       | None -> Lwt.return res
@@ -320,7 +321,10 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         (* replace tarball opam metadata with more accurate opam repository metadata *)
         Printf.sprintf "while read package ; do opam show --raw ${package}.%s > ${package}.opam; done < /tmp/packages-in-repo" pkg_version;
 
-        "opam install ./ --depext-only --with-test --with-doc";
+        (* attempt to install depexts *)
+        (* sometimes it turns out that there is no solution, then exit early *)
+        {|opam install ./ --depext-only --with-test --with-doc || (echo "opam-health-check: Depext unsolvable" && exit 1)|};
+
         (* retrieve dependencies as opam would solve them to know which local packages we will need *)
         Printf.sprintf {|opam install --dry-run --with-test ./%s.opam | sed -nE 's/(.*)- install ([^[:blank:]]*)(.*)/\2/p' > /tmp/packages-via-opam|} pkg_name;
         (* remove all the existing packages but remember which ones exist *)
