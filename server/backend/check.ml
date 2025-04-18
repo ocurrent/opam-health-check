@@ -337,7 +337,7 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         (* always at least build the current package *)
         Printf.sprintf {|echo %s >> /tmp/packages-to-build|} pkg_name;
         (* check what other local packages are part of the solution *)
-        "while read package ; do if grep --quiet $package /tmp/packages-via-opam ; then echo $package >> /tmp/packages-to-build ; fi ; done < /tmp/packages-locally-available";
+        {|while read package ; do if grep --quiet "^${package}\$" /tmp/packages-via-opam ; then echo $package >> /tmp/packages-to-build ; fi ; done < /tmp/packages-locally-available|};
         (* restore packages that we need as dependencies *)
         "while read package ; do opam show --raw $package > $package.opam; done < /tmp/packages-to-build";
         (* create dummies for all other packages *)
