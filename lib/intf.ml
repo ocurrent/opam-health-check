@@ -38,7 +38,6 @@ module Compiler = struct
       failwith "Forbidden switch name";
     Comp x
 
-
   let to_string (Comp x) = x
   let equal (Comp x) (Comp y) = OpamVersionCompare.equal x y
   let compare (Comp x) (Comp y) = OpamVersionCompare.compare x y
@@ -59,8 +58,6 @@ module Build_with = struct
     | Dune, Opam -> 1
 end
 
-
-(* TODO: Exchange the name with the Compiler module *)
 module Switch = struct
   type t = {
     compiler: Compiler.t;
