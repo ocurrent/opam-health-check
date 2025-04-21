@@ -97,6 +97,18 @@ let check_is_docker_compatible name =
   if not (String.for_all Oca_lib.char_is_docker_compatible name) then
     failwith "name field has to contain only alphanumerical characters and '.'"
 
+let ensure_no_duplicate_switches switches =
+  let module Names = Set.Make (String) in
+  let init = Names.empty in
+  ListLabels.fold_left ~init ~f:(fun names switch ->
+    let name = Intf.Switch.name switch in
+    match Names.mem name names with
+    | false -> Names.add name names
+    | true ->
+      let err = Printf.sprintf "switch name %S is duplicated, please choose distinct names" name in
+      failwith err) switches
+  |> ignore
+
 let set_config conf = function
   | _, `Null -> ()
   | "name" as field, `String name ->
@@ -148,6 +160,7 @@ let set_config conf = function
       ) platform
   | "ocaml-switches" as field, `A switches ->
       let switches = List.map get_comp switches in
+      ensure_no_duplicate_switches switches;
       set_field ~field (fun () -> conf.ocaml_switches <- Some switches) conf.ocaml_switches
   | "slack-webhooks" as field, `A webhooks ->
       let webhooks = List.map get_uri webhooks in
