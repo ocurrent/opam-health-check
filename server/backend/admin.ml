@@ -82,9 +82,9 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
         else
           let+ () = Server_configfile.set_processes conf i in
           (fun () -> Lwt.return_none)
-    | ["add-ocaml-switch"; name; switch; build_with] ->
+    | ["add-ocaml-switch"; name; compiler; build_with] ->
         let build_with = build_with_of_string_exn build_with in
-        let switch = Intf.Switch.create ~name ~switch ~build_with in
+        let switch = Intf.Switch.create ~name ~compiler ~build_with in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         if List.mem ~eq:Intf.Switch.equal switch switches then
           Lwt.fail (Failure "Cannot have duplicate switches names.")
@@ -92,9 +92,9 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
           let switches = List.sort Intf.Switch.compare (switch :: switches) in
           let+ () = Server_configfile.set_ocaml_switches conf switches in
           (fun () -> Lwt.return_none)
-    | ["set-ocaml-switch"; name; switch; build_with] ->
+    | ["set-ocaml-switch"; name; compiler; build_with] ->
         let build_with = build_with_of_string_exn build_with in
-        let switch = Intf.Switch.create ~name ~switch ~build_with in
+        let switch = Intf.Switch.create ~name ~compiler ~build_with in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let idx, _ = Option.get_exn_or "can't find switch name" (List.find_idx (Intf.Switch.equal switch) switches) in
         let switches = List.set_at_idx idx switch switches in
@@ -104,7 +104,7 @@ let admin_action ~on_finished ~conf ~run_trigger workdir body =
         let to_delete = Intf.Compiler.from_string name in
         let switches = Option.get_or ~default:[] (Server_configfile.ocaml_switches conf) in
         let switches = List.filter (fun switch ->
-          Intf.Compiler.equal (Intf.Switch.name switch) to_delete) switches
+          Intf.Compiler.equal (Intf.Switch.compiler switch) to_delete) switches
         in
         let+ () = Server_configfile.set_ocaml_switches conf switches in
         (fun () -> Lwt.return_none)

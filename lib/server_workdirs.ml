@@ -111,12 +111,13 @@ let logdir_search ~switch ~regexp = function
 let tmpdir (Logdir (_, _, _, workdir, _) as logdir) = base_tmpdir workdir/get_logdir_name logdir
 
 let tmplogdir logdir = tmpdir logdir/"logs"
-let tmpswitchlogdir ~switch logdir = tmplogdir logdir/Intf.Compiler.to_string switch
+let tmpswitchlogdir ~name logdir = tmplogdir logdir/name
 
-let logdir_move ~switches (Logdir (ty, _, _, workdir, _) as logdir) = match ty with
+let logdir_move ~names (Logdir (ty, _, _, workdir, _) as logdir) =
+  match ty with
   | Compressed ->
       let cwd = tmplogdir logdir in
-      let directories = List.map Intf.Compiler.to_string switches in
+      let directories = names in
       let archive = base_logdir workdir/get_logdir_name logdir+"txz" in
       let* () = Oca_lib.compress_tpxz_archive ~cwd ~directories archive in
       Oca_lib.rm_rf cwd
@@ -128,18 +129,18 @@ let logdir_move ~switches (Logdir (ty, _, _, workdir, _) as logdir) = match ty w
 let ilogdir workdir = workdir/"ilogs"
 let new_ilogfile ~start_time workdir = ilogdir workdir/Printf.sprintf "%.0f" start_time
 
-let tmpgooddir ~switch logdir = tmpswitchlogdir ~switch logdir/"good"
-let tmppartialdir ~switch logdir = tmpswitchlogdir ~switch logdir/"partial"
-let tmpbaddir ~switch logdir = tmpswitchlogdir ~switch logdir/"bad"
-let tmpnotavailabledir ~switch logdir = tmpswitchlogdir ~switch logdir/"not-available"
-let tmpinternalfailuredir ~switch logdir = tmpswitchlogdir ~switch logdir/"internal-failure"
-let tmplogfile ~pkg ~switch logdir = tmpswitchlogdir ~switch logdir/pkg
+let tmpgooddir ~name logdir = tmpswitchlogdir ~name logdir/"good"
+let tmppartialdir ~name logdir = tmpswitchlogdir ~name logdir/"partial"
+let tmpbaddir ~name logdir = tmpswitchlogdir ~name logdir/"bad"
+let tmpnotavailabledir ~name logdir = tmpswitchlogdir ~name logdir/"not-available"
+let tmpinternalfailuredir ~name logdir = tmpswitchlogdir ~name logdir/"internal-failure"
+let tmplogfile ~pkg ~name logdir = tmpswitchlogdir ~name logdir/pkg
 
-let tmpgoodlog ~pkg ~switch logdir = tmpgooddir ~switch logdir/pkg
-let tmppartiallog ~pkg ~switch logdir = tmppartialdir ~switch logdir/pkg
-let tmpbadlog ~pkg ~switch logdir = tmpbaddir ~switch logdir/pkg
-let tmpnotavailablelog ~pkg ~switch logdir = tmpnotavailabledir ~switch logdir/pkg
-let tmpinternalfailurelog ~pkg ~switch logdir = tmpinternalfailuredir ~switch logdir/pkg
+let tmpgoodlog ~pkg ~name logdir = tmpgooddir ~name logdir/pkg
+let tmppartiallog ~pkg ~name logdir = tmppartialdir ~name logdir/pkg
+let tmpbadlog ~pkg ~name logdir = tmpbaddir ~name logdir/pkg
+let tmpnotavailablelog ~pkg ~name logdir = tmpnotavailabledir ~name logdir/pkg
+let tmpinternalfailurelog ~pkg ~name logdir = tmpinternalfailuredir ~name logdir/pkg
 
 let metadatadir workdir = workdir/"metadata"
 let opamsdir workdir = metadatadir workdir/"opams"
@@ -163,12 +164,12 @@ let init_base workdir =
   Oca_lib.mkdir_p (revdepsdir workdir)
 
 let init_base_job ~switch logdir =
-  let switch = Intf.Switch.name switch in
-  let* () = Oca_lib.mkdir_p (tmpgooddir ~switch logdir) in
-  let* () = Oca_lib.mkdir_p (tmppartialdir ~switch logdir) in
-  let* () = Oca_lib.mkdir_p (tmpbaddir ~switch logdir) in
-  let* () = Oca_lib.mkdir_p (tmpnotavailabledir ~switch logdir) in
-  Oca_lib.mkdir_p (tmpinternalfailuredir ~switch logdir)
+  let name = Intf.Switch.name switch in
+  let* () = Oca_lib.mkdir_p (tmpgooddir ~name logdir) in
+  let* () = Oca_lib.mkdir_p (tmppartialdir ~name logdir) in
+  let* () = Oca_lib.mkdir_p (tmpbaddir ~name logdir) in
+  let* () = Oca_lib.mkdir_p (tmpnotavailabledir ~name logdir) in
+  Oca_lib.mkdir_p (tmpinternalfailuredir ~name logdir)
 
 let init_base_jobs ~switches logdir =
   let* () = Oca_lib.mkdir_p (tmplogdir logdir) in

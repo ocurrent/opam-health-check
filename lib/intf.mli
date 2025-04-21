@@ -25,15 +25,17 @@ module Compiler : sig
 
   val equal : t -> t -> bool
   val compare : t -> t -> int
+
+  val pp : Format.formatter -> t -> unit
 end
 
 module Switch : sig
   type t
 
-  val create : name:string -> switch:string -> build_with:Build_with.t -> t
+  val create : name:string -> compiler:string -> build_with:Build_with.t -> t
 
-  val name : t -> Compiler.t
-  val switch : t -> string
+  val name : t -> string
+  val compiler : t -> Compiler.t
   val build_with : t -> Build_with.t
 
   (* [true] if the switch is using Dune package management *)

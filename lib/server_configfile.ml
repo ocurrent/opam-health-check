@@ -73,9 +73,9 @@ let get_comp_str = function
   | _ -> failwith "string expected"
 
 let get_comp = function
-  | `O [name, `O [ ("switch", `String switch); ("build-with", build_with)] ] ->
+  | `O [name, `O [ ("switch", `String compiler); ("build-with", build_with)] ] ->
       let build_with = build_with_of_yaml_exn build_with in
-      Intf.Switch.create ~name ~switch ~build_with
+      Intf.Switch.create ~name ~compiler ~build_with
   | _ ->
       failwith "key and value expected"
 
@@ -172,8 +172,8 @@ let yaml_of_extra_repositories l =
 
 let yaml_of_ocaml_switches l =
   `A (List.map (fun s ->
-    `O [Intf.(Compiler.to_string (Switch.name s)),
-        `O ["switch", `String (Intf.Switch.switch s); "build-with", yaml_of_build_with (Intf.Switch.build_with s)]]) l)
+    `O [Intf.Switch.name s,
+        `O ["switch", `String (s |> Intf.Switch.compiler |> Intf.Compiler.to_string); "build-with", yaml_of_build_with (Intf.Switch.build_with s)]]) l)
 
 let yaml_of_slack_webhooks l =
   `A (List.map (fun s -> `String (Uri.to_string s)) l)
