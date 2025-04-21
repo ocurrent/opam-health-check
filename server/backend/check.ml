@@ -356,8 +356,8 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
 
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
-    let* () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.name switch^"…") in
     let name = Intf.Switch.name switch in
+    let* () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^name^"…") in
     let logfile = Server_workdirs.tmplogfile ~pkg ~name logdir in
     let* v =
       Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) (fun stdout ->
