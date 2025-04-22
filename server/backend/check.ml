@@ -454,15 +454,16 @@ let get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch =
         (Intf.Compiler.to_string (Intf.Switch.compiler switch));
       run ~network "opam update --depexts";
     ] @
-    (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
-    (* TODO: this is wonky because it assumes the version of the compiler from the switch name which is arbitrary *)
-    (if OpamVersionCompare.compare (Intf.Switch.name switch) "4.08" < 0 then
-       [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
-       (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
-                and https://github.com/ocaml/opam-repository/pull/15642 *)
-     else
-       []
-    ) @
+    (
+      (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
+      let four_oh_eight = Intf.Compiler.from_string "4.08" in
+      if Intf.Compiler.compare (Intf.Switch.compiler switch) four_oh_eight < 0 then
+         [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
+         (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
+                  and https://github.com/ocaml/opam-repository/pull/15642 *)
+       else
+         [])
+    @
     (match Server_configfile.extra_command conf with
      | Some c -> [run ~cache ~network "%s" c]
      | None -> []
