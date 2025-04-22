@@ -78,9 +78,11 @@ module Switch = struct
     | Build_with.Dune -> true
     | Build_with.Opam -> false
 
-  let compare {compiler; build_with; _} x =
+  let compare {compiler; build_with; name} x =
     match Compiler.compare compiler x.compiler with
-    | 0 -> Build_with.compare build_with x.build_with
+    | 0 -> (match String.compare name x.name with 
+      | 0 -> Build_with.compare build_with x.build_with
+      | otherwise -> otherwise)
     | otherwise -> otherwise
 end
 
