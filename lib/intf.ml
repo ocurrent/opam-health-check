@@ -78,10 +78,6 @@ module Switch = struct
     | Build_with.Dune -> true
     | Build_with.Opam -> false
 
-  let equal {compiler; _} x =
-    (* equality of switches is just equality of their compilers *)
-    Compiler.equal compiler x.compiler
-
   let compare {compiler; build_with; _} x =
     match Compiler.compare compiler x.compiler with
     | 0 -> Build_with.compare build_with x.build_with

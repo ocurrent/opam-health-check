@@ -41,7 +41,6 @@ module Switch : sig
   (* [true] if the switch is using Dune package management *)
   val with_dune : t -> bool
 
-  val equal : t -> t -> bool
   val compare : t -> t -> int
 end
 
