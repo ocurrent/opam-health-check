@@ -326,7 +326,9 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         (* determine the depopts so we can add them to the query so we get the most depexts *)
         {|opam show -f depopts ./*.opam | tr '\n' ' ' | tr -d '"' > /tmp/packages-depopts-for-opam|};
         (* sometimes it turns out that there is no solution, then exit early *)
-        {|opam install ./ --depext-only --with-test --with-doc $(cat /tmp/packages-depopts-for-opam) || (echo "opam-health-check: Depext unsolvable" && exit 1)|};
+        {|opam install ./ --depext-only --with-test --with-doc $(cat /tmp/packages-depopts-for-opam) 2> >(tee /tmp/depext-output >&2)|};
+
+        {|if grep -q "ERROR" /tmp/depext-output; then echo "opam-health-check: Depext unsolvable" && exit 1; fi|};
 
         (* retrieve dependencies as opam would solve them to know which local packages we will need *)
         Printf.sprintf {|opam install --dry-run --with-test ./%s.opam | sed -nE 's/(.*)- install ([^[:blank:]]*)(.*)/\2/p' > /tmp/packages-via-opam|} pkg_name;
