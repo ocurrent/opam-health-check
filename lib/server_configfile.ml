@@ -73,9 +73,9 @@ let get_comp_str = function
   | _ -> failwith "string expected"
 
 let get_comp = function
-  | `O [name, `O [ ("switch", `String switch); ("build-with", build_with)] ] ->
+  | `O [name, `O [ ("switch", `String compiler); ("build-with", build_with)] ] ->
       let build_with = build_with_of_yaml_exn build_with in
-      Intf.Switch.create ~name ~switch ~build_with
+      Intf.Switch.create ~name ~compiler ~build_with
   | _ ->
       failwith "key and value expected"
 
@@ -96,6 +96,18 @@ let get_uri = function
 let check_is_docker_compatible name =
   if not (String.for_all Oca_lib.char_is_docker_compatible name) then
     failwith "name field has to contain only alphanumerical characters and '.'"
+
+let assert_unique_switch_names switches =
+  let module Names = Set.Make (String) in
+  let init = Names.empty in
+  ListLabels.fold_left ~init ~f:(fun names switch ->
+    let name = Intf.Switch.name switch in
+    match Names.mem name names with
+    | false -> Names.add name names
+    | true ->
+      let err = Printf.sprintf "switch name %S is duplicated, please choose distinct names" name in
+      failwith err) switches
+  |> ignore
 
 let set_config conf = function
   | _, `Null -> ()
@@ -148,6 +160,7 @@ let set_config conf = function
       ) platform
   | "ocaml-switches" as field, `A switches ->
       let switches = List.map get_comp switches in
+      assert_unique_switch_names switches;
       set_field ~field (fun () -> conf.ocaml_switches <- Some switches) conf.ocaml_switches
   | "slack-webhooks" as field, `A webhooks ->
       let webhooks = List.map get_uri webhooks in
@@ -172,8 +185,8 @@ let yaml_of_extra_repositories l =
 
 let yaml_of_ocaml_switches l =
   `A (List.map (fun s ->
-    `O [Intf.(Compiler.to_string (Switch.name s)),
-        `O ["switch", `String (Intf.Switch.switch s); "build-with", yaml_of_build_with (Intf.Switch.build_with s)]]) l)
+    `O [Intf.Switch.name s,
+        `O ["switch", `String (s |> Intf.Switch.compiler |> Intf.Compiler.to_string); "build-with", yaml_of_build_with (Intf.Switch.build_with s)]]) l)
 
 let yaml_of_slack_webhooks l =
   `A (List.map (fun s -> `String (Uri.to_string s)) l)

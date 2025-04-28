@@ -41,6 +41,8 @@ module Compiler = struct
   let to_string (Comp x) = x
   let equal (Comp x) (Comp y) = OpamVersionCompare.equal x y
   let compare (Comp x) (Comp y) = OpamVersionCompare.compare x y
+
+  let pp ppf (Comp x) = Format.fprintf ppf "%s" x
 end
 
 module Build_with = struct
@@ -56,21 +58,19 @@ module Build_with = struct
     | Dune, Opam -> 1
 end
 
-
-(* TODO: Exchange the name with the Compiler module *)
 module Switch = struct
   type t = {
-    name: Compiler.t;
-    switch: string;
+    compiler: Compiler.t;
+    name: string;
     build_with: Build_with.t;
   }
 
-  let create ~name ~switch ~build_with =
-    let name = Compiler.from_string name in
-    { name; switch; build_with; }
+  let create ~name ~compiler ~build_with =
+    let compiler = Compiler.from_string compiler in
+    { name; compiler; build_with; }
 
   let name {name; _} = name
-  let switch {switch; _} = switch
+  let compiler {compiler; _} = compiler
   let build_with {build_with; _} = build_with
 
   let with_dune {build_with; _} =
@@ -78,13 +78,11 @@ module Switch = struct
     | Build_with.Dune -> true
     | Build_with.Opam -> false
 
-  let equal {name; _} x =
-    (* equality of switches is just equality of their names *)
-    Compiler.equal name x.name
-
-  let compare {name; build_with; _} x =
-    match Compiler.compare name x.name with
-    | 0 -> Build_with.compare build_with x.build_with
+  let compare {compiler; build_with; name} x =
+    match Compiler.compare compiler x.compiler with
+    | 0 -> (match String.compare name x.name with 
+      | 0 -> Build_with.compare build_with x.build_with
+      | otherwise -> otherwise)
     | otherwise -> otherwise
 end
 

@@ -244,12 +244,13 @@ let set_up_workspace ~extra_repos =
 
 let dune_path = "PATH=$HOME/.local/bin:$PATH"
 
-let set_up_project_using ~switch =
+let set_up_project_using ~compiler =
+  let version = Intf.Compiler.to_string compiler in
   let dune_project = Printf.sprintf {|(lang dune 3.17)
 (package
   (name dummy)
   (allow_empty true)
-  (depends (ocaml (= %s))))|} switch in
+  (depends (ocaml (= %s))))|} version in
   Printf.sprintf {|echo '%s' > dune-project|} dune_project
 
 let prebuild_toolchains ~conf =
@@ -259,10 +260,10 @@ let prebuild_toolchains ~conf =
     switches
     |> ListLabels.filter ~f:Intf.Switch.with_dune
     |> ListLabels.map ~f:(fun switch ->
-        let switch = Intf.Switch.switch switch in
+        let compiler = Intf.Switch.compiler switch in
         String.concat " && " [
           "PLACE=$(mktemp -d) && cd $PLACE";
-          set_up_project_using ~switch;
+          set_up_project_using ~compiler;
           Printf.sprintf {|%s dune pkg lock|} dune_path;
           Printf.sprintf {|%s dune build|} dune_path;
         ])
@@ -355,9 +356,9 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
 
 let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch ~num logdir pkg =
   Lwt_pool.use pool begin fun () ->
-    let* () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^Intf.Switch.switch switch^"…") in
-    let switch_name = Intf.Switch.name switch in
-    let logfile = Server_workdirs.tmplogfile ~pkg ~switch:switch_name logdir in
+    let name = Intf.Switch.name switch in
+    let* () = Lwt_io.write_line stderr ("["^num^"] Checking "^pkg^" on "^name^"…") in
+    let logfile = Server_workdirs.tmplogfile ~pkg ~name logdir in
     let* v =
       Lwt_io.with_file ~flags:Unix.[O_WRONLY; O_CREAT; O_TRUNC] ~perm:0o640 ~mode:Lwt_io.Output (Fpath.to_string logfile) (fun stdout ->
         let with_dune = Intf.Switch.with_dune switch in
@@ -367,23 +368,23 @@ let run_job ~cap ~conf ~pool ~debug ~stderr ~base_obuilder ~extra_repos ~switch 
     | Ok () ->
         Prometheus.Counter.inc_one Metrics.jobs_ok;
         let* () = Lwt_io.write_line stderr ("["^num^"] succeeded.") in
-        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~switch:switch_name logdir))
+        Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpgoodlog ~pkg ~name logdir))
     | Error () ->
         Prometheus.Counter.inc_one Metrics.jobs_error;
         let* v = failure_kind conf ~switch ~pkg logfile in
         begin match v with
         | `Partial ->
             let* () = Lwt_io.write_line stderr ("["^num^"] finished with a partial failure.") in
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~switch:switch_name logdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmppartiallog ~pkg ~name logdir))
         | `Failure ->
             let* () = Lwt_io.write_line stderr ("["^num^"] failed.") in
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~switch:switch_name logdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpbadlog ~pkg ~name logdir))
         | `NotAvailable ->
             let* () = Lwt_io.write_line stderr ("["^num^"] finished with not available.") in
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~switch:switch_name logdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpnotavailablelog ~pkg ~name logdir))
         | `Other | `AcceptFailures | `Timeout ->
             let* () = Lwt_io.write_line stderr ("["^num^"] finished with an internal failure.") in
-            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~switch:switch_name logdir))
+            Lwt_unix.rename (Fpath.to_string logfile) (Fpath.to_string (Server_workdirs.tmpinternalfailurelog ~pkg ~name logdir))
         end
   end
 
@@ -396,11 +397,11 @@ let () =
 
 let get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch =
   let extra_repos =
-    let switch = Intf.Switch.name switch in
+    let compiler = Intf.Switch.compiler switch in
     List.filter (fun (repo, _) ->
       match Intf.Repository.for_switches repo with
       | None -> true
-      | Some for_switches -> List.exists (Intf.Compiler.equal switch) for_switches
+      | Some for_switches -> List.exists (Intf.Compiler.equal compiler) for_switches
     ) extra_repos
   in
   let open Obuilder_spec in
@@ -449,18 +450,20 @@ let get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch =
     ) @ [
       run ~cache ~network "opam switch create --repositories=%sdefault '%s' '%s'"
         (List.fold_left (fun acc (repo, _) -> Intf.Repository.name repo^","^acc) "" extra_repos)
-        (Intf.Compiler.to_string (Intf.Switch.name switch))
-        (Intf.Switch.switch switch);
+        (Intf.Switch.name switch)
+        (Intf.Compiler.to_string (Intf.Switch.compiler switch));
       run ~network "opam update --depexts";
     ] @
-    (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
-    (if OpamVersionCompare.compare (Intf.Switch.switch switch) "4.08" < 0 then
-       [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
-       (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
-                and https://github.com/ocaml/opam-repository/pull/15642 *)
-     else
-       []
-    ) @
+    (
+      (* TODO: Should this be removed now that it is part of the base docker images? What about macOS? *)
+      let four_oh_eight = Intf.Compiler.from_string "4.08" in
+      if Intf.Compiler.compare (Intf.Switch.compiler switch) four_oh_eight < 0 then
+         [run ~cache ~network "opam install -y ocaml-secondary-compiler"]
+         (* NOTE: See https://github.com/ocaml/opam-repository/pull/15404
+                  and https://github.com/ocaml/opam-repository/pull/15642 *)
+       else
+         [])
+    @
     (match Server_configfile.extra_command conf with
      | Some c -> [run ~cache ~network "%s" c]
      | None -> []
@@ -478,8 +481,9 @@ let get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch =
 
 let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
   let with_dune = Intf.Switch.with_dune switch in
-  let switch = Intf.Compiler.to_string (Intf.Switch.name switch) in
-  let* () = Lwt_io.write_line stderr ("Getting packages list for "^switch^"… (this may take an hour or two)") in
+  let compiler = Intf.Switch.compiler switch in
+  let line = Format.asprintf "Getting packages list for %a… (this may take an hour or two)" Intf.Compiler.pp compiler in
+  let* () = Lwt_io.write_line stderr line in
   let* pkgs = ocluster_build_str ~important:true ~debug ~cap ~conf ~with_dune ~base_obuilder ~stderr ~default:None (Server_configfile.list_command conf) in
   let pkgs = List.filter begin fun pkg ->
     Oca_lib.is_valid_filename pkg &&
@@ -507,8 +511,9 @@ let get_pkgs ~debug ~cap ~conf ~stderr (switch, base_obuilder) =
     | "ocaml-options-vanilla" -> false
     | _ -> true
   end pkgs in
-  let nelts = string_of_int (List.length pkgs) in
-  let+ () = Lwt_io.write_line stderr ("Package list for "^switch^" retrieved. "^nelts^" elements to process.") in
+  let nelts = List.length pkgs in
+  let line = Format.asprintf "Package list for %a retrieved. %d elements to process." Intf.Compiler.pp compiler nelts in
+  let+ () = Lwt_io.write_line stderr line in
   pkgs
 
 let with_stderr ~start_time workdir f =
@@ -591,8 +596,8 @@ let move_tmpdirs_to_final ~switches logdir workdir =
   let metadatadir = Server_workdirs.metadatadir workdir in
   let tmpmetadatadir = Server_workdirs.tmpmetadatadir logdir in
   let tmpdir = Server_workdirs.tmpdir logdir in
-  let switches = List.map Intf.Switch.name switches in
-  let* () = Server_workdirs.logdir_move ~switches logdir in
+  let names = List.map Intf.Switch.name switches in
+  let* () = Server_workdirs.logdir_move ~names logdir in
   let* () = Oca_lib.rm_rf metadatadir in
   let* () = Lwt_unix.rename (Fpath.to_string tmpmetadatadir) (Fpath.to_string metadatadir) in
   Oca_lib.rm_rf tmpdir
