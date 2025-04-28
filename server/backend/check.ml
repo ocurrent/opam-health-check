@@ -323,8 +323,10 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         Printf.sprintf "while read package ; do opam show --raw ${package}.%s > ${package}.opam; done < /tmp/packages-in-repo" pkg_version;
 
         (* attempt to install depexts *)
+        (* determine the depopts so we can add them to the query so we get the most depexts *)
+        {|opam show -f depopts ./*.opam | tr '\n' ' ' | tr -d '"' > /tmp/packages-depopts-for-opam|};
         (* sometimes it turns out that there is no solution, then exit early *)
-        {|opam install ./ --depext-only --with-test --with-doc || (echo "opam-health-check: Depext unsolvable" && exit 1)|};
+        {|opam install ./ --depext-only --with-test --with-doc $(cat /tmp/packages-depopts-for-opam) || (echo "opam-health-check: Depext unsolvable" && exit 1)|};
 
         (* retrieve dependencies as opam would solve them to know which local packages we will need *)
         Printf.sprintf {|opam install --dry-run --with-test ./%s.opam | sed -nE 's/(.*)- install ([^[:blank:]]*)(.*)/\2/p' > /tmp/packages-via-opam|} pkg_name;
