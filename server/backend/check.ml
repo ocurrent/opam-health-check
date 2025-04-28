@@ -322,14 +322,6 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         (* replace tarball opam metadata with more accurate opam repository metadata *)
         Printf.sprintf "while read package ; do opam show --raw ${package}.%s > ${package}.opam; done < /tmp/packages-in-repo" pkg_version;
 
-        (* attempt to install depexts *)
-        (* determine the depopts so we can add them to the query so we get the most depexts *)
-        {|opam show -f depopts ./*.opam | tr '\n' ' ' | tr -d '"' > /tmp/packages-depopts-for-opam|};
-        (* sometimes it turns out that there is no solution, then exit early *)
-        {|opam install ./ --depext-only --with-test --with-doc $(cat /tmp/packages-depopts-for-opam) 2> >(tee /tmp/depext-output >&2)|};
-
-        {|if grep -q "ERROR" /tmp/depext-output; then echo "opam-health-check: Depext unsolvable" && exit 1; fi|};
-
         (* retrieve dependencies as opam would solve them to know which local packages we will need *)
         Printf.sprintf {|opam install --dry-run --with-test ./%s.opam | sed -nE 's/(.*)- install ([^[:blank:]]*)(.*)/\2/p' > /tmp/packages-via-opam|} pkg_name;
         (* remove all the existing packages but remember which ones exist *)
@@ -352,6 +344,12 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
 
         (* now try lock with all the required local packages in place *)
         Printf.sprintf {|%s dune pkg lock || (echo "opam-health-check: Solve failed" && exit 1) |} dune_path;
+
+        (* attempt to install depexts after a lockfile solution has been created *)
+        (* need to use dune for it as opam does not pick up depopts and dune does. *)
+        Printf.sprintf "%s dune show depexts > /tmp/packages-dune-determined-depexts" dune_path;
+        "xargs sudo apt-get install -y < /tmp/packages-dune-determined-depexts";
+
         (* avoid invalid dependency hash errors by removing the hash *)
         "grep -v dependency_hash dune.lock/lock.dune > /tmp/lock.dune";
         "mv /tmp/lock.dune dune.lock/lock.dune";
