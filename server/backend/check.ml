@@ -173,8 +173,7 @@ let failure_kind_dune logfile =
     let rec lookup res =
       let* line = Lwt_io.read_line_opt ic in
       match line with
-      | Some "opam-health-check: Solve failed"
-      | Some "opam-health-check: Depext unsolvable" -> Lwt.return `NotAvailable
+      | Some "opam-health-check: Solve failed" -> Lwt.return `NotAvailable
       | Some "opam-health-check: Build failed" -> Lwt.return `Failure
       | Some _ -> lookup res
       | None -> Lwt.return res
