@@ -346,8 +346,7 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
 
         (* attempt to install depexts after a lockfile solution has been created *)
         (* need to use dune for it as opam does not pick up depopts and dune does. *)
-        Printf.sprintf "%s dune show depexts > /tmp/packages-dune-determined-depexts" dune_path;
-        "xargs sudo apt-get install -y < /tmp/packages-dune-determined-depexts";
+        Printf.sprintf "sudo apt-get install -y $(%s dune show depexts)" dune_path;
 
         (* avoid invalid dependency hash errors by removing the hash *)
         "grep -v dependency_hash dune.lock/lock.dune > /tmp/lock.dune";
