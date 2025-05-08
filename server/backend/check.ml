@@ -278,8 +278,9 @@ let install_remove_packages =
 
 let remove_packages =
   String.concat " && " [
-    "/tmp/sexp/_opam/bin/sexp change '(try (rewrite (package @X) OPAM-HEALTH-CHECK-DROP))' < dune-project | grep -v OPAM-HEALTH-CHECK-DROP > dune-project-new";
-    "mv dune-project-new dune-project";
+    "/tmp/sexp/_opam/bin/sexp change '(try (rewrite (package @X) OPAM-HEALTH-CHECK-DROP))' < dune-project | grep -v OPAM-HEALTH-CHECK-DROP > dune-project-no-pkg";
+    "mv dune-project dune-project-pkg";
+    "mv dune-project-no-pkg dune-project";
   ]
 
 let run_script ~conf ~switch ~extra_repos pkg =
@@ -351,6 +352,11 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         (* avoid invalid dependency hash errors by removing the hash *)
         "grep -v dependency_hash dune.lock/lock.dune > /tmp/lock.dune";
         "mv /tmp/lock.dune dune.lock/lock.dune";
+
+        (* now that locking is done, reinstate the original dune-project which has package & sites information *)
+        "mv dune-project-pkg dune-project";
+
+        (* finally, build *)
         Printf.sprintf {|%s dune build --release --only-packages $(cat /tmp/packages-for-dune) || (echo "opam-health-check: Build failed" && exit 1)|} dune_path
       ]])
 
