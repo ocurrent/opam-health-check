@@ -445,6 +445,10 @@ let get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch =
       run ~network "rm -rf ~/opam-repository && git clone -q '%s' ~/opam-repository && git -C ~/opam-repository checkout -q %s" (Intf.Github.url opam_repo) opam_repo_commit;
       run "rm -rf ~/.opam && opam init -ya --bare%s ~/opam-repository" opam_init_options;
     ] @
+    (match Server_configfile.extra_command conf with
+     | Some c -> [run ~cache ~network "%s" c]
+     | None -> []
+    ) @
     List.flatten (
       List.map (fun (repo, hash) ->
         let name = Filename.quote (Intf.Repository.name repo) in
@@ -470,10 +474,6 @@ let get_obuilder ~conf ~cache ~opam_repo ~opam_repo_commit ~extra_repos switch =
        else
          [])
     @
-    (match Server_configfile.extra_command conf with
-     | Some c -> [run ~cache ~network "%s" c]
-     | None -> []
-    ) @
     (if Server_configfile.enable_dune_cache conf then
        [ run ~cache ~network "opam pin add -k version dune $(opam show -f version dune)";
          env "DUNE_CACHE" "enabled";
