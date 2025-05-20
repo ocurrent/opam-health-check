@@ -343,11 +343,15 @@ fi |} pkg pkg pkg (Server_configfile.platform_distribution conf)
         "paste -s -d , /tmp/packages-to-build > /tmp/packages-for-dune";
 
         (* now try lock with all the required local packages in place *)
+        (* we need to disable portable lock files for now until https://github.com/ocaml/dune/issues/11824 is fixed *)
+        "export DUNE_CONFIG__PORTABLE_LOCK_DIR=disabled";
         Printf.sprintf {|%s dune pkg lock || (echo "opam-health-check: Solve failed" && exit 1) |} dune_path;
 
         (* attempt to install depexts after a lockfile solution has been created *)
         (* need to use dune for it as opam does not pick up depopts and dune does. *)
-        Printf.sprintf "sudo apt-get install -y $(%s dune show depexts)" dune_path;
+        Printf.sprintf "%s dune show depexts 2> /tmp/depexts-from-dune" dune_path;
+        {|paste -s -d " " /tmp/depexts-from-dune > /tmp/depexts-for-apt|};
+        "sudo apt-get install -y $(cat /tmp/depexts-for-apt)";
 
         (* avoid invalid dependency hash errors by removing the hash *)
         "grep -v dependency_hash dune.lock/lock.dune > /tmp/lock.dune";
