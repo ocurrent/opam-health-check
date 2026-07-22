@@ -51,7 +51,7 @@
    (lwt (>= 5.3.0))
    uri
    (x509 (>= 1.0.0))
-   (docker_hub (and (>= 0.1.0) (< 0.2.0)))
+   (docker_hub (>= 0.2.0))
    (memtrace (>= 0.2.3))
    (tls-lwt (>= 0.16.0)) ; activate conduit with TLS for slack webhooks
    conf-libev ; Required for lwt to avoid hitting the limits of select(2)

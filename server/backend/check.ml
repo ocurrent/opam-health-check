@@ -679,61 +679,56 @@ let wait_current_run_to_finish =
   loop
 
 let update_docker_image conf =
-  let repo_and_tag ~image =
-    match String.split_on_char ':' image with
-    | [] -> assert false
-    | [image] -> (image, None)
-    | image::tag -> (image, Some (String.concat ":" tag))
+  let os = Server_configfile.platform_os conf in
+  let arch = match Server_configfile.platform_arch conf with
+    | "x86_64" -> "amd64"
+    | arch -> arch
   in
-  let get_latest_image ~image =
-    let repo, tag = repo_and_tag ~image in
-    let os = Server_configfile.platform_os conf in
-    let arch = match Server_configfile.platform_arch conf with
-      | "x86_64" -> "amd64"
-      | arch -> arch
-    in
-    let* v = Docker_hub.fetch_manifests ~repo ~tag in
-    match v with
-    | Ok manifests ->
-        begin match Docker_hub.digest ~os ~arch manifests with
-        | Ok digest -> Lwt.return_some (image^"@"^digest)
-        | Error e ->
-           let e = match e with
-             | `Malformed_json str -> fmt "malformed json %S" str
-             | `No_corresponding_arch_found -> "no corresponding arch found"
-             | `No_corresponding_os_found -> "no corresponding os found"
-           in
-           prerr_endline ("Something went wrong while parsing docker digest: "^e);
-           Lwt.return_none
-        end
-    | Error e ->
-       let e = match e with
-         | `Api_error (response, body) ->
-             Format.asprintf "response: %a, body: %a"
-               Http_lwt_client.pp_response response
-               (Option.pp String.pp) body
-         | `Malformed_json str -> fmt "malformed json %S" str
-         | `Msg str -> str
-       in
-       prerr_endline ("Something went wrong while fetching docker manifests: "^e);
-       Lwt.return_none
+  let pp_error = function
+    | `Api_error (response, body) ->
+        Format.asprintf "response: %a, body: %a"
+          Http_lwt_client.pp_response response
+          (Option.pp String.pp) body
+    | `Malformed_json str -> fmt "malformed json %S" str
+    | `Msg str -> str
   in
   let image = Server_configfile.platform_image conf in
-  match String.split_on_char '@' image with
-  | [] -> assert false
-  | [image] ->
-      let* v =get_latest_image ~image in
-      begin match v with
-      | Some image -> Server_configfile.set_platform_image conf image
+  (* [from_string] handles both "repo:tag" and "repo:tag@digest". *)
+  let name, tag, old_digest = Docker_hub.Image.from_string image in
+  (* Resolve the digest for our os/arch from the manifest list. Entries that
+     are not real platforms (e.g. the "unknown" attestation manifest that
+     recent images carry) simply do not match and are skipped. *)
+  let* resolved =
+    let* token = Docker_hub.Token.fetch name in
+    begin match token with
+    | Error e -> Lwt.return (Error (pp_error e))
+    | Ok token ->
+        let* manifests = Docker_hub.Manifests.fetch tag token in
+        begin match manifests with
+        | Error e -> Lwt.return (Error (pp_error e))
+        | Ok manifests ->
+            let matches (e : Docker_hub.Manifests.elt) =
+              let p = e.Docker_hub.Manifests.platform in
+              String.equal p.Docker_hub.Platform.os os &&
+              String.equal p.Docker_hub.Platform.arch arch
+            in
+            begin match List.find_opt matches (Docker_hub.Manifests.elements manifests) with
+            | Some e -> Lwt.return (Ok e.Docker_hub.Manifests.digest)
+            | None -> Lwt.return (Error (fmt "no manifest entry for os=%s arch=%s" os arch))
+            end
+        end
+    end
+  in
+  match resolved with
+  | Ok digest ->
+      Server_configfile.set_platform_image conf
+        (Docker_hub.Image.to_string name tag (Some digest))
+  | Error e ->
+      prerr_endline ("Something went wrong while resolving docker image: " ^ e);
+      begin match old_digest with
+      | Some _ -> prerr_endline "Defaulting to old digest"; Lwt.return_unit
       | None -> Lwt.fail (Failure (fmt "Could not get digest for image '%s'" image))
       end
-  | [image; _old_digest] ->
-      let* v = get_latest_image ~image in
-      begin match v with
-      | Some image -> Server_configfile.set_platform_image conf image
-      | None -> prerr_endline "Defaulting to old digest"; Lwt.return_unit
-      end
-  | _ -> Lwt.fail (Failure (fmt "Image name '%s' is not valid" image))
 
 let run ~debug ~cap_file ~on_finished ~conf oca_cache workdir =
   let switches = Option.get_exn_or "no switches" (Server_configfile.ocaml_switches conf) in
