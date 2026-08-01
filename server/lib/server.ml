@@ -101,7 +101,48 @@ module Make (Backend : Backend_intf.S) = struct
       String.equal (Server_workdirs.get_logdir_name logdir) name
     ) logdirs
 
-  let callback ~conf backend _conn req body_NOT_USED =
+  let redirect url extra_headers =
+    let headers = Cohttp.Header.of_list (("Location", url) :: extra_headers) in
+    Cohttp_lwt_unix.Server.respond ~headers ~body:`Empty ~status:`Found ()
+
+  (* With github-oauth configured, log pages require a GitHub login;
+     [serve] only runs with a valid session, anonymous users are sent
+     through the OAuth flow and come back to [path]. *)
+  let with_auth ~conf ~auth_key ~path req serve =
+    match Server_configfile.github_oauth conf with
+    | None -> serve ()
+    | Some (client_id, _) ->
+        match Auth.verify_session ~key:auth_key (Cohttp.Request.headers req) with
+        | Some _login -> serve ()
+        | None ->
+            let redirect_uri = Server_configfile.public_url conf^"/oauth2/callback" in
+            let state = Auth.make_state ~key:auth_key path in
+            redirect (Auth.authorize_url ~client_id ~redirect_uri ~state) []
+
+  let oauth_callback ~conf ~auth_key uri =
+    match Server_configfile.github_oauth conf with
+    | None ->
+        Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
+    | Some (client_id, client_secret) ->
+        let forbidden msg =
+          Cohttp_lwt_unix.Server.respond_string ~status:`Forbidden ~body:("Login failed: "^msg^"\n") ()
+        in
+        let state = Option.get_or ~default:"" (Uri.get_query_param uri "state") in
+        match Auth.verify_state ~key:auth_key state, Uri.get_query_param uri "code" with
+        | None, _ -> forbidden "invalid or expired state"
+        | Some _, None -> forbidden "missing code"
+        | Some path, Some code ->
+            let public_url = Server_configfile.public_url conf in
+            let redirect_uri = public_url^"/oauth2/callback" in
+            let* v = Auth.login ~client_id ~client_secret ~redirect_uri ~code in
+            match v with
+            | Error msg -> forbidden msg
+            | Ok login ->
+                let secure = String.prefix ~pre:"https://" public_url in
+                let cookie = Auth.session_cookie ~key:auth_key ~secure login in
+                redirect path [("Set-Cookie", cookie)]
+
+  let callback ~conf ~auth_key backend _conn req body_NOT_USED =
     let* () = Cohttp_lwt.Body.drain_body body_NOT_USED in
     let uri = Cohttp.Request.uri req in
     let get_log ~logdir ~comp ~state ~pkg =
@@ -166,8 +207,12 @@ module Make (Backend : Backend_intf.S) = struct
                 let* html = Cache.get_html_diff ~conf ~old_logdir ~new_logdir Backend.cache in
                 serv_text ~content_type:"text/html" html))
     | ["log"; logdir; comp; state; pkg] ->
-        (* NOTE: sync up with server/lib/json.ml *)
-        get_log ~logdir ~comp ~state ~pkg
+        let path = "/log/"^logdir^"/"^comp^"/"^state^"/"^pkg in
+        with_auth ~conf ~auth_key ~path req (fun () ->
+          (* NOTE: sync up with server/lib/json.ml *)
+          get_log ~logdir ~comp ~state ~pkg)
+    | ["oauth2"; "callback"] ->
+        oauth_callback ~conf ~auth_key uri
     | ["api"; ("v1" | "v2") as api_version; "latest"; "packages"] ->
         let api_version = match api_version with
           | "v1" -> `V1
@@ -183,9 +228,9 @@ module Make (Backend : Backend_intf.S) = struct
     | _ ->
         Cohttp_lwt_unix.Server.respond ~body:`Empty ~status:`Not_found ()
 
-  let callback ~debug ~conf backend conn req body =
+  let callback ~debug ~conf ~auth_key backend conn req body =
     (* TODO: Try to understand why it wouldn't do anything before when this was ~on_exn *)
-    Lwt.catch (fun () -> callback ~conf backend conn req body)
+    Lwt.catch (fun () -> callback ~conf ~auth_key backend conn req body)
       (fun e ->
         if debug then begin
           let uri = Uri.to_string (Cohttp.Request.uri req) in
@@ -207,9 +252,10 @@ module Make (Backend : Backend_intf.S) = struct
     let* () = Server_workdirs.init_base workdir in
     let conf = Server_configfile.from_workdir workdir in
     let port = Server_configfile.port conf in
+    let* auth_key = Auth.load_key workdir in
     let* (backend, backend_task) = Backend.start ~debug ~cap_file conf workdir in
     Lwt.join [
-      tcp_server port (callback ~debug ~conf backend);
+      tcp_server port (callback ~debug ~conf ~auth_key backend);
       backend_task ();
     ]
 end

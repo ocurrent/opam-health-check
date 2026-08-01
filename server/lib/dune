@@ -17,4 +17,6 @@
   yojson
   current_ansi
   prometheus-app
+  http-lwt-client
+  digestif
   oca_lib))

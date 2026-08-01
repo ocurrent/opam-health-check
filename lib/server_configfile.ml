@@ -36,6 +36,8 @@ type t = {
   mutable ocaml_switches : Intf.Switch.t list option;
   mutable slack_webhooks : Uri.t list option;
   mutable job_timeout : float option;
+  mutable github_oauth_client_id : string option;
+  mutable github_oauth_client_secret : string option;
 }
 
 let create_conf yamlfile = {
@@ -62,6 +64,8 @@ let create_conf yamlfile = {
   ocaml_switches = None;
   slack_webhooks = None;
   job_timeout = None;
+  github_oauth_client_id = None;
+  github_oauth_client_secret = None;
 }
 
 let set_field ~field set = function
@@ -167,6 +171,16 @@ let set_config conf = function
       set_field ~field (fun () -> conf.slack_webhooks <- Some webhooks) conf.slack_webhooks
   | "job-timeout" as field, `Float job_timeout ->
       set_field ~field (fun () -> conf.job_timeout <- Some job_timeout) conf.job_timeout
+  | "github-oauth", `O fields ->
+      List.iter (function
+        | _, `Null -> ()
+        | "client-id" as field, `String client_id ->
+            set_field ~field (fun () -> conf.github_oauth_client_id <- Some client_id) conf.github_oauth_client_id
+        | "client-secret" as field, `String client_secret ->
+            set_field ~field (fun () -> conf.github_oauth_client_secret <- Some client_secret) conf.github_oauth_client_secret
+        | field, _ ->
+            failwith (Printf.sprintf "Config parser: 'github-oauth.%s' field not recognized" field)
+      ) fields
   | field, _ ->
       failwith (Printf.sprintf "Config parser: '%s' field not recognized" field)
 
@@ -221,6 +235,10 @@ let yaml_of_conf conf =
     "ocaml-switches", Option.map_or ~default:`Null yaml_of_ocaml_switches conf.ocaml_switches;
     "slack-webhooks", Option.map_or ~default:`Null yaml_of_slack_webhooks conf.slack_webhooks;
     "job-timeout", `Float (Option.get_exn_or "conf.job-timeout" conf.job_timeout);
+    "github-oauth", (match conf.github_oauth_client_id, conf.github_oauth_client_secret with
+      | Some client_id, Some client_secret ->
+          `O ["client-id", `String client_id; "client-secret", `String client_secret]
+      | (Some _ | None), _ -> `Null);
   ]
 
 let set_defaults conf =
@@ -310,6 +328,11 @@ let set_platform_image conf image =
 let create yamlfile yaml =
   let conf = create_conf yamlfile in
   List.iter (set_config conf) yaml;
+  begin match conf.github_oauth_client_id, conf.github_oauth_client_secret with
+  | Some _, None | None, Some _ ->
+      failwith "Config parser: 'github-oauth' requires both client-id and client-secret"
+  | (Some _ | None), _ -> ()
+  end;
   set_defaults conf;
   conf
 
@@ -345,3 +368,8 @@ let platform_image {platform_image; _} = Option.get_exn_or "platform_image" plat
 let ocaml_switches {ocaml_switches; _} = ocaml_switches
 let slack_webhooks {slack_webhooks; _} = Option.get_exn_or "slack_webhooks" slack_webhooks
 let job_timeout {job_timeout; _} = Option.get_exn_or "job_timeout" job_timeout
+
+let github_oauth {github_oauth_client_id; github_oauth_client_secret; _} =
+  match github_oauth_client_id, github_oauth_client_secret with
+  | Some client_id, Some client_secret -> Some (client_id, client_secret)
+  | (Some _ | None), _ -> None
