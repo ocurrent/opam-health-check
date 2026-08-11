@@ -18,4 +18,6 @@
   current_ansi
   prometheus-app
   prometheus-lwt
+  http-lwt-client
+  digestif
   oca_lib))
