@@ -177,7 +177,7 @@ module Make (Backend : Backend_intf.S) = struct
         let* json = Cache.get_json_latest_packages api_version Backend.cache in
         serv_text ~content_type:"application/json" json
     | ["metrics"] ->
-        let* data = Prometheus.CollectorRegistry.(collect default) in
+        let* data = Prometheus_lwt.CollectorRegistry.(collect default) in
         let body = Fmt.to_to_string Prometheus_app.TextFormat_0_0_4.output data in
         serv_text ~content_type:"text/plain" body
     | _ ->
