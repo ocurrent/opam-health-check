@@ -1,1 +1,1 @@
-available: os-distribution != "fedora" # No pixz
+available: os != "freebsd" & os-family != "suse" & os-family != "opensuse" & os-distribution != "fedora" # pixz and other system dependencies are unavailable
